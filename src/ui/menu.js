@@ -1,0 +1,106 @@
+import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities } from '../core/state.js';
+import { LEVELS } from '../data/levels.js';
+import { startGame } from '../main.js';
+import { playMenuMusic } from '../core/audio.js';
+
+export function showSubMenu(menuId) {
+    document.getElementById('main-menu-nav').classList.add('hidden');
+    document.getElementById('sub-levels').classList.add('hidden');
+    document.getElementById('sub-shop').classList.add('hidden');
+    document.getElementById('sub-settings').classList.add('hidden');
+    if (menuId === 'main') document.getElementById('main-menu-nav').classList.remove('hidden');
+    else document.getElementById('sub-' + menuId).classList.remove('hidden');
+}
+
+export function updateHUD() {
+    let hud = document.querySelector('.bottom-hud');
+    if (!hud) return;
+    let html = `<div class="controls-hint" style="margin-bottom: 10px;">
+                    <kbd>WASD</kbd> Move &nbsp;|&nbsp; <kbd>SPACE</kbd> Pick/Drop &nbsp;|&nbsp; 
+                    <kbd>R</kbd> Reset Loop &nbsp;|&nbsp; <kbd>ESC</kbd> Menu
+                </div>`;
+    let unlocked = getUnlockedAbilities();
+    let abilities = [];
+    if (unlocked.includes('dash')) abilities.push(`<kbd>SHIFT</kbd> Dash`);
+    if (unlocked.includes('toss')) abilities.push(`<kbd>F</kbd> Toss Package`);
+    if (unlocked.includes('cloak')) abilities.push(`<kbd>C</kbd> Camera Cloak`);
+    if (abilities.length > 0) {
+        html += `<div class="controls-hint" style="color: #ffdd00;">` + abilities.join(' &nbsp;|&nbsp; ') + `</div>`;
+    }
+    hud.innerHTML = html;
+}
+
+export function initMenu() {
+    document.getElementById('title-screen').classList.remove('hidden');
+    document.getElementById('app-layout').classList.add('hidden');
+    document.getElementById('level-complete').classList.add('hidden');
+    document.getElementById('game-over').classList.add('hidden');
+    showSubMenu('main');
+    
+    let uiLevelGrid = document.getElementById('level-select-grid');
+    uiLevelGrid.innerHTML = '';
+    
+    let rankData = ["Junior Courier", "Route Courier", "Security Courier", "Temporal Courier", "Loopmaster"];
+    let displayRank = rankData[getPlayerRank()] || "Senior Courier";
+    document.getElementById('player-rank-display').innerText = `Rank: ${displayRank}`;
+    document.getElementById('credits-display').innerText = getCredits();
+    
+    playMenuMusic();
+    
+    LEVELS.forEach((lvl, idx) => {
+        let isDev = document.getElementById('dev-mode-checkbox').checked;
+        let unlocked = isDev || idx <= state.maxUnlockedLevel;
+        let btn = document.createElement('button');
+        btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
+        
+        let hasGold = state.challengesCompleted[idx] === true;
+        let iconHtml = lockedHtml(lvl, unlocked, hasGold);
+        
+        btn.innerHTML = `${iconHtml} Level ${idx + 1}`;
+        if (unlocked) btn.onclick = () => startGame(idx);
+        uiLevelGrid.appendChild(btn);
+    });
+    
+    let shopDash = document.getElementById('shop-dash');
+    if (state.abilitiesPurchased['dash']) { shopDash.innerText = 'DASH (OWNED)'; shopDash.style.opacity = '0.5'; shopDash.disabled = true; }
+    else { shopDash.innerText = 'DASH ($150)'; shopDash.style.opacity = '1'; shopDash.disabled = false; }
+    shopDash.onclick = () => { if (getCredits() >= 150) { state.abilitiesPurchased['dash'] = true; saveState(); initMenu(); } };
+    
+    let shopToss = document.getElementById('shop-toss');
+    if (state.abilitiesPurchased['toss']) { shopToss.innerText = 'TOSS (OWNED)'; shopToss.style.opacity = '0.5'; shopToss.disabled = true; }
+    else { shopToss.innerText = 'TOSS ($150)'; shopToss.style.opacity = '1'; shopToss.disabled = false; }
+    shopToss.onclick = () => { if (getCredits() >= 150) { state.abilitiesPurchased['toss'] = true; saveState(); initMenu(); } };
+    
+    let shopCloak = document.getElementById('shop-cloak');
+    if (state.abilitiesPurchased['cloak']) { shopCloak.innerText = 'CLOAK (OWNED)'; shopCloak.style.opacity = '0.5'; shopCloak.disabled = true; }
+    else { shopCloak.innerText = 'CLOAK ($200)'; shopCloak.style.opacity = '1'; shopCloak.disabled = false; }
+    shopCloak.onclick = () => { if (getCredits() >= 200) { state.abilitiesPurchased['cloak'] = true; saveState(); initMenu(); } };
+    
+    function updateSuitButtons() {
+        document.querySelectorAll('.suit-btn').forEach((btn) => {
+            let col = btn.getAttribute('data-color');
+            if (col === state.playerColor) {
+                btn.style.border = `2px solid ${col}`;
+                btn.style.boxShadow = `0 0 15px ${col}`;
+            } else {
+                btn.style.border = '1px solid #444';
+                btn.style.boxShadow = 'none';
+            }
+        });
+    }
+
+    document.querySelectorAll('.suit-btn').forEach((btn, index) => {
+        btn.onclick = () => {
+            if (getPlayerRank() >= index) { state.playerColor = btn.getAttribute('data-color'); saveState(); updateSuitButtons(); }
+        };
+        if (getPlayerRank() >= index) { btn.style.opacity = '1'; btn.style.cursor = 'pointer'; btn.innerHTML = ''; }
+        else { btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; btn.innerHTML = '🔒'; btn.style.fontSize = '18px'; btn.style.lineHeight = '35px'; }
+    });
+    updateSuitButtons();
+}
+
+function lockedHtml(lvl, unlocked, hasGold) {
+    if (!unlocked) return '🔒';
+    if (hasGold) return '⭐';
+    return '';
+}
