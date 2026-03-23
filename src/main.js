@@ -39,6 +39,98 @@ function getNextLevelIndex(levelIndex) {
     return levelIndex < CAMPAIGN_LEVEL_COUNT - 1 ? levelIndex + 1 : null;
 }
 
+function checkProjectedWallCollision(x, y, w, h, walls) {
+    return walls.some(wall => AABB(x, y, w, h, wall.x, wall.y, wall.w, wall.h));
+}
+
+function buildProjectedEchoPath(runData) {
+    if (!runData || runData.length === 0 || !state.player) return null;
+
+    const firstStep = runData[0];
+    let preview = {
+        x: firstStep.x,
+        y: firstStep.y,
+        w: state.player.w,
+        h: state.player.h,
+        facingX: firstStep.facingX || 1,
+        facingY: firstStep.facingY || 0
+    };
+    let points = [{ x: preview.x, y: preview.y }];
+
+    for (let i = 1; i < runData.length; i++) {
+        const step = runData[i];
+        if (!step) continue;
+
+        preview.facingX = step.facingX || preview.facingX || 1;
+        preview.facingY = step.facingY || preview.facingY || 0;
+
+        if (step.dash) {
+            let dest = getDashDestination(preview.x, preview.y, preview.facingX, preview.facingY, 120, preview.w, preview.h);
+            preview.x = dest.x;
+            preview.y = dest.y;
+        }
+
+        let speed = 4;
+        for (let z of state.statics) {
+            if (AABB(preview.x, preview.y, preview.w, preview.h, z.x, z.y, z.w, z.h)) {
+                speed = 2;
+                break;
+            }
+        }
+
+        let envVx = 0;
+        let envVy = 0;
+        for (let w of state.winds) {
+            if (AABB(preview.x, preview.y, preview.w, preview.h, w.x, w.y, w.w, w.h)) {
+                envVx += w.vx;
+                envVy += w.vy;
+            }
+        }
+
+        let moveX = step.moveX || 0;
+        let moveY = step.moveY || 0;
+        let magnitude = Math.hypot(moveX, moveY);
+        if (magnitude > 1) {
+            moveX /= magnitude;
+            moveY /= magnitude;
+        }
+
+        let dx = envVx + moveX * speed;
+        let dy = envVy + moveY * speed;
+
+        if (!checkProjectedWallCollision(preview.x + dx, preview.y, preview.w, preview.h, state.walls)) {
+            preview.x += dx;
+        }
+        if (!checkProjectedWallCollision(preview.x, preview.y + dy, preview.w, preview.h, state.walls)) {
+            preview.y += dy;
+        }
+
+        points.push({ x: preview.x, y: preview.y });
+    }
+
+    return {
+        points,
+        final: preview
+    };
+}
+
+function hasCompletedTutorialTrack() {
+    return TUTORIAL_LEVEL_INDICES.length > 0 && TUTORIAL_LEVEL_INDICES.every(index => state.tutorialProgress[index]);
+}
+
+function showTutorialPrompt() {
+    document.getElementById('main-menu-nav').classList.add('hidden');
+    document.getElementById('sub-levels').classList.add('hidden');
+    document.getElementById('sub-tutorials').classList.add('hidden');
+    document.getElementById('sub-shop').classList.add('hidden');
+    document.getElementById('sub-settings').classList.add('hidden');
+    document.getElementById('tutorial-prompt').classList.remove('hidden');
+}
+
+function hideTutorialPrompt() {
+    document.getElementById('tutorial-prompt').classList.add('hidden');
+}
+
 function ghostShieldBlocks(defenderGhost, actorBox) {
     const unlocked = getUnlockedAbilities();
     if (!unlocked.includes('ghostShield') || !defenderGhost.isActive) return false;
@@ -143,10 +235,10 @@ function update() {
     if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
     if (isKeyJustPressed('r')) { resetRun(); updatePrevKeys(); return; }
 
-    let allActors = [{x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h}];
+    let allActors = [state.player];
     for (let ghost of state.activeGhosts) {
-        ghost.update(state.packages, state.statics);
-        if (ghost.isActive) allActors.push({x: ghost.x, y: ghost.y, w: ghost.w, h: ghost.h});
+        ghost.update(state.packages, state.statics, state.winds);
+        if (ghost.isActive) allActors.push(ghost);
     }
 
     state.alarmState = false; state.cameras.forEach(c => c.update(state.player, state.packages));
@@ -221,11 +313,6 @@ function update() {
     let nextPlayerY = { x: state.player.x, y: state.player.y + dy, w: state.player.w, h: state.player.h };
     let pCanMoveX = !checkWallCollision(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h);
     let pCanMoveY = !checkWallCollision(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h);
-    state.activeGhosts.forEach(g => {
-        if (!g.isActive) return;
-        if (AABB(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h, g.x, g.y, g.w, g.h) && ghostShieldBlocks(g, nextPlayerX)) pCanMoveX = false;
-        if (AABB(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h, g.x, g.y, g.w, g.h) && ghostShieldBlocks(g, nextPlayerY)) pCanMoveY = false;
-    });
     if (pCanMoveX) state.player.x += dx;
     if (pCanMoveY) state.player.y += dy;
 
@@ -237,8 +324,6 @@ function update() {
         let nextGhostY = { x: g.x, y: g.y + gDy, w: g.w, h: g.h };
         let gCanMoveX = !checkWallCollision(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h);
         let gCanMoveY = !checkWallCollision(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h);
-        if (AABB(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h, state.player.x, state.player.y, state.player.w, state.player.h) && ghostShieldBlocks(g, state.player)) gCanMoveX = false;
-        if (AABB(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h, state.player.x, state.player.y, state.player.w, state.player.h) && ghostShieldBlocks(g, state.player)) gCanMoveY = false;
         state.activeGhosts.forEach(otherG => {
             if (otherG !== g && otherG.isActive) {
                 if (AABB(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h, otherG.x, otherG.y, otherG.w, otherG.h) && ghostShieldBlocks(otherG, nextGhostX)) gCanMoveX = false;
@@ -305,7 +390,7 @@ function update() {
         else if (p.carriedBy && p.carriedBy.startsWith('ghost_')) {
             let ghostId = parseInt(p.carriedBy.split('_')[1]);
             let ghost = state.activeGhosts.find(ag => ag.id === ghostId);
-            if (ghost) { p.x = ghost.x + (ghost.w - p.w)/2; p.y = ghost.y + (ghost.h - p.h)/2; }
+            if (ghost && ghost.isActive) { p.x = ghost.x + (ghost.w - p.w)/2; p.y = ghost.y + (ghost.h - p.h)/2; }
             else p.carriedBy = null;
         }
     }
@@ -320,6 +405,8 @@ function update() {
         SFX.win(); state.gameState = 'LEVEL_COMPLETE'; uiLevelComplete.classList.remove('hidden'); 
         let chalMsg = document.getElementById('challenge-result');
         if (state.currentLevelMeta?.isTutorial) {
+            state.tutorialProgress[state.currentLevelIndex] = true;
+            saveState();
             if (chalMsg) { chalMsg.innerHTML = "Tutorial complete. You can replay this module any time from TRAINING."; chalMsg.style.color = '#00f3ff'; }
         } else {
             let isFirstTimeLevel = (state.currentLevelIndex == parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'));
@@ -344,7 +431,20 @@ function update() {
             : (nextIndex !== null ? "NEXT LEVEL" : "FINISH SHIFT");
     }
     
-    state.currentRun.push({ x: state.player.x, y: state.player.y, facingX: state.player.facingX, facingY: state.player.facingY, cloakTimer: state.player.cloakTimer, interact: interactJustPressed, toss: tossJustPressed }); 
+    let moveX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+    let moveY = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
+    state.currentRun.push({
+        x: state.player.x,
+        y: state.player.y,
+        moveX,
+        moveY,
+        facingX: state.player.facingX,
+        facingY: state.player.facingY,
+        cloakTimer: state.player.cloakTimer,
+        interact: interactJustPressed,
+        toss: tossJustPressed,
+        dash: dashJustPressed
+    });
     state.currentTick++; updatePrevKeys();
 }
 
@@ -356,7 +456,67 @@ function draw() {
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx); state.plates.forEach(p => p.render(ctx)); state.walls.forEach(w => w.render(ctx));
     state.lasers.forEach(l => l.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
-    state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx)); 
+    state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
+
+    if (state.gameState === 'PLAYING' && state.currentRun.length > 0) {
+        const projectedEcho = buildProjectedEchoPath(state.currentRun);
+        ctx.save();
+        ctx.strokeStyle = '#7df9ff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(state.currentRun[0].x + state.player.w / 2, state.currentRun[0].y + state.player.h / 2);
+        for (let i = 1; i < state.currentRun.length; i++) {
+            ctx.lineTo(state.currentRun[i].x + state.player.w / 2, state.currentRun[i].y + state.player.h / 2);
+        }
+        ctx.lineTo(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        if (projectedEcho && projectedEcho.points.length > 1) {
+            ctx.save();
+            ctx.strokeStyle = '#ffdd00';
+            ctx.lineWidth = 3;
+            ctx.globalAlpha = 0.45;
+            ctx.beginPath();
+            ctx.moveTo(projectedEcho.points[0].x + state.player.w / 2, projectedEcho.points[0].y + state.player.h / 2);
+            for (let i = 1; i < projectedEcho.points.length; i++) {
+                ctx.lineTo(projectedEcho.points[i].x + state.player.w / 2, projectedEcho.points[i].y + state.player.h / 2);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.globalAlpha = 0.22;
+            if (state.assets.player) {
+                ctx.drawImage(state.assets.player, projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h);
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.fillStyle = '#ffdd00';
+                ctx.globalAlpha = 0.4;
+                ctx.fillRect(projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h);
+            } else {
+                ctx.fillStyle = '#ffdd00';
+                ctx.fillRect(projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h);
+            }
+            ctx.restore();
+        } else {
+            ctx.save();
+            ctx.globalAlpha = 0.18;
+            if (state.assets.player) {
+                ctx.drawImage(state.assets.player, state.player.x, state.player.y, state.player.w, state.player.h);
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.fillStyle = '#7df9ff';
+                ctx.globalAlpha = 0.32;
+                ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
+            } else {
+                ctx.fillStyle = '#7df9ff';
+                ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
+            }
+            ctx.restore();
+        }
+    }
     
     ctx.save(); if (state.player.cloakTimer > 0) ctx.globalAlpha = 0.2; state.player.render(ctx); ctx.restore();
     
@@ -408,10 +568,23 @@ window.onload = () => {
     initTouchControls();
     window.startNextAvailableLevel = () => {
         let devModeCheckbox = document.getElementById('dev-mode-checkbox');
+        if (!devModeCheckbox.checked && !hasCompletedTutorialTrack()) {
+            showTutorialPrompt();
+            return;
+        }
         let lvl = devModeCheckbox.checked ? 0 : Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
         startGame(lvl);
     };
     window.startTutorialTrack = () => startGame(TUTORIAL_LEVEL_START);
+    window.startTutorialTrackFromPrompt = () => {
+        hideTutorialPrompt();
+        startGame(TUTORIAL_LEVEL_START);
+    };
+    window.skipTutorialPrompt = () => {
+        hideTutorialPrompt();
+        let lvl = Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
+        startGame(lvl);
+    };
     
     window.startEditorMode = (jsonString, levelIndex = null) => {
         state.gameState = 'EDITOR';

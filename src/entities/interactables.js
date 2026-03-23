@@ -67,9 +67,9 @@ export class TemporalPlate extends PressurePlate {
     update(actors) { 
         this.isPressed = false;
         let validActor = null;
-        if (this.requiredTimeline === 'present') validActor = actors.find(a => !a.id && a.assetName === 'player');
-        else if (this.requiredTimeline === 'first') validActor = actors.find(a => a.id === 1);
-        else if (this.requiredTimeline === 'last') validActor = actors.find(a => a.id === state.activeGhosts.length);
+        if (this.requiredTimeline === 'present') validActor = actors.find(a => a.id === undefined && a.assetName === 'player');
+        else if (this.requiredTimeline === 'first') validActor = actors.find(a => a.id === 0);
+        else if (this.requiredTimeline === 'last') validActor = actors.find(a => a.id === state.activeGhosts.length - 1);
         
         if (validActor && AABB(this.x, this.y, this.w, this.h, validActor.x, validActor.y, validActor.w, validActor.h)) this.isPressed = true;
     }

@@ -3,6 +3,7 @@ export const state = {
     playerColor: localStorage.getItem('echoCourier_suit') || '#ff7b00',
     challengesCompleted: JSON.parse(localStorage.getItem('echoCourier_challenges') || '{}'),
     abilitiesPurchased: JSON.parse(localStorage.getItem('echoCourier_abilities') || '{}'),
+    tutorialProgress: JSON.parse(localStorage.getItem('echoCourier_tutorials') || '{}'),
     runStats: { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 },
     
     FPS: 60,
@@ -72,5 +73,6 @@ export function saveState() {
     localStorage.setItem('echoCourier_maxLevel', state.maxUnlockedLevel);
     localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
     localStorage.setItem('echoCourier_abilities', JSON.stringify(state.abilitiesPurchased));
+    localStorage.setItem('echoCourier_tutorials', JSON.stringify(state.tutorialProgress));
     localStorage.setItem('echoCourier_suit', state.playerColor);
 }

@@ -1,6 +1,6 @@
 import { state, getPlayerRank } from '../core/state.js';
 import { Entity } from './base.js';
-import { AABB } from '../core/physics.js';
+import { AABB, getDashDestination } from '../core/physics.js';
 
 export class PlayerEntity extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'player'); }
@@ -16,11 +16,14 @@ export class PlayerEntity extends Entity {
 
 export class Ghost extends Entity {
     constructor(id, runData) {
-        super(-100, -100, 30, 30, 'player'); this.id=id; this.runData=runData; this.isActive=true;
-        this.localTick=0; this.lastStateIndex=0; this.cloakTimer=0; this.facingX=0; this.facingY=0;
+        const firstStep = runData?.[0] || {};
+        super(firstStep.x ?? -100, firstStep.y ?? -100, 30, 30, 'player'); this.id=id; this.runData=runData; this.isActive=true;
+        this.localTick=0; this.lastStateIndex=0; this.cloakTimer=0; this.facingX=firstStep.facingX || 1; this.facingY=firstStep.facingY || 0;
         this.cloakActive = false;
+        this.intendedDx = 0;
+        this.intendedDy = 0;
     }
-    update(pkgs, staticZones) {
+    update(pkgs, staticZones, winds) {
         this.isActive = true;
         let speed = 1.0;
         for(let z of staticZones) if (AABB(this.x, this.y, this.w, this.h, z.x, z.y, z.w, z.h)) speed = 0.5;
@@ -28,15 +31,8 @@ export class Ghost extends Entity {
         
         let stateIndex = Math.floor(this.localTick); let isPastEnd = false;
         if (stateIndex >= this.runData.length) { stateIndex = this.runData.length - 1; isPastEnd = true; }
-        const step = this.runData[stateIndex]; 
-        let targetX = step.x; let targetY = step.y;
-        if (this.lastStateIndex !== stateIndex) {
-            if (Math.random() < 0.05) { targetX += (Math.random() - 0.5) * 4; targetY += (Math.random() - 0.5) * 4; }
-        }
-        
-        let dx = targetX - this.x; let dy = targetY - this.y;
-        if (Math.hypot(dx, dy) > 20) { this.x = targetX; this.y = targetY; this.intendedDx = 0; this.intendedDy = 0; } 
-        else { this.intendedDx = dx; this.intendedDy = dy; }
+        const step = this.runData[stateIndex];
+        if (!step) { this.intendedDx = 0; this.intendedDy = 0; return; }
         
         this.cloakTimer = step.cloakTimer || 0;
         this.cloakActive = this.cloakTimer > 0;
@@ -44,7 +40,27 @@ export class Ghost extends Entity {
         
         let interactJustPressed = !isPastEnd && step.interact && this.lastStateIndex !== stateIndex;
         let tossJustPressed = !isPastEnd && step.toss && this.lastStateIndex !== stateIndex;
+        let dashJustPressed = !isPastEnd && step.dash && this.lastStateIndex !== stateIndex;
         this.lastStateIndex = stateIndex;
+
+        if (dashJustPressed) {
+            let dest = getDashDestination(this.x, this.y, this.facingX || 1, this.facingY || 0, 120, this.w, this.h);
+            this.x = dest.x;
+            this.y = dest.y;
+        }
+
+        let envVx = 0, envVy = 0;
+        for (let w of winds) if (AABB(this.x, this.y, this.w, this.h, w.x, w.y, w.w, w.h)) { envVx += w.vx; envVy += w.vy; }
+
+        let carried = pkgs.find(p => p.carriedBy === 'ghost_' + this.id);
+        let currentSpeed = (carried && carried.type === 'heavy') ? 2 : 4;
+        let inputX = isPastEnd ? 0 : (step.moveX || 0);
+        let inputY = isPastEnd ? 0 : (step.moveY || 0);
+        let moveMagnitude = Math.hypot(inputX, inputY);
+        if (moveMagnitude > 1) { inputX /= moveMagnitude; inputY /= moveMagnitude; }
+
+        this.intendedDx = envVx + inputX * currentSpeed;
+        this.intendedDy = envVy + inputY * currentSpeed;
 
         if (interactJustPressed) {
             let carrying = null;

@@ -3,6 +3,10 @@ import { Entity } from './base.js';
 import { AABB, checkWallCollision, lineOfSightBlocked } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
 
+function isPresentPlayer(actor) {
+    return actor && actor.id === undefined && actor.assetName === 'player';
+}
+
 export class Laser extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'laser'); this.id=id; this.isOpen=false; }
     render(ctx) {
@@ -260,7 +264,11 @@ export class StaticZone extends Entity {
 export class Pit extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'pit'); }
     update(actors) {
-        for(let a of actors) if (AABB(a.x,a.y,a.w,a.h, this.x,this.y,this.w,this.h)) return "Fell into pit!";
+        for(let a of actors) {
+            if (!AABB(a.x,a.y,a.w,a.h, this.x,this.y,this.w,this.h)) continue;
+            if (isPresentPlayer(a)) return "Fell into pit!";
+            if (a.id !== undefined) a.isActive = false;
+        }
         return null;
     }
     render(ctx) {
@@ -273,7 +281,11 @@ export class CrackedFloor extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'crack'); this.ticks=0; this.broken=false; }
     update(actors) {
         if (this.broken) {
-            for(let a of actors) if (AABB(a.x,a.y,a.w,a.h, this.x,this.y,this.w,this.h)) return "Fell into pit!";
+            for(let a of actors) {
+                if (!AABB(a.x,a.y,a.w,a.h, this.x,this.y,this.w,this.h)) continue;
+                if (isPresentPlayer(a)) return "Fell into pit!";
+                if (a.id !== undefined) a.isActive = false;
+            }
             return null;
         }
         let touched=false;

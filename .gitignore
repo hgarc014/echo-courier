@@ -9,6 +9,8 @@ Desktop.ini
 # Local tooling downloads
 tools/node-*-win-x64/
 tools/node-*-win-x64.zip
+tools/playtest/
+tools/ms-playwright/
 
 # Optional package manager output
 node_modules/

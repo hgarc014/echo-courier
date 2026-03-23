@@ -4,6 +4,7 @@ import { startGame } from '../main.js';
 import { playMenuMusic } from '../core/audio.js';
 
 export function showSubMenu(menuId) {
+    document.getElementById('tutorial-prompt').classList.add('hidden');
     document.getElementById('main-menu-nav').classList.add('hidden');
     document.getElementById('sub-levels').classList.add('hidden');
     document.getElementById('sub-tutorials').classList.add('hidden');
