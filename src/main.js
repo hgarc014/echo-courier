@@ -1,5 +1,5 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
-import { keys, prevKeys, isKeyJustPressed, updatePrevKeys } from './core/input.js';
+import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination } from './core/physics.js';
 import { getLevelSetup, LEVELS, deserializeLevel } from './data/levels.js';
@@ -336,6 +336,7 @@ function loop(timestamp) {
 }
 
 window.onload = () => {
+    initTouchControls();
     window.startNextAvailableLevel = () => {
         let devModeCheckbox = document.getElementById('dev-mode-checkbox');
         let lvl = devModeCheckbox.checked ? 0 : Math.min(state.maxUnlockedLevel, LEVELS.length - 1);

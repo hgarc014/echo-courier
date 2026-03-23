@@ -21,9 +21,9 @@ export function updateHUD() {
                 </div>`;
     let unlocked = getUnlockedAbilities();
     let abilities = [];
-    if (unlocked.includes('dash')) abilities.push(`<kbd>SHIFT</kbd> Dash`);
-    if (unlocked.includes('toss')) abilities.push(`<kbd>F</kbd> Toss Package`);
-    if (unlocked.includes('cloak')) abilities.push(`<kbd>C</kbd> Camera Cloak`);
+    if (unlocked.includes('dash')) { abilities.push(`<kbd>SHIFT</kbd> Dash`); document.getElementById('touch-btn-dash')?.classList.remove('hidden'); }
+    if (unlocked.includes('toss')) { abilities.push(`<kbd>F</kbd> Toss Package`); document.getElementById('touch-btn-toss')?.classList.remove('hidden'); }
+    if (unlocked.includes('cloak')) { abilities.push(`<kbd>C</kbd> Camera Cloak`); document.getElementById('touch-btn-cloak')?.classList.remove('hidden'); }
     if (abilities.length > 0) {
         html += `<div class="controls-hint" style="color: #ffdd00;">` + abilities.join(' &nbsp;|&nbsp; ') + `</div>`;
     }

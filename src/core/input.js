@@ -32,3 +32,36 @@ window.addEventListener('keyup', e => {
 
 export function isKeyJustPressed(key) { return keys[key] && !prevKeys[key]; }
 export function updatePrevKeys() { Object.assign(prevKeys, keys); }
+
+export function initTouchControls() {
+    let joystickEnabled = false;
+    
+    window.addEventListener('touchstart', () => {
+        if (!joystickEnabled && document.getElementById('mobile-controls')) {
+            document.getElementById('mobile-controls').classList.remove('hidden');
+            joystickEnabled = true;
+        }
+    }, { once: true });
+
+    document.querySelectorAll('.touch-btn').forEach(btn => {
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            let key = btn.getAttribute('data-key');
+            if (keys.hasOwnProperty(key)) keys[key] = true;
+            btn.style.opacity = '1.0'; btn.style.transform = 'scale(0.85)';
+        }, { passive: false });
+        
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            let key = btn.getAttribute('data-key');
+            if (keys.hasOwnProperty(key)) keys[key] = false;
+            btn.style.opacity = '0.5'; btn.style.transform = 'scale(1.0)';
+        }, { passive: false });
+
+        btn.addEventListener('touchcancel', () => {
+            let key = btn.getAttribute('data-key');
+            if (keys.hasOwnProperty(key)) keys[key] = false;
+            btn.style.opacity = '0.5'; btn.style.transform = 'scale(1.0)';
+        });
+    });
+}
