@@ -2,7 +2,7 @@ import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/st
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination } from './core/physics.js';
-import { getLevelSetup, LEVELS, deserializeLevel } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
 import { initEditor, drawEditorOverlay } from './ui/editor.js';
@@ -16,29 +16,65 @@ let uiAppLayout = document.getElementById('app-layout');
 let uiLevelComplete = document.getElementById('level-complete');
 let uiGameOver = document.getElementById('game-over');
 
+function showGameComplete() {
+    state.gameState = 'GAME_COMPLETE';
+    uiAppLayout.classList.remove('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.remove('hidden');
+    let ed = document.getElementById('ending-title'); if(ed) { ed.innerText = "CHRONOHAUL EXPOSED"; ed.style.color = '#39ff14'; ed.style.textShadow = '0 0 20px #39ff14'; }
+    let eb = document.getElementById('retry-btn'); if(eb) { eb.innerText = "RETURN TO CITY"; eb.style.borderColor = '#39ff14'; eb.style.color = '#39ff14'; }
+    document.getElementById('credits-display').parentElement.classList.add('hidden');
+}
+
+function getLevelDisplayLabel(levelIndex, levelDef) {
+    if (levelDef.isTutorial) return `T${levelDef.tutorialNumber}`;
+    return `${levelIndex + 1}`;
+}
+
+function getNextLevelIndex(levelIndex) {
+    const level = LEVELS[levelIndex];
+    if (!level) return null;
+    if (level.isTutorial) {
+        const tutorialPos = TUTORIAL_LEVEL_INDICES.indexOf(levelIndex);
+        return tutorialPos >= 0 && tutorialPos < TUTORIAL_LEVEL_INDICES.length - 1 ? TUTORIAL_LEVEL_INDICES[tutorialPos + 1] : null;
+    }
+    return levelIndex < CAMPAIGN_LEVEL_COUNT - 1 ? levelIndex + 1 : null;
+}
+
+function ghostShieldBlocks(defenderGhost, actorBox) {
+    const unlocked = getUnlockedAbilities();
+    if (!unlocked.includes('ghostShield') || !defenderGhost.isActive) return false;
+
+    const fx = defenderGhost.facingX || 1;
+    const fy = defenderGhost.facingY || 0;
+    const ghostCx = defenderGhost.x + defenderGhost.w / 2;
+    const ghostCy = defenderGhost.y + defenderGhost.h / 2;
+    const actorCx = actorBox.x + actorBox.w / 2;
+    const actorCy = actorBox.y + actorBox.h / 2;
+    const dot = (actorCx - ghostCx) * fx + (actorCy - ghostCy) * fy;
+    return dot > 0;
+}
+
 export function startGame(levelIndex) {
-    startMusic();
     if (levelIndex >= LEVELS.length) { 
-        state.gameState = 'GAME_COMPLETE'; 
-        uiAppLayout.classList.remove('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.remove('hidden'); 
-        let ed = document.getElementById('ending-title'); if(ed) { ed.innerText = "CHRONOHAUL EXPOSED"; ed.style.color = '#39ff14'; ed.style.textShadow = '0 0 20px #39ff14'; }
-        let eb = document.getElementById('retry-btn'); if(eb) { eb.innerText = "RETURN TO CITY"; eb.style.borderColor = '#39ff14'; eb.style.color = '#39ff14'; }
-        document.getElementById('credits-display').parentElement.classList.add('hidden');
+        showGameComplete();
         return; 
     }
+    state.currentLevelIndex = levelIndex;
+    state.currentLevelMeta = LEVELS[levelIndex];
+    startMusic();
     let maxLoops = LEVELS[levelIndex].maxGhosts + 1;
     document.getElementById('max-loops').innerText = maxLoops;
-    state.currentLevelIndex = levelIndex; let lv = LEVELS[levelIndex];
+    let lv = LEVELS[levelIndex];
+    state.levelAbilityOverrides = [...(lv.grants || [])];
     state.robots = []; state.projectiles = [];
-    document.getElementById('level-display').innerText = levelIndex + 1; document.getElementById('objective-text').innerText = lv.obj; 
+    document.getElementById('level-display').innerText = getLevelDisplayLabel(levelIndex, lv); document.getElementById('objective-text').innerText = lv.obj; 
     
     let setupData = getLevelSetup(levelIndex);
     Object.assign(state, setupData);
     
     state.player.facingX=1; state.player.facingY=0; state.player.cloakTimer=0; state.player.dashCooldown=0;
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
-    document.getElementById('challenge-text').innerText = "⭐ Challenge: " + lv.challenge.desc;
-    document.getElementById('challenge-text').style.color = state.challengesCompleted[levelIndex] ? "gold" : "#fff";
+    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
+    document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[levelIndex] ? "gold" : "#fff");
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.alarmState = false;
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
     uiAppLayout.classList.remove('hidden'); document.getElementById('loop-count').innerText = state.pastRuns.length; Object.assign(prevKeys, keys);
@@ -67,6 +103,25 @@ export function resetRun() {
     document.getElementById('loop-count').innerText = state.pastRuns.length;
 }
 
+export function restartLevel() {
+    let lv = LEVELS[state.currentLevelIndex];
+    if (!lv) return;
+    state.currentLevelMeta = lv;
+    state.levelAbilityOverrides = [...(lv.grants || [])];
+    let setupData = getLevelSetup(state.currentLevelIndex);
+    Object.assign(state, setupData);
+    state.player.facingX = 1; state.player.facingY = 0; state.player.cloakTimer = 0; state.player.dashCooldown = 0;
+    state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.failTimer = 0; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
+    document.getElementById('loop-count').innerText = 0;
+    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
+    document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[state.currentLevelIndex] ? "gold" : "#fff");
+    let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
+    state.gameState = 'PLAYING';
+    updateHUD();
+    Object.assign(prevKeys, keys);
+}
+
 export function levelFailed(reason) { if (state.failTimer > 0) return; SFX.fail(); state.failMessage = reason; state.failTimer = 120; }
 export function returnToMenu() { state.gameState = 'MENU'; initMenu(); }
 
@@ -85,6 +140,7 @@ function update() {
     
     if (state.failTimer > 0) { state.failTimer--; if (state.failTimer === 0) resetRun(); return; }
     if (isKeyJustPressed('esc')) { returnToMenu(); return; }
+    if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
     if (isKeyJustPressed('r')) { resetRun(); updatePrevKeys(); return; }
 
     let allActors = [{x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h}];
@@ -161,12 +217,14 @@ function update() {
         state.player.facingY = dy-envVy===0 ? 0 : (dy-envVy>0 ? 1 : -1);
     }
 
-    let pCanMoveX = !checkWallCollision(state.player.x + dx, state.player.y, state.player.w, state.player.h);
-    let pCanMoveY = !checkWallCollision(state.player.x, state.player.y + dy, state.player.w, state.player.h);
+    let nextPlayerX = { x: state.player.x + dx, y: state.player.y, w: state.player.w, h: state.player.h };
+    let nextPlayerY = { x: state.player.x, y: state.player.y + dy, w: state.player.w, h: state.player.h };
+    let pCanMoveX = !checkWallCollision(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h);
+    let pCanMoveY = !checkWallCollision(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h);
     state.activeGhosts.forEach(g => {
         if (!g.isActive) return;
-        if (AABB(state.player.x + dx, state.player.y, state.player.w, state.player.h, g.x, g.y, g.w, g.h)) pCanMoveX = false;
-        if (AABB(state.player.x, state.player.y + dy, state.player.w, state.player.h, g.x, g.y, g.w, g.h)) pCanMoveY = false;
+        if (AABB(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h, g.x, g.y, g.w, g.h) && ghostShieldBlocks(g, nextPlayerX)) pCanMoveX = false;
+        if (AABB(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h, g.x, g.y, g.w, g.h) && ghostShieldBlocks(g, nextPlayerY)) pCanMoveY = false;
     });
     if (pCanMoveX) state.player.x += dx;
     if (pCanMoveY) state.player.y += dy;
@@ -175,13 +233,16 @@ function update() {
         if (!g.isActive) return;
         let gDx = g.intendedDx || 0; let gDy = g.intendedDy || 0;
         if (gDx === 0 && gDy === 0) return;
-        let gCanMoveX = !checkWallCollision(g.x + gDx, g.y, g.w, g.h); let gCanMoveY = !checkWallCollision(g.x, g.y + gDy, g.w, g.h);
-        if (AABB(g.x + gDx, g.y, g.w, g.h, state.player.x, state.player.y, state.player.w, state.player.h)) gCanMoveX = false;
-        if (AABB(g.x, g.y + gDy, g.w, g.h, state.player.x, state.player.y, state.player.w, state.player.h)) gCanMoveY = false;
+        let nextGhostX = { x: g.x + gDx, y: g.y, w: g.w, h: g.h };
+        let nextGhostY = { x: g.x, y: g.y + gDy, w: g.w, h: g.h };
+        let gCanMoveX = !checkWallCollision(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h);
+        let gCanMoveY = !checkWallCollision(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h);
+        if (AABB(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h, state.player.x, state.player.y, state.player.w, state.player.h) && ghostShieldBlocks(g, state.player)) gCanMoveX = false;
+        if (AABB(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h, state.player.x, state.player.y, state.player.w, state.player.h) && ghostShieldBlocks(g, state.player)) gCanMoveY = false;
         state.activeGhosts.forEach(otherG => {
             if (otherG !== g && otherG.isActive) {
-                if (AABB(g.x + gDx, g.y, g.w, g.h, otherG.x, otherG.y, otherG.w, otherG.h)) gCanMoveX = false;
-                if (AABB(g.x, g.y + gDy, g.w, g.h, otherG.x, otherG.y, otherG.w, otherG.h)) gCanMoveY = false;
+                if (AABB(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h, otherG.x, otherG.y, otherG.w, otherG.h) && ghostShieldBlocks(otherG, nextGhostX)) gCanMoveX = false;
+                if (AABB(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h, otherG.x, otherG.y, otherG.w, otherG.h) && ghostShieldBlocks(otherG, nextGhostY)) gCanMoveY = false;
             }
         });
         if (gCanMoveX) g.x += gDx;
@@ -257,22 +318,30 @@ function update() {
     
     if (allDelivered && state.packages.filter(p=>p.type !== 'decoy').length > 0 && state.gameState === 'PLAYING') { 
         SFX.win(); state.gameState = 'LEVEL_COMPLETE'; uiLevelComplete.classList.remove('hidden'); 
-        let isFirstTimeLevel = (state.currentLevelIndex == parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'));
-        if (state.currentLevelIndex >= state.maxUnlockedLevel && state.currentLevelIndex < LEVELS.length - 1) {
-            state.maxUnlockedLevel = state.currentLevelIndex + 1; localStorage.setItem('echoCourier_maxLevel', state.maxUnlockedLevel);
-        }
-        let earnedMsg = isFirstTimeLevel ? "Level Clear: +$50<br><br>" : "Level Clear: +$0<br><br>";
-        
-        let chalSuccess = !state.challengesCompleted[state.currentLevelIndex] && LEVELS[state.currentLevelIndex].challenge.check();
         let chalMsg = document.getElementById('challenge-result');
-        if (chalSuccess) {
-            state.challengesCompleted[state.currentLevelIndex] = true;
-            localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
-            if (chalMsg) { chalMsg.innerHTML = earnedMsg + "⭐ Challenge Passed! (+$50) ⭐"; chalMsg.style.color = 'gold'; }
+        if (state.currentLevelMeta?.isTutorial) {
+            if (chalMsg) { chalMsg.innerHTML = "Tutorial complete. You can replay this module any time from TRAINING."; chalMsg.style.color = '#00f3ff'; }
         } else {
-            let previouslyDone = state.challengesCompleted[state.currentLevelIndex];
-            if (chalMsg) { chalMsg.innerHTML = earnedMsg + (previouslyDone ? "⭐ Challenge Already Claimed ⭐" : "Challenge Failed (Try again!)"); chalMsg.style.color = previouslyDone ? 'gold' : '#888'; }
+            let isFirstTimeLevel = (state.currentLevelIndex == parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'));
+            if (state.currentLevelIndex >= state.maxUnlockedLevel && state.currentLevelIndex < CAMPAIGN_LEVEL_COUNT - 1) {
+                state.maxUnlockedLevel = state.currentLevelIndex + 1; localStorage.setItem('echoCourier_maxLevel', state.maxUnlockedLevel);
+            }
+            let earnedMsg = isFirstTimeLevel ? "Level Clear: +$50<br><br>" : "Level Clear: +$0<br><br>";
+            let chalSuccess = !state.challengesCompleted[state.currentLevelIndex] && LEVELS[state.currentLevelIndex].challenge.check();
+            if (chalSuccess) {
+                state.challengesCompleted[state.currentLevelIndex] = true;
+                localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
+                if (chalMsg) { chalMsg.innerHTML = earnedMsg + "⭐ Challenge Passed! (+$50) ⭐"; chalMsg.style.color = 'gold'; }
+            } else {
+                let previouslyDone = state.challengesCompleted[state.currentLevelIndex];
+                if (chalMsg) { chalMsg.innerHTML = earnedMsg + (previouslyDone ? "⭐ Challenge Already Claimed ⭐" : "Challenge Failed (Try again!)"); chalMsg.style.color = previouslyDone ? 'gold' : '#888'; }
+            }
         }
+        let nextIndex = getNextLevelIndex(state.currentLevelIndex);
+        let nextBtn = document.getElementById('next-level-btn');
+        nextBtn.innerText = state.currentLevelMeta?.isTutorial
+            ? (nextIndex !== null ? "NEXT TUTORIAL" : "RETURN TO MENU")
+            : (nextIndex !== null ? "NEXT LEVEL" : "FINISH SHIFT");
     }
     
     state.currentRun.push({ x: state.player.x, y: state.player.y, facingX: state.player.facingX, facingY: state.player.facingY, cloakTimer: state.player.cloakTimer, interact: interactJustPressed, toss: tossJustPressed }); 
@@ -339,9 +408,10 @@ window.onload = () => {
     initTouchControls();
     window.startNextAvailableLevel = () => {
         let devModeCheckbox = document.getElementById('dev-mode-checkbox');
-        let lvl = devModeCheckbox.checked ? 0 : Math.min(state.maxUnlockedLevel, LEVELS.length - 1);
+        let lvl = devModeCheckbox.checked ? 0 : Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
         startGame(lvl);
     };
+    window.startTutorialTrack = () => startGame(TUTORIAL_LEVEL_START);
     
     window.startEditorMode = (jsonString, levelIndex = null) => {
         state.gameState = 'EDITOR';
@@ -369,12 +439,19 @@ window.onload = () => {
 
     window.showSubMenu = showSubMenu;
     window.startGame = startGame;
+    window.restartLevel = restartLevel;
     window.initMenu = initMenu;
     window.returnToMenu = returnToMenu;
     
     document.getElementById('open-editor-btn').onclick = () => window.startEditorMode();
+    document.getElementById('dev-mode-checkbox').onchange = () => initMenu();
     
-    document.getElementById('next-level-btn').onclick = () => startGame(state.currentLevelIndex + 1);
+    document.getElementById('next-level-btn').onclick = () => {
+        let nextIndex = getNextLevelIndex(state.currentLevelIndex);
+        if (nextIndex !== null) startGame(nextIndex);
+        else if (state.currentLevelMeta?.isTutorial) initMenu();
+        else showGameComplete();
+    };
     document.getElementById('reset-save-btn').onclick = () => { localStorage.clear(); location.reload(); };
     
     document.body.addEventListener('click', () => {

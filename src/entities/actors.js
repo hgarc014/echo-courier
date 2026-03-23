@@ -82,5 +82,28 @@ export class Ghost extends Entity {
             ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = '#00f3ff'; ctx.globalAlpha = 0.5; ctx.fillRect(this.x, this.y, this.w, this.h);
         } else { ctx.fillStyle = '#00f3ff'; ctx.fillRect(this.x, this.y, this.w, this.h); }
         ctx.restore();
+
+        if (state.abilitiesPurchased.ghostShield || state.levelAbilityOverrides.includes('ghostShield')) {
+            const cx = this.x + this.w / 2;
+            const cy = this.y + this.h / 2;
+            const facingX = this.facingX || 1;
+            const facingY = this.facingY || 0;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 221, 0, 0.9)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + facingX * 18, cy + facingY * 18);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 221, 0, 0.25)';
+            if (Math.abs(facingX) > 0) {
+                const shieldX = facingX > 0 ? this.x + this.w - 4 : this.x - 8;
+                ctx.fillRect(shieldX, this.y - 2, 8, this.h + 4);
+            } else if (Math.abs(facingY) > 0) {
+                const shieldY = facingY > 0 ? this.y + this.h - 4 : this.y - 8;
+                ctx.fillRect(this.x - 2, shieldY, this.w + 4, 8);
+            }
+            ctx.restore();
+        }
     }
 }

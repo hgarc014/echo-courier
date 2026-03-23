@@ -1,0 +1,14 @@
+# OS/editor clutter
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Local tooling downloads
+tools/node-*-win-x64/
+tools/node-*-win-x64.zip
+
+# Optional package manager output
+node_modules/

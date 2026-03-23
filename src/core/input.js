@@ -1,4 +1,4 @@
-export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, shift: false, f: false, c: false, esc: false };
+export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, q: false, shift: false, f: false, c: false, esc: false };
 export const prevKeys = { ...keys };
 
 window.addEventListener('keydown', e => {
@@ -9,6 +9,7 @@ window.addEventListener('keydown', e => {
         case 'KeyD': case 'ArrowRight': keys.d = true; break;
         case 'Space': keys.space = true; break;
         case 'KeyR': keys.r = true; break;
+        case 'KeyQ': keys.q = true; break;
         case 'ShiftLeft': case 'ShiftRight': keys.shift = true; break;
         case 'KeyF': keys.f = true; break;
         case 'KeyC': keys.c = true; break;
@@ -23,6 +24,7 @@ window.addEventListener('keyup', e => {
         case 'KeyD': case 'ArrowRight': keys.d = false; break;
         case 'Space': keys.space = false; break;
         case 'KeyR': keys.r = false; break;
+        case 'KeyQ': keys.q = false; break;
         case 'ShiftLeft': case 'ShiftRight': keys.shift = false; break;
         case 'KeyF': keys.f = false; break;
         case 'KeyC': keys.c = false; break;

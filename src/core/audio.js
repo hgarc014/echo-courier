@@ -78,7 +78,7 @@ export function playMenuMusic() {
 
 export function startMusic() {
     let nextTrack;
-    if (state.currentLevelIndex === 12) nextTrack = trackBoss; 
+    if (state.currentLevelMeta?.isBoss) nextTrack = trackBoss;
     else if (state.currentLevelIndex <= 5) nextTrack = track1;  // Levels 1 through 6
     else nextTrack = track2;                                    // Levels 7 through 12
 

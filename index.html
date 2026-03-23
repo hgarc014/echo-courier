@@ -16,14 +16,21 @@
         <!-- Main Hub Buttons -->
         <div id="main-menu-nav" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
             <button class="primary-btn" style="width: 300px; margin-top: 0;" onclick="startNextAvailableLevel()">START SHIFT</button>
+            <button class="secondary-btn" style="width: 300px; margin-top: 0;" onclick="showSubMenu('tutorials')">TRAINING</button>
             <button class="secondary-btn" style="width: 300px; margin-top: 0;" onclick="showSubMenu('levels')">LEVEL SELECT</button>
             <button class="secondary-btn" style="width: 300px; margin-top: 0;" onclick="showSubMenu('shop')">UPGRADE & SUITS</button>
             <button class="secondary-btn" style="width: 300px; margin-top: 0;" onclick="showSubMenu('settings')">SETTINGS</button>
         </div>
 
+        <div id="sub-tutorials" class="hidden" style="display: flex; flex-direction: column; align-items: center;">
+            <h2 style="color: #ffdd00; margin-bottom: 20px;">TRAINING</h2>
+            <div id="tutorial-select-grid" class="level-grid" style="max-height: 400px; overflow-y: auto;"></div>
+            <button class="secondary-btn" style="margin-top: 30px;" onclick="showSubMenu('main')">BACK</button>
+        </div>
+
         <!-- Level Select Submenu -->
         <div id="sub-levels" class="hidden" style="display: flex; flex-direction: column; align-items: center;">
-            <h2 style="color: #00f3ff; margin-bottom: 20px;">LEVEL SELECT</h2>
+            <h2 style="color: #00f3ff; margin-bottom: 20px;">CAMPAIGN</h2>
             <div id="level-select-grid" class="level-grid" style="max-height: 400px; overflow-y: auto;"></div>
             <button class="secondary-btn" style="margin-top: 30px;" onclick="showSubMenu('main')">BACK</button>
         </div>
@@ -38,6 +45,7 @@
                 <button id="shop-dash" class="secondary-btn" style="margin-top: 0; padding: 6px 12px; font-size: 0.8rem;">DASH ($300)</button>
                 <button id="shop-toss" class="secondary-btn" style="margin-top: 0; padding: 6px 12px; font-size: 0.8rem;">TOSS ($300)</button>
                 <button id="shop-cloak" class="secondary-btn" style="margin-top: 0; padding: 6px 12px; font-size: 0.8rem;">CLOAK ($400)</button>
+                <button id="shop-ghost-shield" class="secondary-btn" style="margin-top: 0; padding: 6px 12px; font-size: 0.8rem;">ECHO SHIELD ($400)</button>
             </div>
             
             <div id="suit-selector-container" style="margin-top: 25px; display: flex; gap: 10px; justify-content: center;">
@@ -92,6 +100,7 @@
                 <div id="action-cluster" style="position: relative; width: 140px; height: 140px; pointer-events: auto; opacity: 0.5;">
                     <div data-key="space" class="touch-btn" style="position:absolute; top:45px; left:45px; width:50px; height:50px; background:#000; border:2px solid #ffdd00; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#ffdd00; font-weight:bold; user-select:none; font-size:12px;">INT</div>
                     <div data-key="r" class="touch-btn" style="position:absolute; top:0; left:50px; width:40px; height:40px; background:#000; border:2px solid red; border-radius:50%; display:flex; justify-content:center; align-items:center; color:red; font-weight:bold; font-size: 10px; user-select:none;">RST</div>
+                    <div data-key="q" class="touch-btn" style="position:absolute; top:100px; left:50px; width:40px; height:40px; background:#000; border:2px solid #ff66cc; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#ff66cc; font-weight:bold; font-size: 10px; user-select:none;">LVL</div>
                     <div data-key="shift" id="touch-btn-dash" class="touch-btn hidden" style="position:absolute; top:100px; left:0; width:40px; height:40px; background:#000; border:2px solid #39ff14; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#39ff14; font-weight:bold; font-size: 10px; user-select:none;">DSH</div>
                     <div data-key="f" id="touch-btn-toss" class="touch-btn hidden" style="position:absolute; top:100px; left:100px; width:40px; height:40px; background:#000; border:2px solid orange; border-radius:50%; display:flex; justify-content:center; align-items:center; color:orange; font-weight:bold; font-size: 10px; user-select:none;">TOS</div>
                     <div data-key="c" id="touch-btn-cloak" class="touch-btn hidden" style="position:absolute; top:0; left:100px; width:40px; height:40px; background:#000; border:2px solid #b026ff; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#b026ff; font-weight:bold; font-size: 10px; user-select:none;">CLK</div>
@@ -126,6 +135,7 @@
                 <kbd>WASD</kbd> Move &nbsp;|&nbsp; 
                 <kbd>SPACE</kbd> Pick/Drop &nbsp;|&nbsp; 
                 <kbd>R</kbd> Reset Loop &nbsp;|&nbsp;
+                <kbd>Q</kbd> Restart Level &nbsp;|&nbsp;
                 <kbd>ESC</kbd> Menu
             </div>
             <div class="controls-hint" style="color: #ffdd00;">

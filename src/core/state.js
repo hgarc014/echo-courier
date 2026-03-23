@@ -20,6 +20,8 @@ export const state = {
     failTimer: 0,
     failMessage: "",
     alarmState: false,
+    levelAbilityOverrides: [],
+    currentLevelMeta: null,
     
     walls: [], doors: [], plates: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], projectiles: [], dashTrails: [],
     deliveryZone: null, player: null,
@@ -36,7 +38,11 @@ state.assetNames.forEach(name => {
 
 export function getCredits() {
     let earned = (state.maxUnlockedLevel * 50) + (Object.keys(state.challengesCompleted).length * 50);
-    let spent = (state.abilitiesPurchased['dash'] ? 150 : 0) + (state.abilitiesPurchased['toss'] ? 150 : 0) + (state.abilitiesPurchased['cloak'] ? 200 : 0);
+    let spent =
+        (state.abilitiesPurchased['dash'] ? 150 : 0) +
+        (state.abilitiesPurchased['toss'] ? 150 : 0) +
+        (state.abilitiesPurchased['cloak'] ? 200 : 0) +
+        (state.abilitiesPurchased['ghostShield'] ? 200 : 0);
     return earned - spent;
 }
 
@@ -52,11 +58,13 @@ export function getPlayerRank() {
 
 export function getUnlockedAbilities() {
     const devMode = document.getElementById('dev-mode-checkbox');
-    if (devMode && devMode.checked) return ['dash', 'toss', 'cloak'];
+    if (devMode && devMode.checked) return ['dash', 'toss', 'cloak', 'ghostShield'];
     let unlocks = new Set();
     if (state.abilitiesPurchased['dash']) unlocks.add('dash');
     if (state.abilitiesPurchased['toss']) unlocks.add('toss');
     if (state.abilitiesPurchased['cloak']) unlocks.add('cloak');
+    if (state.abilitiesPurchased['ghostShield']) unlocks.add('ghostShield');
+    for (let ability of state.levelAbilityOverrides) unlocks.add(ability);
     return Array.from(unlocks);
 }
 
