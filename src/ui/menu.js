@@ -1,7 +1,7 @@
 import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities } from '../core/state.js';
 import { LEVELS, TUTORIAL_LEVEL_INDICES } from '../data/levels.js';
 import { startGame } from '../main.js';
-import { playMenuMusic } from '../core/audio.js';
+import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
 
 export function showSubMenu(menuId) {
     document.getElementById('tutorial-prompt').classList.add('hidden');
@@ -52,8 +52,24 @@ export function initMenu() {
     let displayRank = rankData[getPlayerRank()] || "Senior Courier";
     document.getElementById('player-rank-display').innerText = `Rank: ${displayRank}`;
     document.getElementById('credits-display').innerText = getCredits();
+    document.getElementById('voice-dialog-checkbox').checked = state.audioSettings.dialogVoiceEnabled !== false;
+    document.getElementById('dialog-volume-slider').value = Math.round((state.audioSettings.dialogVolume ?? 0.8) * 100);
+    document.getElementById('dialog-volume-value').innerText = `${Math.round((state.audioSettings.dialogVolume ?? 0.8) * 100)}%`;
+    document.getElementById('music-volume-slider').value = Math.round((state.audioSettings.musicVolume ?? 0.8) * 100);
+    document.getElementById('music-volume-value').innerText = `${Math.round((state.audioSettings.musicVolume ?? 0.8) * 100)}%`;
+    document.getElementById('global-audio-toggle-btn').innerText = state.audioSettings.muted ? 'Unmute Audio' : 'Mute Audio';
+    document.getElementById('voice-engine-status').innerText = getDialogVoiceStatus();
+
+    let hudAudioBtn = document.getElementById('hud-audio-toggle-btn');
+    if (hudAudioBtn) {
+        hudAudioBtn.classList.toggle('muted', state.audioSettings.muted);
+        hudAudioBtn.title = state.audioSettings.muted ? 'Unmute audio' : 'Mute audio';
+        hudAudioBtn.setAttribute('aria-label', state.audioSettings.muted ? 'Unmute audio' : 'Mute audio');
+    }
     
     playMenuMusic();
+    applyAudioSettings();
+    preloadDialogVoice().catch(() => {});
     
     LEVELS.forEach((lvl, idx) => {
         if (lvl.isTutorial) return;
@@ -63,7 +79,7 @@ export function initMenu() {
         btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
         
         let hasGold = state.challengesCompleted[idx] === true;
-        let iconHtml = lockedHtml(lvl, unlocked, hasGold);
+        let iconHtml = lockedHtml(unlocked, hasGold);
         
         btn.innerHTML = `${iconHtml} Level ${idx + 1}`;
         if (unlocked) btn.onclick = () => startGame(idx);
@@ -117,13 +133,54 @@ export function initMenu() {
             if (getPlayerRank() >= index) { state.playerColor = btn.getAttribute('data-color'); saveState(); updateSuitButtons(); }
         };
         if (getPlayerRank() >= index) { btn.style.opacity = '1'; btn.style.cursor = 'pointer'; btn.innerHTML = ''; }
-        else { btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; btn.innerHTML = '🔒'; btn.style.fontSize = '18px'; btn.style.lineHeight = '35px'; }
+        else { btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; btn.innerHTML = 'LOCK'; btn.style.fontSize = '10px'; btn.style.lineHeight = '35px'; }
     });
     updateSuitButtons();
+
+    document.getElementById('voice-dialog-checkbox').onchange = (e) => {
+        setDialogVoiceEnabled(e.target.checked);
+        saveState();
+        document.getElementById('voice-engine-status').innerText = getDialogVoiceStatus();
+    };
+    document.getElementById('dialog-volume-slider').oninput = (e) => {
+        let volume = parseInt(e.target.value, 10) / 100;
+        setDialogVolume(volume);
+        document.getElementById('dialog-volume-value').innerText = `${Math.round(volume * 100)}%`;
+        saveState();
+    };
+    document.getElementById('music-volume-slider').oninput = (e) => {
+        let volume = parseInt(e.target.value, 10) / 100;
+        setMusicVolume(volume);
+        document.getElementById('music-volume-value').innerText = `${Math.round(volume * 100)}%`;
+        saveState();
+    };
+    document.getElementById('voice-test-btn').onclick = (e) => {
+        playDialogVoicePreview();
+        window.setTimeout(() => {
+            document.getElementById('voice-engine-status').innerText = getDialogVoiceStatus();
+        }, 50);
+        e.currentTarget.blur();
+    };
+    document.getElementById('global-audio-toggle-btn').onclick = () => {
+        setGlobalMute(!state.audioSettings.muted);
+        saveState();
+        document.getElementById('global-audio-toggle-btn').blur();
+        initMenu();
+    };
+    if (hudAudioBtn) {
+        hudAudioBtn.onclick = (e) => {
+            setGlobalMute(!state.audioSettings.muted);
+            saveState();
+            hudAudioBtn.classList.toggle('muted', state.audioSettings.muted);
+            hudAudioBtn.title = state.audioSettings.muted ? 'Unmute audio' : 'Mute audio';
+            hudAudioBtn.setAttribute('aria-label', state.audioSettings.muted ? 'Unmute audio' : 'Mute audio');
+            e.currentTarget.blur();
+        };
+    }
 }
 
-function lockedHtml(lvl, unlocked, hasGold) {
-    if (!unlocked) return '🔒';
-    if (hasGold) return '⭐';
+function lockedHtml(unlocked, hasGold) {
+    if (!unlocked) return 'LOCK';
+    if (hasGold) return 'STAR';
     return '';
 }

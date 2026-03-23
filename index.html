@@ -73,6 +73,22 @@
         <div id="sub-settings" class="hidden" style="display: flex; flex-direction: column; align-items: center;">
             <h2 style="color: #ffdd00;">SYSTEM CONFIG</h2>
             <div class="dev-mode-toggle" style="margin-top: 30px;">
+                <label style="font-size: 1.1rem;"><input type="checkbox" id="voice-dialog-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Voice Dialog</label>
+                <br><br>
+                <label style="font-size: 1.05rem;">Dialog Volume: <span id="dialog-volume-value">80%</span></label>
+                <br>
+                <input type="range" id="dialog-volume-slider" min="0" max="100" step="5" style="width: 280px; margin-top: 12px;">
+                <br><br>
+                <label style="font-size: 1.05rem;">Music Volume: <span id="music-volume-value">80%</span></label>
+                <br>
+                <input type="range" id="music-volume-slider" min="0" max="100" step="5" style="width: 280px; margin-top: 12px;">
+                <br><br>
+                <div style="font-size: 0.95rem; color: #9fb0bd;">Voice Engine: <span id="voice-engine-status" style="color: #00f3ff; font-weight: 700;">Idle</span></div>
+                <br>
+                <button id="voice-test-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0;">TEST VOICE</button>
+                <br><br>
+                <button id="global-audio-toggle-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0;">MUTE ALL AUDIO</button>
+                <br><br><br>
                 <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-mode-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Developer Mode (Unlock All)</label>
                 <br><br><br>
                 <button id="open-editor-btn" class="primary-btn" style="padding: 10px 20px; border-color: #39ff14; color: #39ff14;">LAUNCH LEVEL EDITOR</button>
@@ -86,13 +102,18 @@
     <!-- Active Game Layout -->
     <div id="app-layout" class="hidden">
         <div class="top-hud">
-            <h1 class="logo">ECHO COURIER</h1>
+            <div class="hud-brand">
+                <h1 class="logo">ECHO COURIER</h1>
+            </div>
             <div class="hud-center">
                 <div class="stat-box">Loop <span id="loop-count">0</span> / Maximum <span id="max-loops">∞</span></div>
                 <div class="stat-box hidden" id="delivery-progress-box">Delivery <span id="delivery-progress">0 / 0</span></div>
                 <div class="objective" id="objective-text">Deliver the package safely to the green zone.</div>
                 <span id="level-display" style="display:none;">1</span>
                 <div class="objective" id="challenge-text" style="font-size: 0.9rem; margin-top:5px; color: #ffdd00;">⭐ Challenge: None</div>
+            </div>
+            <div class="hud-actions">
+                <button id="hud-audio-toggle-btn" class="hud-audio-btn" aria-label="Mute audio" title="Mute audio"></button>
             </div>
         </div>
         

@@ -1,9 +1,44 @@
+function loadAudioSettings() {
+    const raw = localStorage.getItem('echoCourier_audio');
+    if (!raw) {
+        return { muted: false, dialogVoiceEnabled: true, dialogVolume: 0.9, musicVolume: 0.7 };
+    }
+
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return { muted: false, dialogVoiceEnabled: true, dialogVolume: 0.9, musicVolume: 0.7 };
+    }
+
+    const settings = {
+        muted: !!parsed.muted,
+        dialogVoiceEnabled: parsed.dialogVoiceEnabled !== false,
+        dialogVolume: typeof parsed.dialogVolume === 'number' ? parsed.dialogVolume : 0.9,
+        musicVolume: typeof parsed.musicVolume === 'number' ? parsed.musicVolume : 0.7
+    };
+
+    const isLegacyDefault =
+        settings.muted === false &&
+        settings.dialogVoiceEnabled === true &&
+        settings.dialogVolume === 0.8 &&
+        settings.musicVolume === 0.8;
+
+    if (isLegacyDefault) {
+        settings.dialogVolume = 0.9;
+        settings.musicVolume = 0.7;
+    }
+
+    return settings;
+}
+
 export const state = {
     maxUnlockedLevel: parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'),
     playerColor: localStorage.getItem('echoCourier_suit') || '#ff7b00',
     challengesCompleted: JSON.parse(localStorage.getItem('echoCourier_challenges') || '{}'),
     abilitiesPurchased: JSON.parse(localStorage.getItem('echoCourier_abilities') || '{}'),
     tutorialProgress: JSON.parse(localStorage.getItem('echoCourier_tutorials') || '{}'),
+    audioSettings: loadAudioSettings(),
     runStats: { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 },
     
     FPS: 60,
@@ -75,5 +110,6 @@ export function saveState() {
     localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
     localStorage.setItem('echoCourier_abilities', JSON.stringify(state.abilitiesPurchased));
     localStorage.setItem('echoCourier_tutorials', JSON.stringify(state.tutorialProgress));
+    localStorage.setItem('echoCourier_audio', JSON.stringify(state.audioSettings));
     localStorage.setItem('echoCourier_suit', state.playerColor);
 }

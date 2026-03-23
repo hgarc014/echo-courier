@@ -1,6 +1,6 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls } from './core/input.js';
-import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic } from './core/audio.js';
+import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination } from './core/physics.js';
 import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -160,23 +160,26 @@ function hideTutorialPrompt() {
     document.getElementById('tutorial-prompt').classList.add('hidden');
 }
 
-function showLevelDialog(speaker, text, accentColor = '#39ff14') {
+function showLevelDialog(speaker, text, accentColor = '#39ff14', clipKey = null) {
     let speakerUI = document.getElementById('dialog-speaker'); if (speakerUI) { speakerUI.innerText = speaker; speakerUI.style.color = accentColor; }
     let textUI = document.getElementById('dialog-text'); if (textUI) textUI.innerText = `"${text}"`;
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.remove('hidden');
+    preloadDialogVoice().catch(() => {});
+    speakDialog(speaker, text, clipKey);
 }
 
 function hideLevelDialog() {
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
     let ds = document.getElementById('dialog-speaker'); if (ds) ds.innerText = '';
     let dt = document.getElementById('dialog-text'); if (dt) dt.innerText = '';
+    stopDialogSpeech();
 }
 
 function startBossIntro(level) {
     if (!level?.bossIntro) return;
     state.pendingBossIntro = null;
     state.gameState = 'BOSS_INTRO';
-    showLevelDialog(level.bossIntro.speaker, level.bossIntro.text, '#ff5555');
+    showLevelDialog(level.bossIntro.speaker, level.bossIntro.text, '#ff5555', `level-${state.currentLevelIndex}-boss-intro`);
 }
 
 function beginBossEncounter(level) {
@@ -216,6 +219,8 @@ function ghostShieldBlocks(defenderGhost, actorBox) {
 }
 
 export function startGame(levelIndex) {
+    unlockAudio();
+    preloadDialogVoice().catch(() => {});
     if (levelIndex >= LEVELS.length) { 
         showGameComplete();
         return; 
@@ -245,7 +250,7 @@ export function startGame(levelIndex) {
     
     if (lv.story) {
         state.gameState = 'DIALOG';
-        showLevelDialog(lv.story.speaker, lv.story.text);
+        showLevelDialog(lv.story.speaker, lv.story.text, '#39ff14', `level-${levelIndex}-story`);
     } else {
         state.gameState = 'PLAYING';
         hideLevelDialog();
@@ -283,6 +288,7 @@ export function restartLevel() {
     document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
     document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[state.currentLevelIndex] ? "gold" : "#fff");
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
+    stopDialogSpeech();
     state.pendingBossIntro = lv.bossIntro || null;
     if (lv.isBoss && state.pendingBossIntro) startBossIntro(lv);
     else state.gameState = 'PLAYING';
@@ -291,7 +297,7 @@ export function restartLevel() {
 }
 
 export function levelFailed(reason) { if (state.failTimer > 0) return; SFX.fail(); state.failMessage = reason; state.failTimer = 120; }
-export function returnToMenu() { state.gameState = 'MENU'; initMenu(); }
+export function returnToMenu() { stopDialogSpeech(); state.gameState = 'MENU'; initMenu(); }
 
 function update() {
     scheduleMusic();
@@ -651,6 +657,9 @@ function loop(timestamp) {
 
 window.onload = () => {
     initTouchControls();
+    preloadDialogVoice().catch(() => {});
+    document.body.addEventListener('pointerdown', () => { unlockAudio(); }, { passive: true });
+    document.body.addEventListener('keydown', () => { unlockAudio(); });
     window.startNextAvailableLevel = () => {
         let devModeCheckbox = document.getElementById('dev-mode-checkbox');
         if (!devModeCheckbox.checked && !hasCompletedTutorialTrack()) {
@@ -713,6 +722,7 @@ window.onload = () => {
     document.getElementById('reset-save-btn').onclick = () => { localStorage.clear(); location.reload(); };
     
     document.body.addEventListener('click', () => {
+        unlockAudio();
         if (state.gameState === 'MENU' || state.gameState === 'GAME_COMPLETE') playMenuMusic();
     });
     
