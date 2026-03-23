@@ -67,11 +67,6 @@ export class LaserProjectile {
                 g.isActive = false; this.active = false; break;
             }
         }
-        for (let p of pkgs) {
-            if (p.type === 'fragile' && AABB(this.x, this.y, this.w, this.h, p.x, p.y, p.w, p.h)) {
-                p.isDestroyed = true; this.active = false;
-            }
-        }
         return null;
     }
     render(ctx) {
@@ -87,10 +82,42 @@ export class ShooterRobot extends Entity {
         this.path = path; this.pathIndex = 0; this.speed = 1.5;
         this.fireCooldown = 0; this.facingAngle = 0;
         this.hp = 3; this.hitFlicker = 0;
+        this.engaged = true;
+        this.isEmerging = false;
+        this.emergeUntilPathIndex = 0;
     }
     update(player, activeGhosts, walls) {
         if (this.hp <= 0) return;
+        if (!this.engaged && !this.isEmerging) return;
         if (this.hitFlicker > 0) { this.hitFlicker--; return; } // Stun
+
+        const moveAlongPath = () => {
+            if (this.path.length <= 1) return;
+            let curSpeed = this.hp === 2 ? 3.0 : 2.0;
+            let target = this.path[this.pathIndex];
+            let dx = target.x - this.x;
+            let dy = target.y - this.y;
+            let dist = Math.hypot(dx, dy);
+            if (dist < curSpeed) {
+                this.x = target.x;
+                this.y = target.y;
+                this.pathIndex = (this.pathIndex + 1) % this.path.length;
+            } else {
+                this.x += (dx / dist) * curSpeed;
+                this.y += (dy / dist) * curSpeed;
+                this.facingAngle = Math.atan2(dy, dx);
+            }
+        };
+
+        if (this.isEmerging) {
+            moveAlongPath();
+            if (this.pathIndex >= this.emergeUntilPathIndex) {
+                this.isEmerging = false;
+                this.engaged = true;
+                this.fireCooldown = Math.max(this.fireCooldown, 45);
+            }
+            return;
+        }
         
         let targets = [];
         if (player.cloakTimer <= 0) targets.push(player);
@@ -110,10 +137,7 @@ export class ShooterRobot extends Entity {
             this.facingAngle = Math.atan2(dy, dx);
         } else if (this.path.length > 1) {
             // Speed up slightly in Phase 2
-            let curSpeed = this.hp === 2 ? 3.0 : 2.0;
-            let target = this.path[this.pathIndex]; let dx = target.x - this.x; let dy = target.y - this.y; let dist = Math.hypot(dx, dy);
-            if (dist < curSpeed) { this.pathIndex = (this.pathIndex + 1) % this.path.length; }
-            else { this.x += (dx/dist)*curSpeed; this.y += (dy/dist)*curSpeed; this.facingAngle = Math.atan2(dy, dx); }
+            moveAlongPath();
             if (bestTarget) { this.facingAngle = Math.atan2(bestTarget.y + 15 - (this.y+17), bestTarget.x + 15 - (this.x+17)); }
         }
 

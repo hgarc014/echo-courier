@@ -11,6 +11,11 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 initEditor(canvas, ctx);
 
+const RECORDED_TRAIL_SECONDS = 2.5;
+const PROJECTED_TRAIL_SECONDS = 3;
+const RECORDED_TRAIL_FRAMES = Math.floor(RECORDED_TRAIL_SECONDS * 60);
+const PROJECTED_TRAIL_FRAMES = Math.floor(PROJECTED_TRAIL_SECONDS * 60);
+
 let uiTitleScreen = document.getElementById('title-screen');
 let uiAppLayout = document.getElementById('app-layout');
 let uiLevelComplete = document.getElementById('level-complete');
@@ -108,14 +113,38 @@ function buildProjectedEchoPath(runData) {
         points.push({ x: preview.x, y: preview.y });
     }
 
+    const visiblePoints = points.slice(-PROJECTED_TRAIL_FRAMES);
+
     return {
-        points,
+        points: visiblePoints,
         final: preview
     };
 }
 
 function hasCompletedTutorialTrack() {
     return TUTORIAL_LEVEL_INDICES.length > 0 && TUTORIAL_LEVEL_INDICES.every(index => state.tutorialProgress[index]);
+}
+
+function getRequiredPackages() {
+    return state.packages.filter(p => p.requiredForDelivery !== false);
+}
+
+function isPackageDelivered(pkg) {
+    return !pkg.isDestroyed && !pkg.carriedBy && AABB(state.deliveryZone.x, state.deliveryZone.y, state.deliveryZone.w, state.deliveryZone.h, pkg.x, pkg.y, pkg.w, pkg.h);
+}
+
+function updateDeliveryProgressUI() {
+    const box = document.getElementById('delivery-progress-box');
+    const label = document.getElementById('delivery-progress');
+    if (!box || !label || !state.deliveryZone) return;
+    const required = getRequiredPackages();
+    if (required.length <= 1) {
+        box.classList.add('hidden');
+        return;
+    }
+    const delivered = required.filter(isPackageDelivered).length;
+    label.innerText = `${delivered} / ${required.length}`;
+    box.classList.remove('hidden');
 }
 
 function showTutorialPrompt() {
@@ -129,6 +158,47 @@ function showTutorialPrompt() {
 
 function hideTutorialPrompt() {
     document.getElementById('tutorial-prompt').classList.add('hidden');
+}
+
+function showLevelDialog(speaker, text, accentColor = '#39ff14') {
+    let speakerUI = document.getElementById('dialog-speaker'); if (speakerUI) { speakerUI.innerText = speaker; speakerUI.style.color = accentColor; }
+    let textUI = document.getElementById('dialog-text'); if (textUI) textUI.innerText = `"${text}"`;
+    let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.remove('hidden');
+}
+
+function hideLevelDialog() {
+    let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
+    let ds = document.getElementById('dialog-speaker'); if (ds) ds.innerText = '';
+    let dt = document.getElementById('dialog-text'); if (dt) dt.innerText = '';
+}
+
+function startBossIntro(level) {
+    if (!level?.bossIntro) return;
+    state.pendingBossIntro = null;
+    state.gameState = 'BOSS_INTRO';
+    showLevelDialog(level.bossIntro.speaker, level.bossIntro.text, '#ff5555');
+}
+
+function beginBossEncounter(level) {
+    if (!level?.isBoss) return;
+    if (level.bossIntroDoorId) {
+        let introDoor = state.doors.find(d => d.id === level.bossIntroDoorId);
+        if (introDoor) introDoor.isOpen = true;
+    }
+    state.robots.forEach(robot => {
+        robot.engaged = false;
+        robot.isEmerging = true;
+        robot.fireCooldown = Math.max(robot.fireCooldown, 60);
+    });
+}
+
+function engageBossEncounter(level) {
+    if (!level?.isBoss) return;
+    state.robots.forEach(robot => {
+        robot.isEmerging = false;
+        robot.engaged = true;
+        robot.fireCooldown = Math.max(robot.fireCooldown, 30);
+    });
 }
 
 function ghostShieldBlocks(defenderGhost, actorBox) {
@@ -152,6 +222,7 @@ export function startGame(levelIndex) {
     }
     state.currentLevelIndex = levelIndex;
     state.currentLevelMeta = LEVELS[levelIndex];
+    state.pendingBossIntro = state.currentLevelMeta?.bossIntro || null;
     startMusic();
     let maxLoops = LEVELS[levelIndex].maxGhosts + 1;
     document.getElementById('max-loops').innerText = maxLoops;
@@ -165,6 +236,7 @@ export function startGame(levelIndex) {
     
     state.player.facingX=1; state.player.facingY=0; state.player.cloakTimer=0; state.player.dashCooldown=0;
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
+    updateDeliveryProgressUI();
     document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
     document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[levelIndex] ? "gold" : "#fff");
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.alarmState = false;
@@ -173,12 +245,11 @@ export function startGame(levelIndex) {
     
     if (lv.story) {
         state.gameState = 'DIALOG';
-        let speakerUI = document.getElementById('dialog-speaker'); if (speakerUI) speakerUI.innerText = lv.story.speaker;
-        let textUI = document.getElementById('dialog-text'); if (textUI) textUI.innerText = `"${lv.story.text}"`;
-        let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.remove('hidden');
+        showLevelDialog(lv.story.speaker, lv.story.text);
     } else {
         state.gameState = 'PLAYING';
-        let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
+        hideLevelDialog();
+        if (state.pendingBossIntro) startBossIntro(lv);
     }
 }
 
@@ -191,8 +262,10 @@ export function resetRun() {
     Object.assign(state, setupData);
     
     state.player.facingX=1; state.player.facingY=0; state.player.cloakTimer=0; state.player.dashCooldown=0;
+    if (state.currentLevelMeta?.isBoss) engageBossEncounter(state.currentLevelMeta);
     state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
     document.getElementById('loop-count').innerText = state.pastRuns.length;
+    updateDeliveryProgressUI();
 }
 
 export function restartLevel() {
@@ -206,10 +279,13 @@ export function restartLevel() {
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     document.getElementById('loop-count').innerText = 0;
+    updateDeliveryProgressUI();
     document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
     document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[state.currentLevelIndex] ? "gold" : "#fff");
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
-    state.gameState = 'PLAYING';
+    state.pendingBossIntro = lv.bossIntro || null;
+    if (lv.isBoss && state.pendingBossIntro) startBossIntro(lv);
+    else state.gameState = 'PLAYING';
     updateHUD();
     Object.assign(prevKeys, keys);
 }
@@ -221,10 +297,18 @@ function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
         if (isKeyJustPressed('space')) {
-            startMusic(); state.gameState = 'PLAYING';
-            let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
-            let ds = document.getElementById('dialog-speaker'); if (ds) ds.innerText = '';
-            let dt = document.getElementById('dialog-text'); if (dt) dt.innerText = '';
+            startMusic();
+            hideLevelDialog();
+            if (state.pendingBossIntro) startBossIntro(state.currentLevelMeta);
+            else state.gameState = 'PLAYING';
+        }
+        updatePrevKeys(); return;
+    }
+    if (state.gameState === 'BOSS_INTRO') {
+        if (isKeyJustPressed('space')) {
+            hideLevelDialog();
+            beginBossEncounter(state.currentLevelMeta);
+            state.gameState = 'PLAYING';
         }
         updatePrevKeys(); return;
     }
@@ -376,7 +460,9 @@ function update() {
         if (!p.carriedBy && p.tossTicks > 0) {
             for (let r of state.robots) {
                 if (r.hp > 0 && AABB(p.x, p.y, p.w, p.h, r.x, r.y, r.w, r.h)) {
-                    r.hp--; r.hitFlicker = 30; SFX.laserHit(); p.isDestroyed = true;
+                    r.hp--; r.hitFlicker = 30; SFX.laserHit();
+                    if (p.requiredForDelivery !== false) p.reset();
+                    else p.isDestroyed = true;
                     if (r.hp <= 0) {
                         let bossDoor = state.doors.find(d => d.id === 'boss_door');
                         if (bossDoor) bossDoor.isOpen = true;
@@ -395,13 +481,11 @@ function update() {
         }
     }
 
-    let allDelivered = true;
-    for (let p of state.packages) {
-        if (p.type === 'decoy') continue;
-        if (p.isDestroyed || p.carriedBy || !AABB(state.deliveryZone.x, state.deliveryZone.y, state.deliveryZone.w, state.deliveryZone.h, p.x, p.y, p.w, p.h)) { allDelivered = false; break; }
-    }
+    updateDeliveryProgressUI();
+    const requiredPackages = getRequiredPackages();
+    let allDelivered = requiredPackages.length > 0 && requiredPackages.every(isPackageDelivered);
     
-    if (allDelivered && state.packages.filter(p=>p.type !== 'decoy').length > 0 && state.gameState === 'PLAYING') { 
+    if (allDelivered && state.gameState === 'PLAYING') { 
         SFX.win(); state.gameState = 'LEVEL_COMPLETE'; uiLevelComplete.classList.remove('hidden'); 
         let chalMsg = document.getElementById('challenge-result');
         if (state.currentLevelMeta?.isTutorial) {
@@ -450,7 +534,7 @@ function update() {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (state.gameState !== 'PLAYING' && state.gameState !== 'LEVEL_COMPLETE' && state.gameState !== 'EDITOR') return;
+    if (state.gameState !== 'PLAYING' && state.gameState !== 'LEVEL_COMPLETE' && state.gameState !== 'EDITOR' && state.gameState !== 'BOSS_INTRO' && state.gameState !== 'DIALOG') return;
     if (state.assetsLoaded < state.assetNames.length) { ctx.fillStyle = '#fff'; ctx.fillText("Loading Assets...", 400, 300); return; }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
@@ -460,15 +544,16 @@ function draw() {
 
     if (state.gameState === 'PLAYING' && state.currentRun.length > 0) {
         const projectedEcho = buildProjectedEchoPath(state.currentRun);
+        const recordedTrail = state.currentRun.slice(-RECORDED_TRAIL_FRAMES);
         ctx.save();
         ctx.strokeStyle = '#7df9ff';
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 6]);
         ctx.globalAlpha = 0.5;
         ctx.beginPath();
-        ctx.moveTo(state.currentRun[0].x + state.player.w / 2, state.currentRun[0].y + state.player.h / 2);
-        for (let i = 1; i < state.currentRun.length; i++) {
-            ctx.lineTo(state.currentRun[i].x + state.player.w / 2, state.currentRun[i].y + state.player.h / 2);
+        ctx.moveTo(recordedTrail[0].x + state.player.w / 2, recordedTrail[0].y + state.player.h / 2);
+        for (let i = 1; i < recordedTrail.length; i++) {
+            ctx.lineTo(recordedTrail[i].x + state.player.w / 2, recordedTrail[i].y + state.player.h / 2);
         }
         ctx.lineTo(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
         ctx.stroke();

@@ -63,6 +63,58 @@ kbd {
 .overlay {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
 }
+.dialog-overlay {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 28px;
+    background: linear-gradient(to top, rgba(5, 7, 10, 0.88) 0%, rgba(5, 7, 10, 0.45) 26%, rgba(5, 7, 10, 0.05) 55%, rgba(5, 7, 10, 0) 100%);
+    z-index: 1000;
+    pointer-events: none;
+}
+.dialog-panel {
+    width: min(720px, 100%);
+    padding: 22px 24px 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(0, 243, 255, 0.35);
+    background:
+        linear-gradient(135deg, rgba(0, 243, 255, 0.12), rgba(255, 255, 255, 0) 35%),
+        rgba(13, 17, 23, 0.9);
+    box-shadow:
+        0 24px 40px rgba(0, 0, 0, 0.55),
+        0 0 24px rgba(0, 243, 255, 0.12);
+    text-align: left;
+    pointer-events: auto;
+}
+.dialog-chip {
+    display: inline-block;
+    margin-bottom: 10px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 221, 0, 0.12);
+    color: var(--accent-interact);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+}
+.dialog-speaker {
+    margin-bottom: 10px;
+    font-size: 1.15rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+.dialog-text {
+    font-size: 1.1rem;
+    line-height: 1.55;
+    color: var(--text-main);
+}
+.dialog-continue {
+    margin-top: 16px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    text-align: right;
+}
 .panel {
     background: var(--panel-bg); border: 1px solid var(--border-color);
     padding: 40px; border-radius: 8px; text-align: center;
@@ -135,3 +187,17 @@ h2 { color: var(--accent-safe); font-size: 2.5rem; margin-bottom: 16px; letter-s
 .level-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .dev-mode-toggle { margin-top: 40px; color: var(--text-dim); font-size: 0.9rem; }
+
+@media (max-width: 860px) {
+    .dialog-overlay {
+        padding: 16px;
+        align-items: flex-end;
+    }
+    .dialog-panel {
+        width: 100%;
+        padding: 18px 18px 16px;
+    }
+    .dialog-text {
+        font-size: 1rem;
+    }
+}

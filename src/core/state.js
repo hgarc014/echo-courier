@@ -23,6 +23,7 @@ export const state = {
     alarmState: false,
     levelAbilityOverrides: [],
     currentLevelMeta: null,
+    pendingBossIntro: null,
     
     walls: [], doors: [], plates: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], projectiles: [], dashTrails: [],
     deliveryZone: null, player: null,

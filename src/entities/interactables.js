@@ -16,12 +16,13 @@ export class Wall extends Entity {
 }
 
 export class Package extends Entity {
-    constructor(id, x, y, type = 'standard') {
+    constructor(id, x, y, type = 'standard', requiredForDelivery = true) {
         super(x, y, 30, 30, 'package');
         this.id=id; this.type=type; this.startX=x; this.startY=y; this.carriedBy=null; this.isDestroyed=false;
         this.wasPickedUp=false; this.countdown=300; this.tossTicks=0; this.vx=0; this.vy=0;
+        this.requiredForDelivery = requiredForDelivery;
     }
-    reset() { this.x=this.startX; this.y=this.startY; this.carriedBy=null; this.isDestroyed=false; this.wasPickedUp=false; this.countdown=300; this.tossTicks=0; }
+    reset() { this.x=this.startX; this.y=this.startY; this.carriedBy=null; this.isDestroyed=false; this.wasPickedUp=false; this.countdown=300; this.tossTicks=0; this.vx=0; this.vy=0; }
     update() {
         if (this.isDestroyed) return null;
         if (this.carriedBy) this.wasPickedUp = true;
@@ -41,6 +42,11 @@ export class Package extends Entity {
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(this.x+2, this.y+4, this.w, this.h);
         if (this.type === 'contraband') { ctx.fillStyle='purple'; ctx.fillRect(this.x, this.y, this.w, this.h); ctx.strokeStyle='red'; ctx.lineWidth=3; ctx.strokeRect(this.x, this.y, this.w, this.h); }
         else if (this.type === 'decoy') { ctx.globalAlpha=0.5; ctx.fillStyle='#00f3ff'; ctx.fillRect(this.x, this.y, this.w, this.h); ctx.globalAlpha=1.0; }
+        else if (this.type === 'heavy') {
+            ctx.fillStyle='#a26a2d'; ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.strokeStyle='#ffd27a'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h);
+            ctx.fillStyle='#3a2410'; ctx.fillRect(this.x+6, this.y+6, this.w-12, this.h-12);
+        }
         else if (this.type === 'timed') { ctx.fillStyle='#ff0000'; ctx.fillRect(this.x, this.y, this.w, this.h); ctx.fillStyle='#fff'; ctx.font='10px Arial'; ctx.fillText(Math.ceil(this.countdown/60), this.x+8, this.y+20); }
         else super.render(ctx);
     }
