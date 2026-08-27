@@ -53,8 +53,8 @@ This document describes the current implemented game structure in the repo as of
   - `grants` are temporary level-specific ability overrides and are active in that level.
   - Current tutorial levels use `grants` to teach abilities without requiring purchase.
 - Important implementation note
-  - Level 8 contains an `unlocks: ['cloak']` field in level data, but `unlocks` is not currently used by the gameplay logic.
-  - In practice, only purchased abilities, developer mode, and `grants` affect active abilities.
+  - `unlocks` is treated as a synonym of `grants`: both temporarily enable the ability for that level only.
+  - Purchased abilities, developer mode, `grants`, and `unlocks` all affect active abilities.
 
 ## Core Systems and Entities
 
@@ -129,7 +129,7 @@ For each level:
    - Objective: get across cracked flooring and complete delivery.
    - Main mechanics: cracked floor hazard, plate-held door.
    - Expected abilities: `dash` expected
-   - Availability: purchased, not granted
+   - Availability: `dash` granted for the level
    - Echo expectation: useful / expected
    - Max ghosts: 2
 
@@ -144,7 +144,7 @@ For each level:
    - Objective: throw a package across a large gap.
    - Main mechanics: toss, cracked floors, door support from plate.
    - Expected abilities: `toss` expected
-   - Availability: purchased, not granted
+   - Availability: `toss` granted for the level
    - Echo expectation: useful / expected
    - Max ghosts: 2
 
@@ -152,7 +152,7 @@ For each level:
    - Objective: cross wind tunnels without being blown into lasers.
    - Main mechanics: wind push, laser punish, no-ghost challenge framing.
    - Expected abilities: `dash` strongly expected
-   - Availability: purchased, not granted
+   - Availability: `dash` granted for the level
    - Echo expectation: minimal
    - Max ghosts: 1
 
@@ -160,7 +160,7 @@ For each level:
    - Objective: deliver contraband through camera/alarm space.
    - Main mechanics: cameras, alarm door, contraband visibility.
    - Expected abilities: `cloak` is clearly intended by design text
-   - Availability: currently must be purchased; `unlocks` field is present in data but not wired to gameplay
+   - Availability: `cloak` granted for the level (`grants` / `unlocks`)
    - Echo expectation: optional
    - Max ghosts: 3
 
@@ -168,7 +168,7 @@ For each level:
    - Objective: use decoys to misdirect a drone while delivering the real package.
    - Main mechanics: drone audio investigation, decoy package.
    - Expected abilities: `toss` strongly expected
-   - Availability: purchased, not granted
+   - Availability: `toss` granted for the level
    - Echo expectation: optional but useful
    - Max ghosts: 3
 
@@ -176,7 +176,7 @@ For each level:
    - Objective: deliver a timed package before it detonates.
    - Main mechanics: timed cargo, gap crossing, speed pressure.
    - Expected abilities: `toss` expected
-   - Availability: purchased, not granted
+   - Availability: `toss` granted for the level
    - Echo expectation: useful
    - Max ghosts: 2
 
@@ -198,7 +198,7 @@ For each level:
    - Objective: damage the boss with heavy crates, then deliver the final fragile artifact.
    - Main mechanics: boss intro dialog, emerging robot, shooter boss, optional ammo crates, boss door unlock on defeat.
    - Expected abilities: `toss` strongly expected
-   - Availability: purchased, not granted
+   - Availability: `toss` granted for the level
    - Echo expectation: optional
    - Max ghosts: 2
    - Special delivery rule: only the fragile artifact is required for level completion
@@ -268,6 +268,6 @@ Implemented and visible in the current codebase:
 
 ## Useful Design Notes
 
-- Level design currently uses campaign levels to imply some abilities before those abilities are guaranteed. This is especially true for `dash`, `toss`, and `cloak`.
+- Campaign levels that are designed around a shop tool now grant that tool for the level, matching training. Shop purchases still persist across levels.
 - Training levels are the clearest place to see the intended mechanics in isolation.
 - If the project goal is “every campaign level should be beatable with only abilities the player definitely has by that point,” Level 4, Level 6, Level 7, Level 8, Level 9, Level 10, and Level 13 are the most important levels to audit.
