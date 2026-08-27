@@ -1,3 +1,5 @@
+import { prepareLoadedAsset } from './sprites.js';
+
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
     if (!raw) {
@@ -45,7 +47,7 @@ export const state = {
     TICK_RATE: 1000 / 60,
     assets: {},
     assetsLoaded: 0,
-    assetNames: ['player', 'package', 'plate', 'door', 'wall', 'zone', 'guard', 'laser', 'camera'],
+    assetNames: ['player', 'package', 'plate', 'door', 'wall', 'zone', 'guard', 'laser', 'camera', 'heavy', 'fragile'],
     
     pastRuns: [],
     currentRun: [],
@@ -68,9 +70,16 @@ export const state = {
     }
 };
 
+const CROP_ASSETS = new Set(['player', 'package', 'guard', 'camera', 'heavy', 'fragile']);
+
 state.assetNames.forEach(name => {
-    const img = new Image(); img.src = `assets/${name}.png`;
-    img.onload = () => { state.assetsLoaded++; }; state.assets[name] = img;
+    const img = new Image();
+    img.src = `assets/${name}.png`;
+    img.onload = () => {
+        state.assets[name] = prepareLoadedAsset(img, { crop: CROP_ASSETS.has(name), keyBlack: true });
+        state.assetsLoaded++;
+    };
+    state.assets[name] = img;
 });
 
 export function getCredits() {

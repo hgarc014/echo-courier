@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB, checkWallCollision, lineOfSightBlocked } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
+import { drawSprite } from '../core/sprites.js';
 
 function isPresentPlayer(actor) {
     return actor && actor.id === undefined && actor.assetName === 'player';
@@ -11,12 +12,15 @@ export class Laser extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'laser'); this.id=id; this.isOpen=false; }
     render(ctx) {
         if (!this.isOpen) {
+            const pulse = 0.78 + 0.22 * Math.abs(Math.sin(state.currentTick * 0.18));
             if (state.assets.laser) {
                 ctx.save(); ctx.beginPath(); ctx.rect(this.x, this.y, this.w, this.h); ctx.clip();
-                for(let i=0; i<this.h; i+=40) ctx.drawImage(state.assets.laser, this.x+(this.w/2 - 20), this.y+i, 40, 40);
-                for(let i=0; i<this.w; i+=40) ctx.drawImage(state.assets.laser, this.x+i, this.y+(this.h/2 - 20), 40, 40);
+                ctx.globalAlpha = pulse;
+                const tile = 40;
+                for(let i=0; i<this.h; i+=tile) ctx.drawImage(state.assets.laser, this.x+(this.w/2 - 20), this.y+i, tile, tile);
+                for(let i=0; i<this.w; i+=tile) ctx.drawImage(state.assets.laser, this.x+i, this.y+(this.h/2 - 20), tile, tile);
                 ctx.restore();
-            } else { ctx.fillStyle='rgba(255,0,0,0.5)'; ctx.fillRect(this.x, this.y, this.w, this.h); }
+            } else { ctx.fillStyle=`rgba(255,0,0,${0.35 * pulse})`; ctx.fillRect(this.x, this.y, this.w, this.h); }
         }
     }
 }
@@ -46,7 +50,14 @@ export class SweepCamera extends Entity {
         if (triggerAlarm) { state.alarmState = true; state.runStats.alarms++; }
     }
     render(ctx) {
-        super.render(ctx); ctx.fillStyle = state.alarmState?'rgba(255, 0, 0, 0.3)':'rgba(0, 243, 255, 0.2)';
+        const bob = Math.sin(state.currentTick * 0.2) * 0.8;
+        if (state.assets.camera) {
+            drawSprite(ctx, state.assets.camera, this.x, this.y, this.w, this.h, { valign: 'bottom', bob });
+        } else super.render(ctx);
+        const blink = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(state.currentTick * 0.25));
+        ctx.fillStyle = state.alarmState ? `rgba(255,40,40,${blink})` : `rgba(0,243,255,${blink})`;
+        ctx.beginPath(); ctx.arc(this.x + 15, this.y + 6, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = state.alarmState?'rgba(255, 0, 0, 0.3)':'rgba(0, 243, 255, 0.2)';
         ctx.beginPath(); ctx.moveTo(this.x+15, this.y+15); ctx.arc(this.x+15, this.y+15, 250, this.currentAngle-0.35, this.currentAngle+0.35); ctx.closePath(); ctx.fill();
     }
 }
@@ -215,9 +226,12 @@ export class Drone extends Entity {
         return null;
     }
     render(ctx) {
+        const hover = Math.sin(state.currentTick * 0.22) * 3;
         ctx.fillStyle = this.state==='investigate'?'#ff00aa':'#ffffff';
-        ctx.beginPath(); ctx.arc(this.x+15, this.y+15, 15, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle='#00f3ff'; ctx.beginPath(); ctx.arc(this.x+15, this.y+15, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(this.x+15, this.y+15 + hover, 15, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle='#00f3ff'; ctx.beginPath(); ctx.arc(this.x+15, this.y+15 + hover, 5, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,243,255,0.35)';
+        ctx.beginPath(); ctx.ellipse(this.x+15, this.y+28, 10, 3, 0, 0, Math.PI*2); ctx.stroke();
     }
 }
 
@@ -250,7 +264,18 @@ export class Guard extends Entity {
         return null;
     }
     render(ctx) {
-        super.render(ctx); ctx.fillStyle = this.state==='distracted'?'rgba(255,255,0,0.2)':'rgba(255,0,0,0.2)';
+        const moving = this.state === 'patrol';
+        const t = state.currentTick;
+        const walk = moving ? Math.sin(t * 0.4) : 0;
+        if (state.assets.guard) {
+            drawSprite(ctx, state.assets.guard, this.x, this.y, this.w, this.h, {
+                flipX: this.facingX < 0,
+                bob: moving ? Math.abs(walk) * 2.2 : Math.sin(t * 0.12) * 0.6,
+                scaleY: moving ? 1 + walk * 0.05 : 1,
+                valign: 'bottom'
+            });
+        } else super.render(ctx);
+        ctx.fillStyle = this.state==='distracted'?'rgba(255,255,0,0.2)':'rgba(255,0,0,0.2)';
         let vx=this.x,vy=this.y,vw=30,vh=30;
         if(this.facingX===1){vx+=30;vw=150;}else if(this.facingX===-1){vx-=150;vw=150;}
         if(this.facingY===1){vy+=30;vh=150;}else if(this.facingY===-1){vy-=150;vh=150;}
