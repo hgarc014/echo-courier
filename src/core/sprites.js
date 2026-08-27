@@ -77,9 +77,9 @@ function blitPrepared(ctx, img, dw, dh, { tint, tintAlpha, scanlines }) {
         tintCtx.globalCompositeOperation = 'source-over';
     }
     if (scanlines) {
-        tintCtx.globalCompositeOperation = 'destination-in';
-        tintCtx.fillStyle = '#fff';
-        for (let i = 0; i < th; i += 4) tintCtx.fillRect(0, i, tw, 2);
+        tintCtx.globalCompositeOperation = 'source-atop';
+        tintCtx.fillStyle = 'rgba(0, 243, 255, 0.38)';
+        for (let i = 1; i < th; i += 3) tintCtx.fillRect(0, i, tw, 1);
         tintCtx.globalCompositeOperation = 'source-over';
     }
     ctx.drawImage(tintScratch, -dw / 2, -dh / 2, dw, dh);
@@ -139,11 +139,18 @@ export function drawSprite(ctx, img, x, y, w, h, opts = {}) {
         dy = y;
     }
 
+    const n = (v, fallback) => Number.isFinite(v) ? v : fallback;
+    const bobN = n(bob, 0);
+    const rotN = n(rotation, 0);
+    const sxN = n(scaleX, 1);
+    const syN = n(scaleY, 1);
+    const alphaN = n(alpha, 1);
+
     ctx.save();
-    ctx.translate(dx + dw / 2, dy + dh / 2 - bob);
-    if (rotation) ctx.rotate(rotation);
-    ctx.scale((flipX ? -1 : 1) * scaleX, scaleY);
-    ctx.globalAlpha = alpha;
+    ctx.translate(dx + dw / 2, dy + dh / 2 - bobN);
+    if (rotN) ctx.rotate(rotN);
+    ctx.scale((flipX ? -1 : 1) * sxN, syN);
+    ctx.globalAlpha = alphaN;
     blitPrepared(ctx, img, dw, dh, { tint, tintAlpha, scanlines });
     ctx.restore();
     return true;
