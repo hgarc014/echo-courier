@@ -93,6 +93,11 @@ export function getPlayerRank() {
     return 0;
 }
 
+export function applyLevelAbilityOverrides(level) {
+    const granted = [...(level?.grants || []), ...(level?.unlocks || [])];
+    state.levelAbilityOverrides = [...new Set(granted)];
+}
+
 export function getUnlockedAbilities() {
     const devMode = document.getElementById('dev-mode-checkbox');
     if (devMode && devMode.checked) return ['dash', 'toss', 'cloak', 'ghostShield'];
@@ -102,6 +107,11 @@ export function getUnlockedAbilities() {
     if (state.abilitiesPurchased['cloak']) unlocks.add('cloak');
     if (state.abilitiesPurchased['ghostShield']) unlocks.add('ghostShield');
     for (let ability of state.levelAbilityOverrides) unlocks.add(ability);
+    const meta = state.currentLevelMeta;
+    if (meta) {
+        for (let ability of (meta.grants || [])) unlocks.add(ability);
+        for (let ability of (meta.unlocks || [])) unlocks.add(ability);
+    }
     return Array.from(unlocks);
 }
 
