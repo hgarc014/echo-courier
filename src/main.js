@@ -6,6 +6,7 @@ import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
 import { initEditor, drawEditorOverlay } from './ui/editor.js';
+import { drawSprite } from './core/sprites.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -398,6 +399,8 @@ function update() {
         state.player.facingX = dx-envVx===0 ? 0 : (dx-envVx>0 ? 1 : -1);
         state.player.facingY = dy-envVy===0 ? 0 : (dy-envVy>0 ? 1 : -1);
     }
+    state.player.moving = Math.abs(dx - envVx) + Math.abs(dy - envVy) > 0;
+    state.player.carrying = !!carried;
 
     let nextPlayerX = { x: state.player.x + dx, y: state.player.y, w: state.player.w, h: state.player.h };
     let nextPlayerY = { x: state.player.x, y: state.player.y + dy, w: state.player.w, h: state.player.h };
@@ -579,37 +582,27 @@ function draw() {
             ctx.stroke();
             ctx.restore();
 
-            ctx.save();
-            ctx.globalAlpha = 0.22;
             if (state.assets.player) {
-                ctx.drawImage(state.assets.player, projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h);
-                ctx.globalCompositeOperation = 'source-atop';
-                ctx.fillStyle = '#ffdd00';
-                ctx.globalAlpha = 0.4;
-                ctx.fillRect(projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h);
+                drawSprite(ctx, state.assets.player, projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h, {
+                    tint: '#ffdd00', tintAlpha: 0.22, alpha: 0.55, valign: 'bottom', scanlines: true
+                });
             } else {
                 ctx.fillStyle = '#ffdd00';
                 ctx.fillRect(projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h);
             }
-            ctx.restore();
         } else {
-            ctx.save();
-            ctx.globalAlpha = 0.18;
             if (state.assets.player) {
-                ctx.drawImage(state.assets.player, state.player.x, state.player.y, state.player.w, state.player.h);
-                ctx.globalCompositeOperation = 'source-atop';
-                ctx.fillStyle = '#7df9ff';
-                ctx.globalAlpha = 0.32;
-                ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
+                drawSprite(ctx, state.assets.player, state.player.x, state.player.y, state.player.w, state.player.h, {
+                    tint: '#7df9ff', tintAlpha: 0.2, alpha: 0.4, valign: 'bottom', scanlines: true
+                });
             } else {
                 ctx.fillStyle = '#7df9ff';
                 ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
             }
-            ctx.restore();
         }
     }
     
-    ctx.save(); if (state.player.cloakTimer > 0) ctx.globalAlpha = 0.2; state.player.render(ctx); ctx.restore();
+    state.player.render(ctx);
     
     state.dashTrails.forEach(t => {
         ctx.save(); ctx.globalAlpha = t.life; ctx.strokeStyle = state.playerColor; ctx.lineWidth = state.player.w * 0.8;
