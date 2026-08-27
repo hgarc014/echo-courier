@@ -2,14 +2,14 @@ import { state } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
+import { drawSprite, drawTiled } from '../core/sprites.js';
 
 export class Wall extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'wall'); }
     render(ctx) {
         if (state.assets.wall) {
-            ctx.save(); ctx.beginPath(); ctx.rect(this.x, this.y, this.w, this.h); ctx.clip();
-            for(let i=0; i<this.w; i+=40) for(let j=0; j<this.h; j+=40) ctx.drawImage(state.assets.wall, this.x+i, this.y+j, 40, 40);
-            ctx.restore();
+            const pulse = 0.92 + 0.08 * Math.sin(state.currentTick * 0.06);
+            drawTiled(ctx, state.assets.wall, this.x, this.y, this.w, this.h, 40, pulse);
             ctx.strokeStyle = '#00f3ff'; ctx.lineWidth=1; ctx.strokeRect(this.x, this.y, this.w, this.h);
         }
     }
@@ -39,16 +39,38 @@ export class Package extends Entity {
     }
     render(ctx) {
         if (this.isDestroyed) return;
-        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(this.x+2, this.y+4, this.w, this.h);
-        if (this.type === 'contraband') { ctx.fillStyle='purple'; ctx.fillRect(this.x, this.y, this.w, this.h); ctx.strokeStyle='red'; ctx.lineWidth=3; ctx.strokeRect(this.x, this.y, this.w, this.h); }
-        else if (this.type === 'decoy') { ctx.globalAlpha=0.5; ctx.fillStyle='#00f3ff'; ctx.fillRect(this.x, this.y, this.w, this.h); ctx.globalAlpha=1.0; }
-        else if (this.type === 'heavy') {
-            ctx.fillStyle='#a26a2d'; ctx.fillRect(this.x, this.y, this.w, this.h);
-            ctx.strokeStyle='#ffd27a'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h);
-            ctx.fillStyle='#3a2410'; ctx.fillRect(this.x+6, this.y+6, this.w-12, this.h-12);
+        const t = state.currentTick;
+        const carried = !!this.carriedBy;
+        const bob = carried ? 0 : Math.sin(t * 0.15 + this.id * 1.7) * 1.6;
+        const rotation = this.tossTicks > 0 ? (10 - this.tossTicks) * 0.45 : 0;
+        const scale = carried ? 0.86 : (this.tossTicks > 0 ? 1.08 : 1);
+        const drawY = carried ? this.y - 12 : this.y;
+        let img = state.assets.package;
+        let tint = null;
+        let tintAlpha = 0;
+        if (this.type === 'heavy') { img = state.assets.heavy || img; tint = '#ffd27a'; tintAlpha = 0.16; }
+        else if (this.type === 'fragile') { img = state.assets.fragile || img; tint = '#ff6b6b'; tintAlpha = 0.14; }
+        else if (this.type === 'contraband') { tint = '#b14bff'; tintAlpha = 0.28; }
+        else if (this.type === 'decoy') { tint = '#00f3ff'; tintAlpha = 0.22; }
+        else if (this.type === 'timed') { tint = '#ff3333'; tintAlpha = 0.2; }
+
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(this.x + 4, this.y + this.h - 6, this.w - 8, 5);
+
+        const drawn = img && drawSprite(ctx, img, this.x, drawY, this.w, this.h, {
+            valign: 'bottom', bob, rotation, scaleX: scale, scaleY: scale, tint, tintAlpha,
+            alpha: this.type === 'decoy' ? 0.85 : 1
+        });
+        if (!drawn) {
+            ctx.fillStyle = tint || '#c9a227';
+            ctx.fillRect(this.x, drawY, this.w, this.h);
         }
-        else if (this.type === 'timed') { ctx.fillStyle='#ff0000'; ctx.fillRect(this.x, this.y, this.w, this.h); ctx.fillStyle='#fff'; ctx.font='10px Arial'; ctx.fillText(Math.ceil(this.countdown/60), this.x+8, this.y+20); }
-        else super.render(ctx);
+        if (this.type === 'contraband') { ctx.strokeStyle='red'; ctx.lineWidth=2; ctx.strokeRect(this.x, drawY, this.w, this.h); }
+        if (this.type === 'timed') {
+            ctx.fillStyle='#fff'; ctx.font='10px Space Grotesk, sans-serif'; ctx.textAlign='center';
+            ctx.fillText(String(Math.ceil(this.countdown/60)), this.x + this.w/2, drawY + 18);
+            ctx.textAlign='start';
+        }
     }
 }
 
@@ -60,7 +82,9 @@ export class PressurePlate extends Entity {
         if (!this.isPressed) for (let p of pkgs) if (!p.isDestroyed && !p.carriedBy && AABB(this.x, this.y, this.w, this.h, p.x, p.y, p.w, p.h)) { this.isPressed=true; break; }
     }
     render(ctx) {
-        ctx.globalAlpha = this.isPressed ? 1.0 : 0.5; super.render(ctx); ctx.globalAlpha = 1.0;
+        const pulse = this.isPressed ? 1 : 0.88 + 0.08 * Math.sin(state.currentTick * 0.12);
+        if (state.assets.plate) drawSprite(ctx, state.assets.plate, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
+        else super.render(ctx);
         if (this.isPressed) { ctx.strokeStyle='#ffdd00'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
     }
 }
@@ -85,23 +109,34 @@ export class TemporalPlate extends PressurePlate {
         else if (this.requiredTimeline === 'last') ctx.fillStyle = 'rgba(0, 150, 255, 0.4)';
         ctx.fillRect(this.x, this.y, this.w, this.h);
         
-        ctx.globalAlpha = this.isPressed ? 1.0 : 0.3;
-        if (state.assets.plate) ctx.drawImage(state.assets.plate, this.x, this.y, this.w, this.h);
-        ctx.globalAlpha = 1.0;
+        const pulse = this.isPressed ? 1 : 0.75;
+        if (state.assets.plate) drawSprite(ctx, state.assets.plate, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
         if (this.isPressed) { ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
     }
 }
 
 export class Door extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'door'); this.id=id; this.isOpen=false; }
-    render(ctx) { if (!this.isOpen) super.render(ctx); else { ctx.fillStyle='rgba(255,60,0,0.1)'; ctx.fillRect(this.x, this.y, this.w, this.h); } }
+    render(ctx) {
+        if (!this.isOpen) {
+            if (state.assets.door) drawTiled(ctx, state.assets.door, this.x, this.y, this.w, this.h, 40);
+            else super.render(ctx);
+            const pulse = 0.25 + 0.2 * Math.abs(Math.sin(state.currentTick * 0.14));
+            ctx.fillStyle = `rgba(255,40,40,${pulse})`;
+            ctx.fillRect(this.x, this.y, this.w, 3);
+        } else { ctx.fillStyle='rgba(255,60,0,0.1)'; ctx.fillRect(this.x, this.y, this.w, this.h); }
+    }
 }
 
 export class AlarmDoor extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'door'); this.id=id; this.isOpen=true; }
     render(ctx) {
         this.isOpen = !state.alarmState;
-        if (!this.isOpen) { super.render(ctx); ctx.fillStyle='rgba(255,0,0,0.4)'; ctx.fillRect(this.x, this.y, this.w, this.h); }
+        if (!this.isOpen) {
+            if (state.assets.door) drawTiled(ctx, state.assets.door, this.x, this.y, this.w, this.h, 40);
+            else super.render(ctx);
+            ctx.fillStyle='rgba(255,0,0,0.28)'; ctx.fillRect(this.x, this.y, this.w, this.h);
+        }
         else { ctx.fillStyle='rgba(255,60,0,0.1)'; ctx.fillRect(this.x, this.y, this.w, this.h); }
     }
 }
@@ -112,7 +147,11 @@ export class TimerDoor extends Entity {
         let cycle = state.currentTick % (this.openT + this.closedT);
         if (cycle === this.openT) SFX.door();
         this.isOpen = cycle < this.openT;
-        if (!this.isOpen) { super.render(ctx); ctx.fillStyle='rgba(255,100,0,0.4)'; ctx.fillRect(this.x,this.y,this.w,this.h); }
+        if (!this.isOpen) {
+            if (state.assets.door) drawTiled(ctx, state.assets.door, this.x, this.y, this.w, this.h, 40);
+            else super.render(ctx);
+            ctx.fillStyle='rgba(255,100,0,0.28)'; ctx.fillRect(this.x,this.y,this.w,this.h);
+        }
         else { ctx.fillStyle='rgba(255,100,0,0.1)'; ctx.fillRect(this.x,this.y,this.w,this.h); }
     }
 }
