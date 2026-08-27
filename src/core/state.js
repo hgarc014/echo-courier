@@ -107,6 +107,11 @@ export function getUnlockedAbilities() {
     if (state.abilitiesPurchased['cloak']) unlocks.add('cloak');
     if (state.abilitiesPurchased['ghostShield']) unlocks.add('ghostShield');
     for (let ability of state.levelAbilityOverrides) unlocks.add(ability);
+    const meta = state.currentLevelMeta;
+    if (meta) {
+        for (let ability of (meta.grants || [])) unlocks.add(ability);
+        for (let ability of (meta.unlocks || [])) unlocks.add(ability);
+    }
     return Array.from(unlocks);
 }
 
