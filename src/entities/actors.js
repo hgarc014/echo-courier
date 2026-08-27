@@ -22,6 +22,7 @@ export class Ghost extends Entity {
         this.cloakActive = false;
         this.intendedDx = 0;
         this.intendedDy = 0;
+        this.trail = [];
     }
     update(pkgs, staticZones, winds) {
         this.isActive = true;
@@ -59,8 +60,10 @@ export class Ghost extends Entity {
         let moveMagnitude = Math.hypot(inputX, inputY);
         if (moveMagnitude > 1) { inputX /= moveMagnitude; inputY /= moveMagnitude; }
 
-        this.intendedDx = envVx + inputX * currentSpeed;
-        this.intendedDy = envVy + inputY * currentSpeed;
+        this.intendedDx = (envVx + inputX * currentSpeed) * speed;
+        this.intendedDy = (envVy + inputY * currentSpeed) * speed;
+        this.trail.push({ x: this.x, y: this.y });
+        if (this.trail.length > 24) this.trail.shift();
 
         if (interactJustPressed) {
             let carrying = null;
@@ -83,14 +86,15 @@ export class Ghost extends Entity {
     render(ctx) {
         if (!this.isActive) return;
         if (getPlayerRank() >= 2) {
-            ctx.save(); ctx.strokeStyle = state.playerColor; ctx.lineWidth = 3; ctx.globalAlpha = 0.4;
-            ctx.beginPath(); let startT = Math.max(0, Math.floor(this.localTick) - 15);
-            if (startT < this.runData.length) {
-                ctx.moveTo(this.runData[startT].x + 15, this.runData[startT].y + 15);
-                for (let i = startT + 1; i <= Math.floor(this.localTick) && i < this.runData.length; i++) ctx.lineTo(this.runData[i].x + 15, this.runData[i].y + 15);
+            const pts = this.trail.concat([{ x: this.x, y: this.y }]);
+            if (pts.length > 1) {
+                ctx.save(); ctx.strokeStyle = state.playerColor; ctx.lineWidth = 3; ctx.globalAlpha = 0.4;
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x + this.w / 2, pts[0].y + this.h / 2);
+                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x + this.w / 2, pts[i].y + this.h / 2);
                 ctx.stroke();
+                ctx.restore();
             }
-            ctx.restore();
         }
         ctx.save(); ctx.globalAlpha = this.cloakTimer > 0 ? 0.2 : 0.5;
         if (state.assets[this.assetName]) {
