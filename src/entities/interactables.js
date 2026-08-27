@@ -41,7 +41,8 @@ export class Package extends Entity {
         if (this.isDestroyed) return;
         const t = state.currentTick;
         const carried = !!this.carriedBy;
-        const bob = carried ? 0 : Math.sin(t * 0.15 + this.id * 1.7) * 1.6;
+        const idSeed = typeof this.id === 'number' ? this.id : [...String(this.id)].reduce((n, ch) => n + ch.charCodeAt(0), 0);
+        const bob = carried ? 0 : Math.sin(t * 0.15 + idSeed * 0.17) * 1.6;
         const rotation = this.tossTicks > 0 ? (10 - this.tossTicks) * 0.45 : 0;
         const scale = carried ? 0.86 : (this.tossTicks > 0 ? 1.08 : 1);
         const drawY = carried ? this.y - 12 : this.y;
