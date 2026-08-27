@@ -1,43 +1,76 @@
 export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, q: false, shift: false, f: false, c: false, esc: false };
 export const prevKeys = { ...keys };
+const justPressed = { ...keys };
+const pendingRelease = { ...keys };
+
+const CODE_TO_KEY = {
+    KeyW: 'w', ArrowUp: 'w',
+    KeyA: 'a', ArrowLeft: 'a',
+    KeyS: 's', ArrowDown: 's',
+    KeyD: 'd', ArrowRight: 'd',
+    Space: 'space',
+    KeyR: 'r',
+    KeyQ: 'q',
+    ShiftLeft: 'shift', ShiftRight: 'shift',
+    KeyF: 'f',
+    KeyC: 'c',
+    Escape: 'esc',
+};
+
+function pressKey(key) {
+    if (!Object.prototype.hasOwnProperty.call(keys, key)) return;
+    if (!keys[key]) justPressed[key] = true;
+    keys[key] = true;
+    pendingRelease[key] = false;
+}
+
+function queueRelease(key) {
+    if (!Object.prototype.hasOwnProperty.call(keys, key)) return;
+    pendingRelease[key] = true;
+}
+
+function shouldPreventDefault(e, key) {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
+    return key === 'space' || key === 'w' || key === 'a' || key === 's' || key === 'd';
+}
 
 window.addEventListener('keydown', e => {
-    switch (e.code) {
-        case 'KeyW': case 'ArrowUp': keys.w = true; break;
-        case 'KeyA': case 'ArrowLeft': keys.a = true; break;
-        case 'KeyS': case 'ArrowDown': keys.s = true; break;
-        case 'KeyD': case 'ArrowRight': keys.d = true; break;
-        case 'Space': keys.space = true; break;
-        case 'KeyR': keys.r = true; break;
-        case 'KeyQ': keys.q = true; break;
-        case 'ShiftLeft': case 'ShiftRight': keys.shift = true; break;
-        case 'KeyF': keys.f = true; break;
-        case 'KeyC': keys.c = true; break;
-        case 'Escape': keys.esc = true; break;
+    const key = CODE_TO_KEY[e.code];
+    if (!key) return;
+    if (shouldPreventDefault(e, key)) e.preventDefault();
+    if (e.repeat) {
+        keys[key] = true;
+        pendingRelease[key] = false;
+        return;
     }
-});
-window.addEventListener('keyup', e => {
-    switch (e.code) {
-        case 'KeyW': case 'ArrowUp': keys.w = false; break;
-        case 'KeyA': case 'ArrowLeft': keys.a = false; break;
-        case 'KeyS': case 'ArrowDown': keys.s = false; break;
-        case 'KeyD': case 'ArrowRight': keys.d = false; break;
-        case 'Space': keys.space = false; break;
-        case 'KeyR': keys.r = false; break;
-        case 'KeyQ': keys.q = false; break;
-        case 'ShiftLeft': case 'ShiftRight': keys.shift = false; break;
-        case 'KeyF': keys.f = false; break;
-        case 'KeyC': keys.c = false; break;
-        case 'Escape': keys.esc = false; break;
-    }
+    pressKey(key);
 });
 
-export function isKeyJustPressed(key) { return keys[key] && !prevKeys[key]; }
-export function updatePrevKeys() { Object.assign(prevKeys, keys); }
+window.addEventListener('keyup', e => {
+    const key = CODE_TO_KEY[e.code];
+    if (!key) return;
+    queueRelease(key);
+});
+
+export function isKeyJustPressed(key) {
+    return !!(justPressed[key] || (keys[key] && !prevKeys[key]));
+}
+
+export function updatePrevKeys() {
+    Object.assign(prevKeys, keys);
+    for (const key of Object.keys(keys)) {
+        justPressed[key] = false;
+        if (pendingRelease[key]) {
+            keys[key] = false;
+            pendingRelease[key] = false;
+        }
+    }
+}
 
 export function initTouchControls() {
     let joystickEnabled = false;
-    
+
     window.addEventListener('touchstart', () => {
         if (!joystickEnabled && document.getElementById('mobile-controls')) {
             document.getElementById('mobile-controls').classList.remove('hidden');
@@ -49,20 +82,20 @@ export function initTouchControls() {
         btn.addEventListener('touchstart', (e) => {
             e.preventDefault();
             let key = btn.getAttribute('data-key');
-            if (keys.hasOwnProperty(key)) keys[key] = true;
+            pressKey(key);
             btn.style.opacity = '1.0'; btn.style.transform = 'scale(0.85)';
         }, { passive: false });
-        
+
         btn.addEventListener('touchend', (e) => {
             e.preventDefault();
             let key = btn.getAttribute('data-key');
-            if (keys.hasOwnProperty(key)) keys[key] = false;
+            queueRelease(key);
             btn.style.opacity = '0.5'; btn.style.transform = 'scale(1.0)';
         }, { passive: false });
 
         btn.addEventListener('touchcancel', () => {
             let key = btn.getAttribute('data-key');
-            if (keys.hasOwnProperty(key)) keys[key] = false;
+            queueRelease(key);
             btn.style.opacity = '0.5'; btn.style.transform = 'scale(1.0)';
         });
     });
