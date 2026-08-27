@@ -12,6 +12,7 @@ export function showSubMenu(menuId) {
     document.getElementById('sub-settings').classList.add('hidden');
     if (menuId === 'main') document.getElementById('main-menu-nav').classList.remove('hidden');
     else document.getElementById('sub-' + menuId).classList.remove('hidden');
+    document.getElementById('title-screen').classList.toggle('submenu-open', menuId !== 'main');
 }
 
 export function updateHUD() {
@@ -69,7 +70,8 @@ export function initMenu() {
     
     playMenuMusic();
     applyAudioSettings();
-    preloadDialogVoice().catch(() => {});
+    refreshVoiceEngineStatus();
+    preloadDialogVoice().finally(() => refreshVoiceEngineStatus());
     
     LEVELS.forEach((lvl, idx) => {
         if (lvl.isTutorial) return;
@@ -161,11 +163,11 @@ export function initMenu() {
         }, 50);
         e.currentTarget.blur();
     };
-    document.getElementById('global-audio-toggle-btn').onclick = () => {
+    document.getElementById('global-audio-toggle-btn').onclick = (e) => {
         setGlobalMute(!state.audioSettings.muted);
         saveState();
-        document.getElementById('global-audio-toggle-btn').blur();
-        initMenu();
+        syncMuteButtons();
+        e.currentTarget.blur();
     };
     if (hudAudioBtn) {
         hudAudioBtn.onclick = (e) => {
@@ -176,6 +178,23 @@ export function initMenu() {
             hudAudioBtn.setAttribute('aria-label', state.audioSettings.muted ? 'Unmute audio' : 'Mute audio');
             e.currentTarget.blur();
         };
+    }
+}
+
+function refreshVoiceEngineStatus() {
+    const el = document.getElementById('voice-engine-status');
+    if (el) el.innerText = getDialogVoiceStatus();
+}
+
+function syncMuteButtons() {
+    const muted = !!state.audioSettings.muted;
+    const settingsBtn = document.getElementById('global-audio-toggle-btn');
+    if (settingsBtn) settingsBtn.innerText = muted ? 'Unmute Audio' : 'Mute Audio';
+    const hudAudioBtn = document.getElementById('hud-audio-toggle-btn');
+    if (hudAudioBtn) {
+        hudAudioBtn.classList.toggle('muted', muted);
+        hudAudioBtn.title = muted ? 'Unmute audio' : 'Mute audio';
+        hudAudioBtn.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio');
     }
 }
 
