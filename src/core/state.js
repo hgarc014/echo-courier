@@ -93,6 +93,11 @@ export function getPlayerRank() {
     return 0;
 }
 
+export function applyLevelAbilityOverrides(level) {
+    const granted = [...(level?.grants || []), ...(level?.unlocks || [])];
+    state.levelAbilityOverrides = [...new Set(granted)];
+}
+
 export function getUnlockedAbilities() {
     const devMode = document.getElementById('dev-mode-checkbox');
     if (devMode && devMode.checked) return ['dash', 'toss', 'cloak', 'ghostShield'];
