@@ -51,17 +51,10 @@ export class PlayerEntity extends Entity {
             bob: pose.bob,
             scaleX: pose.scaleX,
             scaleY: pose.scaleY,
-            alpha: cloaking ? 0.7 : 1,
+            alpha: cloaking ? 0.85 : 1,
             scanlines: cloaking,
             valign: 'bottom'
         })) {
-            if (cloaking) {
-                ctx.save();
-                ctx.strokeStyle = `rgba(0,243,255,${0.4 + 0.35 * Math.sin(t * 0.6)})`;
-                ctx.lineWidth = 1.5;
-                ctx.strokeRect(this.x + 3, this.y + 3, this.w - 6, this.h - 6);
-                ctx.restore();
-            }
             return;
         }
         ctx.fillStyle = state.playerColor;
@@ -184,7 +177,7 @@ export class Ghost extends Entity {
                 bob: pose.bob,
                 scaleX: pose.scaleX * spawnScale,
                 scaleY: pose.scaleY * spawnScale,
-                alpha: cloaking ? 0.55 : 0.92,
+                alpha: cloaking ? 0.72 : 0.92,
                 scanlines: cloaking,
                 valign: 'bottom'
             });
