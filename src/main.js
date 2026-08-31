@@ -1,5 +1,5 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
-import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls } from './core/input.js';
+import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination } from './core/physics.js';
 import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
@@ -161,6 +161,16 @@ function hideTutorialPrompt() {
     document.getElementById('tutorial-prompt').classList.add('hidden');
 }
 
+function localizeControlHints(text) {
+    if (!text || !document.body.classList.contains('touch-ui')) return text;
+    return text
+        .replace(/Use SPACE to pick up and drop parcels\./i, 'Use GRAB to pick up and drop parcels.')
+        .replace(/press R to create an echo/i, 'press LOOP to create an echo')
+        .replace(/Press F to toss\./i, 'Use TOSS to throw it.')
+        .replace(/DASH UPGRADE \(Shift\)\./i, 'Use DASH.')
+        .replace(/CLOAK UPGRADE \(C\)\./i, 'Use CLOAK.');
+}
+
 function showLevelDialog(speaker, text, accentColor = '#39ff14', clipKey = null) {
     let speakerUI = document.getElementById('dialog-speaker'); if (speakerUI) { speakerUI.innerText = speaker; speakerUI.style.color = accentColor; }
     let textUI = document.getElementById('dialog-text'); if (textUI) textUI.innerText = `"${text}"`;
@@ -235,7 +245,7 @@ export function startGame(levelIndex) {
     let lv = LEVELS[levelIndex];
     state.levelAbilityOverrides = [...(lv.grants || [])];
     state.robots = []; state.projectiles = [];
-    document.getElementById('level-display').innerText = getLevelDisplayLabel(levelIndex, lv); document.getElementById('objective-text').innerText = lv.obj; 
+    document.getElementById('level-display').innerText = getLevelDisplayLabel(levelIndex, lv); document.getElementById('objective-text').innerText = localizeControlHints(lv.obj); 
     
     let setupData = getLevelSetup(levelIndex);
     Object.assign(state, setupData);
@@ -248,6 +258,8 @@ export function startGame(levelIndex) {
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.alarmState = false;
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
     uiAppLayout.classList.remove('hidden'); document.getElementById('loop-count').innerText = state.pastRuns.length; Object.assign(prevKeys, keys);
+    document.getElementById('mobile-controls')?.classList.remove('hidden');
+    syncTouchUi();
     
     if (lv.story) {
         state.gameState = 'DIALOG';
@@ -288,6 +300,7 @@ export function restartLevel() {
     updateDeliveryProgressUI();
     document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
     document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[state.currentLevelIndex] ? "gold" : "#fff");
+    document.getElementById('objective-text').innerText = localizeControlHints(lv.obj);
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
     stopDialogSpeech();
     state.pendingBossIntro = lv.bossIntro || null;
@@ -303,6 +316,7 @@ export function returnToMenu() { stopDialogSpeech(); state.gameState = 'MENU'; i
 function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
+        if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
         if (isKeyJustPressed('space')) {
             startMusic();
             hideLevelDialog();
@@ -312,6 +326,7 @@ function update() {
         updatePrevKeys(); return;
     }
     if (state.gameState === 'BOSS_INTRO') {
+        if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
         if (isKeyJustPressed('space')) {
             hideLevelDialog();
             beginBossEncounter(state.currentLevelMeta);
@@ -390,10 +405,14 @@ function update() {
     let carried = state.packages.find(p => p.carriedBy === 'player');
     let currentSpeed = (carried && carried.type === 'heavy') ? baseSpeed * 0.5 : baseSpeed;
 
-    let dx = envVx, dy = envVy;
-    if (keys.w) dy -= currentSpeed; if (keys.s) dy += currentSpeed;
-    if (keys.a) dx -= currentSpeed; if (keys.d) dx += currentSpeed;
-    let md = Math.hypot(dx - envVx, dy - envVy); if (md > currentSpeed) { dx = envVx + (dx-envVx)/md*currentSpeed; dy = envVy + (dy-envVy)/md*currentSpeed; }
+    const move = getMoveVector();
+    let mx = move.x;
+    let my = move.y;
+    const moveMag = Math.hypot(mx, my);
+    if (moveMag > 1) { mx /= moveMag; my /= moveMag; }
+
+    let dx = envVx + mx * currentSpeed;
+    let dy = envVy + my * currentSpeed;
 
     if (dx !== envVx || dy !== envVy) {
         state.player.facingX = dx-envVx===0 ? 0 : (dx-envVx>0 ? 1 : -1);
@@ -524,13 +543,11 @@ function update() {
             : (nextIndex !== null ? "NEXT LEVEL" : "FINISH SHIFT");
     }
     
-    let moveX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
-    let moveY = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
     state.currentRun.push({
         x: state.player.x,
         y: state.player.y,
-        moveX,
-        moveY,
+        moveX: mx,
+        moveY: my,
         facingX: state.player.facingX,
         facingY: state.player.facingY,
         cloakTimer: state.player.cloakTimer,
@@ -650,6 +667,7 @@ function loop(timestamp) {
 
 window.onload = () => {
     initTouchControls();
+    syncTouchUi();
     preloadDialogVoice().catch(() => {});
     document.body.addEventListener('pointerdown', () => { unlockAudio(); }, { passive: true });
     document.body.addEventListener('keydown', () => { unlockAudio(); });
@@ -681,6 +699,7 @@ window.onload = () => {
         document.getElementById('level-complete').classList.add('hidden');
         document.querySelector('.top-hud').classList.add('hidden');
         document.querySelector('.bottom-hud').classList.add('hidden');
+        document.getElementById('mobile-controls')?.classList.add('hidden');
         state.resetRunData();
         
         if (jsonString) {

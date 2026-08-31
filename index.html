@@ -3,11 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#05070a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
     <title>Echo Courier</title>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <script>
+        (function () {
+            var maxTouch = navigator.maxTouchPoints || 0;
+            var coarse = window.matchMedia('(any-pointer: coarse)').matches;
+            var noHover = window.matchMedia('(hover: none)').matches;
+            var phone = window.matchMedia('(max-width: 700px)').matches || window.matchMedia('(max-height: 500px)').matches;
+            if (coarse || (noHover && maxTouch > 0) || (maxTouch > 0 && phone)) {
+                document.body.classList.add('touch-ui');
+            }
+        })();
+    </script>
     <!-- Title and Menus -->
     <div id="title-screen" class="overlay full-screen">
         <h1 class="mega-logo">ECHO<br>COURIER</h1>
@@ -113,54 +129,58 @@
                 <div class="objective" id="challenge-text" style="font-size: 0.9rem; margin-top:5px; color: #ffdd00;">⭐ Challenge: None</div>
             </div>
             <div class="hud-actions">
-                <button id="hud-audio-toggle-btn" class="hud-audio-btn" aria-label="Mute audio" title="Mute audio"></button>
+                <button id="hud-menu-btn" class="hud-audio-btn hud-menu-btn" type="button" data-key="esc" aria-label="Return to menu" title="Menu"></button>
+                <button id="hud-audio-toggle-btn" class="hud-audio-btn" type="button" aria-label="Mute audio" title="Mute audio"></button>
             </div>
         </div>
         
-        <div class="game-area">
-            <canvas id="gameCanvas" width="800" height="600"></canvas>
-            
-            <!-- MOBILE CONTROLS OVERLAY -->
-            <div id="mobile-controls" class="hidden" style="position: absolute; top:0; left:0; width:100%; height:100%; z-index: 500; pointer-events: none; display: flex; justify-content: space-between; align-items: flex-end; padding: 15px; box-sizing: border-box;">
+        <div class="play-stage">
+            <div class="game-area">
+                <canvas id="gameCanvas" width="800" height="600"></canvas>
+                <div id="dialog-overlay" class="overlay dialog-overlay hidden">
+                    <div class="dialog-panel">
+                        <div class="dialog-chip">TRANSMISSION</div>
+                        <h3 id="dialog-speaker" class="dialog-speaker">CHRONOHAUL DISPATCH</h3>
+                        <p id="dialog-text" class="dialog-text"></p>
+                        <div class="dialog-continue">
+                            <span class="dialog-continue-desktop">Press <kbd>SPACE</kbd> or click to continue</span>
+                            <span class="dialog-continue-touch">Tap anywhere to continue</span>
+                            <button type="button" id="dialog-continue-btn" class="primary-btn dialog-continue-btn">CONTINUE</button>
+                        </div>
+                    </div>
+                </div>
                 
-                <div id="dpad" style="position: relative; width: 130px; height: 130px; pointer-events: auto; opacity: 0.5;">
-                    <div data-key="w" class="touch-btn" style="position:absolute; top:0; left:45px; width:40px; height:40px; background:#000; border:2px solid #0ff; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#0ff; font-weight:bold; user-select:none;">W</div>
-                    <div data-key="a" class="touch-btn" style="position:absolute; top:45px; left:0; width:40px; height:40px; background:#000; border:2px solid #0ff; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#0ff; font-weight:bold; user-select:none;">A</div>
-                    <div data-key="s" class="touch-btn" style="position:absolute; top:90px; left:45px; width:40px; height:40px; background:#000; border:2px solid #0ff; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#0ff; font-weight:bold; user-select:none;">S</div>
-                    <div data-key="d" class="touch-btn" style="position:absolute; top:45px; left:90px; width:40px; height:40px; background:#000; border:2px solid #0ff; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#0ff; font-weight:bold; user-select:none;">D</div>
+                <div id="level-complete" class="overlay panel hidden">
+                    <h2 class="victory-text">DELIVERY SUCCESSFUL</h2>
+                    <div id="challenge-result" style="margin-top: 10px; font-size: 1.2rem; font-weight: bold;"></div>
+                    <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
+                        <button id="next-level-btn" class="primary-btn" onclick="nextLevel()">NEXT LEVEL</button>
+                        <button id="menu-btn" class="secondary-btn" onclick="initMenu()">LEVEL SELECT</button>
+                    </div>
                 </div>
+                
+                <div id="game-over" class="hidden overlay panel">
+                    <h2 class="victory-text">SHIFT COMPLETE</h2>
+                    <p>You have mastered the time loops.</p>
+                    <button class="primary-btn" onclick="returnToMenu()">MAIN MENU</button>
+                </div>
+            </div>
 
-                <div id="action-cluster" style="position: relative; width: 140px; height: 140px; pointer-events: auto; opacity: 0.5;">
-                    <div data-key="space" class="touch-btn" style="position:absolute; top:45px; left:45px; width:50px; height:50px; background:#000; border:2px solid #ffdd00; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#ffdd00; font-weight:bold; user-select:none; font-size:12px;">INT</div>
-                    <div data-key="r" class="touch-btn" style="position:absolute; top:0; left:50px; width:40px; height:40px; background:#000; border:2px solid red; border-radius:50%; display:flex; justify-content:center; align-items:center; color:red; font-weight:bold; font-size: 10px; user-select:none;">RST</div>
-                    <div data-key="q" class="touch-btn" style="position:absolute; top:100px; left:50px; width:40px; height:40px; background:#000; border:2px solid #ff66cc; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#ff66cc; font-weight:bold; font-size: 10px; user-select:none;">LVL</div>
-                    <div data-key="shift" id="touch-btn-dash" class="touch-btn hidden" style="position:absolute; top:100px; left:0; width:40px; height:40px; background:#000; border:2px solid #39ff14; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#39ff14; font-weight:bold; font-size: 10px; user-select:none;">DSH</div>
-                    <div data-key="f" id="touch-btn-toss" class="touch-btn hidden" style="position:absolute; top:100px; left:100px; width:40px; height:40px; background:#000; border:2px solid orange; border-radius:50%; display:flex; justify-content:center; align-items:center; color:orange; font-weight:bold; font-size: 10px; user-select:none;">TOS</div>
-                    <div data-key="c" id="touch-btn-cloak" class="touch-btn hidden" style="position:absolute; top:0; left:100px; width:40px; height:40px; background:#000; border:2px solid #b026ff; border-radius:50%; display:flex; justify-content:center; align-items:center; color:#b026ff; font-weight:bold; font-size: 10px; user-select:none;">CLK</div>
+            <div id="mobile-controls" aria-hidden="true">
+                <div id="touch-stick" class="touch-stick" role="application" aria-label="Move">
+                    <div id="touch-stick-base" class="touch-stick-base">
+                        <div class="touch-stick-well"></div>
+                        <div id="touch-stick-knob" class="touch-stick-knob"></div>
+                    </div>
                 </div>
-            </div>
-            <div id="dialog-overlay" class="overlay dialog-overlay hidden">
-                <div class="dialog-panel">
-                    <div class="dialog-chip">TRANSMISSION</div>
-                    <h3 id="dialog-speaker" class="dialog-speaker">CHRONOHAUL DISPATCH</h3>
-                    <p id="dialog-text" class="dialog-text"></p>
-                    <div class="dialog-continue">Press <kbd>SPACE</kbd> to continue</div>
+                <div id="action-cluster" class="touch-actions">
+                    <button type="button" data-key="r" class="touch-btn touch-btn-reset">LOOP</button>
+                    <button type="button" data-key="shift" id="touch-btn-dash" class="touch-btn touch-btn-dash hidden">DASH</button>
+                    <button type="button" data-key="space" class="touch-btn touch-btn-main">GRAB</button>
+                    <button type="button" data-key="f" id="touch-btn-toss" class="touch-btn touch-btn-toss hidden">TOSS</button>
+                    <button type="button" data-key="c" id="touch-btn-cloak" class="touch-btn touch-btn-cloak hidden">CLK</button>
+                    <button type="button" data-key="q" class="touch-btn touch-btn-level">LVL</button>
                 </div>
-            </div>
-            
-            <div id="level-complete" class="overlay panel hidden">
-                <h2 class="victory-text">DELIVERY SUCCESSFUL</h2>
-                <div id="challenge-result" style="margin-top: 10px; font-size: 1.2rem; font-weight: bold;"></div>
-                <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
-                    <button id="next-level-btn" class="primary-btn" onclick="nextLevel()">NEXT LEVEL</button>
-                    <button id="menu-btn" class="secondary-btn" onclick="initMenu()">LEVEL SELECT</button>
-                </div>
-            </div>
-            
-            <div id="game-over" class="hidden overlay panel">
-                <h2 class="victory-text">SHIFT COMPLETE</h2>
-                <p>You have mastered the time loops.</p>
-                <button class="primary-btn" onclick="returnToMenu()">MAIN MENU</button>
             </div>
         </div>
         
