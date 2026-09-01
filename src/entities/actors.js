@@ -118,19 +118,19 @@ export class Ghost extends Entity {
         if (interactJustPressed) {
             let carrying = null;
             for (let p of pkgs) if (p.carriedBy === 'ghost_'+this.id) carrying=p;
-            if (carrying) carrying.carriedBy=null;
-            else { 
+            if (carrying) { carrying.carriedBy=null; carrying.onDrop(); }
+            else {
                 for (let p of pkgs) {
-                    if (!p.isDestroyed && (!p.carriedBy || p.carriedBy.startsWith('ghost_')) && AABB(this.x, this.y, this.w, this.h, p.x, p.y, p.w, p.h)) { 
-                        p.carriedBy='ghost_'+this.id; break; 
+                    if (!p.isDestroyed && (!p.carriedBy || p.carriedBy.startsWith('ghost_')) && AABB(this.x, this.y, this.w, this.h, p.x, p.y, p.w, p.h)) {
+                        p.carriedBy='ghost_'+this.id; p.onPickup(); break;
                     }
-                } 
+                }
             }
         }
         
         if (tossJustPressed) {
             let carrying = pkgs.find(p => p.carriedBy === 'ghost_'+this.id);
-            if (carrying) { carrying.carriedBy = null; carrying.vx = this.facingX*12; carrying.vy = this.facingY*12; carrying.tossTicks = 10; }
+            if (carrying) { carrying.carriedBy = null; carrying.onToss(this.facingX || 0, this.facingY || 0); }
         }
     }
     render(ctx) {

@@ -336,7 +336,12 @@ function update() {
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
     
-    if (state.failTimer > 0) { state.failTimer--; if (state.failTimer === 0) resetRun(); return; }
+    if (state.failTimer > 0) {
+        state.failTimer--;
+        for (const p of state.packages) if (p.breakFx) p.update();
+        if (state.failTimer === 0) resetRun();
+        return;
+    }
     if (isKeyJustPressed('esc')) { returnToMenu(); return; }
     if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
     if (isKeyJustPressed('r')) { resetRun(); updatePrevKeys(); return; }
@@ -451,7 +456,7 @@ function update() {
             if (state.player.cloakTimer <= 0 && AABB(state.player.x, state.player.y, state.player.w, state.player.h, l.x, l.y, l.w, l.h)) { levelFailed("Burned by Laser Grid!"); return; }
             for(let p of state.packages) {
                 if (!p.isDestroyed && AABB(p.x, p.y, p.w, p.h, l.x, l.y, l.w, l.h)) {
-                    if (p.type === 'fragile') { p.isDestroyed = true; levelFailed("Fragile Package Destroyed!"); return; }
+                    if (p.type === 'fragile') { p.breakApart('vapor'); SFX.break(); SFX.laserHit(); levelFailed("Fragile Package Destroyed!"); return; }
                 }
             }
         }
@@ -459,25 +464,34 @@ function update() {
 
     if (interactJustPressed) {
         SFX.interact();
-        if (carried) carried.carriedBy = null;
-        else { 
+        if (carried) {
+            SFX.drop();
+            carried.carriedBy = null;
+            carried.onDrop();
+        } else {
             for (let p of state.packages) {
-                if (!p.isDestroyed && (!p.carriedBy || p.carriedBy.startsWith('ghost_')) && AABB(state.player.x, state.player.y, state.player.w, state.player.h, p.x, p.y, p.w, p.h)) { 
-                    p.carriedBy = 'player'; break; 
+                if (!p.isDestroyed && (!p.carriedBy || p.carriedBy.startsWith('ghost_')) && AABB(state.player.x, state.player.y, state.player.w, state.player.h, p.x, p.y, p.w, p.h)) {
+                    p.carriedBy = 'player';
+                    p.onPickup();
+                    SFX.pickup();
+                    break;
                 }
-            } 
+            }
         }
     }
-    
+
     if (tossJustPressed && carried) {
         SFX.toss();
-        carried.carriedBy = null; carried.vx = state.player.facingX * 12; carried.vy = state.player.facingY * 12; carried.tossTicks = 10;
+        const fx = state.player.facingX || 0;
+        const fy = state.player.facingY || 0;
+        carried.carriedBy = null;
+        carried.onToss(fx, fy);
         noiseSources.push({x: state.player.x, y: state.player.y}); state.runStats.tosses++;
     }
 
     for (let p of state.packages) {
         let fail = p.update(); if (fail) { levelFailed(fail); return; }
-        if (p.isDestroyed) continue;
+        if (p.isDestroyed) continue; // breakFx still advances inside update()
         
         let pEnvVx = 0, pEnvVy = 0;
         if (!p.carriedBy && p.tossTicks <= 0) {
@@ -490,7 +504,7 @@ function update() {
                 if (r.hp > 0 && AABB(p.x, p.y, p.w, p.h, r.x, r.y, r.w, r.h)) {
                     r.hp--; r.hitFlicker = 30; SFX.laserHit();
                     if (p.requiredForDelivery !== false) p.reset();
-                    else p.isDestroyed = true;
+                    else p.breakApart('shatter');
                     if (r.hp <= 0) {
                         let bossDoor = state.doors.find(d => d.id === 'boss_door');
                         if (bossDoor) bossDoor.isOpen = true;
@@ -505,7 +519,7 @@ function update() {
             let ghostId = parseInt(p.carriedBy.split('_')[1]);
             let ghost = state.activeGhosts.find(ag => ag.id === ghostId);
             if (ghost && ghost.isActive) { p.x = ghost.x + (ghost.w - p.w)/2; p.y = ghost.y + (ghost.h - p.h)/2; }
-            else p.carriedBy = null;
+            else { p.carriedBy = null; p.onDrop(); }
         }
     }
 
