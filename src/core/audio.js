@@ -21,6 +21,9 @@ export function playTone(freq, type, duration, vol=0.5, slideFreq=null) {
 
 export const SFX = {
     interact: () => playTone(600, 'sine', 0.1, 0.3, 800),
+    pickup: () => playTone(520, 'triangle', 0.12, 0.28, 760),
+    drop: () => playTone(280, 'sine', 0.1, 0.25, 140),
+    break: () => { playTone(180, 'sawtooth', 0.25, 0.45, 60); setTimeout(() => playTone(90, 'square', 0.15, 0.2), 80); },
     toss: () => playTone(300, 'triangle', 0.2, 0.4, 100),
     dash: () => playTone(800, 'square', 0.15, 0.3, 200),
     cloak: () => playTone(200, 'sine', 0.5, 0.4, 100),
@@ -661,3 +664,4 @@ export function stopMusic() {
 export function scheduleMusic() {
     // Nullified procedural generator placeholder. Real audio controls loop natively.
 }
+menuMusic.loop = true; menuMusic.volume = 0.5;
