@@ -1,4 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
+import { PLAYER_SHEET_PATH, buildPlayerAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -48,6 +49,7 @@ export const state = {
     assets: {},
     assetsLoaded: 0,
     assetNames: ['player', 'package', 'plate', 'door', 'wall', 'zone', 'guard', 'laser', 'camera', 'heavy', 'fragile'],
+    playerAtlas: null,
     
     pastRuns: [],
     currentRun: [],
@@ -81,6 +83,19 @@ state.assetNames.forEach(name => {
     };
     state.assets[name] = img;
 });
+
+const playerSheet = new Image();
+playerSheet.src = PLAYER_SHEET_PATH;
+playerSheet.onload = () => {
+    try {
+        state.playerAtlas = buildPlayerAtlas(playerSheet);
+    } catch {
+        state.playerAtlas = null;
+    }
+};
+playerSheet.onerror = () => {
+    state.playerAtlas = null;
+};
 
 export function getCredits() {
     let earned = (state.maxUnlockedLevel * 50) + (Object.keys(state.challengesCompleted).length * 50);
