@@ -1,5 +1,5 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
-import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector } from './core/input.js';
+import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, consumeKey, initTouchControls, syncTouchUi, getMoveVector } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination } from './core/physics.js';
 import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
@@ -253,7 +253,7 @@ export function startGame(levelIndex) {
     state.player.facingX=1; state.player.facingY=0; state.player.cloakTimer=0; state.player.dashCooldown=0;
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
-    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
+    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "☆ Challenge: " + lv.challenge.desc;
     document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[levelIndex] ? "gold" : "#fff");
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.alarmState = false;
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
@@ -298,7 +298,7 @@ export function restartLevel() {
     state.failTimer = 0; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     document.getElementById('loop-count').innerText = 0;
     updateDeliveryProgressUI();
-    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
+    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "☆ Challenge: " + lv.challenge.desc;
     document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[state.currentLevelIndex] ? "gold" : "#fff");
     document.getElementById('objective-text').innerText = localizeControlHints(lv.obj);
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
@@ -317,9 +317,10 @@ function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
         if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
-        if (isKeyJustPressed('space')) {
+        if (isKeyJustPressed('enter')) {
             startMusic();
             hideLevelDialog();
+            consumeKey('space');
             if (state.pendingBossIntro) startBossIntro(state.currentLevelMeta);
             else state.gameState = 'PLAYING';
         }
@@ -327,8 +328,9 @@ function update() {
     }
     if (state.gameState === 'BOSS_INTRO') {
         if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
-        if (isKeyJustPressed('space')) {
+        if (isKeyJustPressed('enter')) {
             hideLevelDialog();
+            consumeKey('space');
             beginBossEncounter(state.currentLevelMeta);
             state.gameState = 'PLAYING';
         }
