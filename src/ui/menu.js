@@ -81,9 +81,12 @@ export function initMenu() {
         btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
         
         let hasGold = state.challengesCompleted[idx] === true;
-        let iconHtml = lockedHtml(unlocked, hasGold);
-        
-        btn.innerHTML = `${iconHtml} Level ${idx + 1}`;
+        if (hasGold) btn.classList.add('gold-star');
+        btn.innerHTML = `${levelSelectIconHtml(unlocked, hasGold)}<span class="level-num">Level ${idx + 1}</span>`;
+        btn.setAttribute('aria-label', hasGold
+            ? `Level ${idx + 1}, gold star challenge complete`
+            : unlocked ? `Level ${idx + 1}` : `Level ${idx + 1}, locked`);
+        if (hasGold) btn.title = 'Gold star challenge complete';
         if (unlocked) btn.onclick = () => startGame(idx);
         uiLevelGrid.appendChild(btn);
     });
@@ -198,8 +201,8 @@ function syncMuteButtons() {
     }
 }
 
-function lockedHtml(unlocked, hasGold) {
-    if (!unlocked) return 'LOCK';
-    if (hasGold) return 'STAR';
-    return '';
+function levelSelectIconHtml(unlocked, hasGold) {
+    if (!unlocked) return '<span class="level-lock">LOCK</span>';
+    if (hasGold) return '<span class="level-star" aria-hidden="true">⭐</span>';
+    return '<span class="level-star-slot" aria-hidden="true"></span>';
 }

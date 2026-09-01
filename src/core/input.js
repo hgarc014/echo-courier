@@ -1,4 +1,4 @@
-export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, q: false, shift: false, f: false, c: false, esc: false };
+export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, q: false, shift: false, f: false, c: false, esc: false, enter: false };
 export const prevKeys = { ...keys };
 const justPressed = { ...keys };
 const pendingRelease = { ...keys };
@@ -15,6 +15,7 @@ const CODE_TO_KEY = {
     KeyF: 'f',
     KeyC: 'c',
     Escape: 'esc',
+    Enter: 'enter', NumpadEnter: 'enter',
 };
 
 const STICK_DEADZONE = 0.14;
@@ -80,6 +81,15 @@ export function updatePrevKeys() {
     }
 }
 
+/** Swallow a key so the current keydown cannot edge-trigger gameplay (e.g. SPACE grab after dialog). */
+export function consumeKey(key) {
+    if (!Object.prototype.hasOwnProperty.call(keys, key)) return;
+    keys[key] = false;
+    justPressed[key] = false;
+    pendingRelease[key] = false;
+    prevKeys[key] = true;
+}
+
 export function getMoveVector() {
     if (stick.active) return { x: stick.x, y: stick.y };
     return {
@@ -92,7 +102,7 @@ export function requestAdvance() {
     const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     if (now - lastAdvanceAt < 280) return false;
     lastAdvanceAt = now;
-    tapKey('space');
+    tapKey('enter');
     return true;
 }
 
