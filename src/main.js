@@ -1,5 +1,5 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
-import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector } from './core/input.js';
+import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination } from './core/physics.js';
 import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
@@ -186,6 +186,26 @@ function hideLevelDialog() {
     stopDialogSpeech();
 }
 
+function applyChallengeHud(level, levelIndex) {
+    const el = document.getElementById('challenge-text');
+    if (!el) return;
+    el.classList.remove('challenge-done', 'challenge-open', 'challenge-training');
+    el.style.color = '';
+    if (level.isTutorial) {
+        el.innerText = 'TRAINING MODULE';
+        el.classList.add('challenge-training');
+        return;
+    }
+    const done = !!state.challengesCompleted[levelIndex];
+    el.innerText = (done ? '⭐ ' : '☆ ') + 'Challenge: ' + level.challenge.desc;
+    el.classList.add(done ? 'challenge-done' : 'challenge-open');
+}
+
+function consumeDialogConfirmKeys() {
+    consumeKey('space');
+    consumeKey('enter');
+}
+
 function startBossIntro(level) {
     if (!level?.bossIntro) return;
     state.pendingBossIntro = null;
@@ -253,8 +273,7 @@ export function startGame(levelIndex) {
     state.player.facingX=1; state.player.facingY=0; state.player.cloakTimer=0; state.player.dashCooldown=0;
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
-    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
-    document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[levelIndex] ? "gold" : "#fff");
+    applyChallengeHud(lv, levelIndex);
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.alarmState = false;
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
     uiAppLayout.classList.remove('hidden'); document.getElementById('loop-count').innerText = state.pastRuns.length; Object.assign(prevKeys, keys);
@@ -298,8 +317,7 @@ export function restartLevel() {
     state.failTimer = 0; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     document.getElementById('loop-count').innerText = 0;
     updateDeliveryProgressUI();
-    document.getElementById('challenge-text').innerText = lv.isTutorial ? "TRAINING MODULE" : "⭐ Challenge: " + lv.challenge.desc;
-    document.getElementById('challenge-text').style.color = lv.isTutorial ? "#00f3ff" : (state.challengesCompleted[state.currentLevelIndex] ? "gold" : "#fff");
+    applyChallengeHud(lv, state.currentLevelIndex);
     document.getElementById('objective-text').innerText = localizeControlHints(lv.obj);
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
     stopDialogSpeech();
@@ -317,20 +335,27 @@ function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
         if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
-        if (isKeyJustPressed('space')) {
+        // SPACE is reserved for GRAB; dialog advances on Enter / overlay tap / CONTINUE.
+        if (isKeyJustPressed('enter')) {
             startMusic();
             hideLevelDialog();
             if (state.pendingBossIntro) startBossIntro(state.currentLevelMeta);
             else state.gameState = 'PLAYING';
+            updatePrevKeys();
+            consumeDialogConfirmKeys();
+            return;
         }
         updatePrevKeys(); return;
     }
     if (state.gameState === 'BOSS_INTRO') {
         if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
-        if (isKeyJustPressed('space')) {
+        if (isKeyJustPressed('enter')) {
             hideLevelDialog();
             beginBossEncounter(state.currentLevelMeta);
             state.gameState = 'PLAYING';
+            updatePrevKeys();
+            consumeDialogConfirmKeys();
+            return;
         }
         updatePrevKeys(); return;
     }
@@ -530,6 +555,7 @@ function update() {
             if (chalSuccess) {
                 state.challengesCompleted[state.currentLevelIndex] = true;
                 localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
+                applyChallengeHud(LEVELS[state.currentLevelIndex], state.currentLevelIndex);
                 if (chalMsg) { chalMsg.innerHTML = earnedMsg + "⭐ Challenge Passed! (+$50) ⭐"; chalMsg.style.color = 'gold'; }
             } else {
                 let previouslyDone = state.challengesCompleted[state.currentLevelIndex];
