@@ -16,6 +16,192 @@ const RECORDED_TRAIL_SECONDS = 2.5;
 const PROJECTED_TRAIL_SECONDS = 3;
 const RECORDED_TRAIL_FRAMES = Math.floor(RECORDED_TRAIL_SECONDS * 60);
 const PROJECTED_TRAIL_FRAMES = Math.floor(PROJECTED_TRAIL_SECONDS * 60);
+const FAIL_HOLD_FRAMES = 120;
+const FAIL_TEXT_DELAY = 28;
+
+function failKindFromReason(reason) {
+    const r = (reason || '').toLowerCase();
+    if (r.includes('laser') || r.includes('burn') || r.includes('vapor')) return 'laser';
+    if (r.includes('guard') || r.includes('spotted') || r.includes('drone') || r.includes('caught')) return 'guard';
+    if (r.includes('pit') || r.includes('fell') || r.includes('crack')) return 'crack';
+    if (r.includes('fragile') || r.includes('package') || r.includes('explod')) return 'package';
+    return 'default';
+}
+
+function deathSite(reason) {
+    const kind = failKindFromReason(reason);
+    if (kind === 'package') {
+        const pkg = state.packages.find(p => p.breakFx || p.isDestroyed);
+        if (pkg) return { x: pkg.x + pkg.w / 2, y: pkg.y + pkg.h / 2 };
+    }
+    const p = state.player;
+    if (p) return { x: p.x + p.w / 2, y: p.y + p.h / 2 };
+    return { x: canvas.width / 2, y: canvas.height / 2 };
+}
+
+function failPalette(kind) {
+    if (kind === 'laser') return { colors: ['#00f3ff', '#ffffff', '#ff3344'], glow: [180, 255, 255], vapor: true };
+    if (kind === 'guard') return { colors: ['#ffdd00', '#ff3333', '#ff7b00'], glow: [255, 80, 40], vapor: false };
+    if (kind === 'crack') return { colors: ['#c9893a', '#888888', '#ffaa66'], glow: [180, 120, 60], vapor: false };
+    if (kind === 'package') return { colors: ['#ff6b6b', '#ffaa88', '#ffffff'], glow: [255, 120, 80], vapor: false };
+    return { colors: ['#ff2244', '#00f3ff', '#ffffff'], glow: [255, 40, 70], vapor: false };
+}
+
+function spawnBurst(cx, cy, opts) {
+    const particles = [];
+    const n = opts.count;
+    const inward = !!opts.inward;
+    for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + Math.random() * 0.4;
+        const speed = opts.speedMin + Math.random() * (opts.speedMax - opts.speedMin);
+        const dir = inward ? -1 : 1;
+        let x = cx;
+        let y = cy;
+        if (inward) {
+            const radius = opts.radius || 34;
+            x = cx + Math.cos(a) * radius;
+            y = cy + Math.sin(a) * radius;
+        }
+        particles.push({
+            x, y,
+            vx: Math.cos(a) * speed * dir,
+            vy: Math.sin(a) * speed * dir - (opts.lift || 0),
+            life: opts.lifeMin + Math.random() * 10,
+            size: opts.sizeMin + Math.random() * opts.sizeMax,
+            rot: Math.random() * Math.PI,
+            color: opts.colors[i % opts.colors.length]
+        });
+    }
+    return { ttl: opts.ttl, max: opts.ttl, kind: opts.kind, particles, cx, cy, glow: opts.glow, vapor: !!opts.vapor };
+}
+
+function tickBurst(fx) {
+    if (!fx) return null;
+    fx.ttl--;
+    const drag = fx.vapor || fx.kind === 'rewind';
+    for (const s of fx.particles) {
+        if (s.life <= 0) continue;
+        s.x += s.vx;
+        s.y += s.vy;
+        if (drag) {
+            s.vx *= 0.92;
+            s.vy *= 0.92;
+        } else {
+            s.vy += 0.16;
+            s.vx *= 0.99;
+        }
+        s.life--;
+        s.rot += 0.2;
+    }
+    return fx.ttl <= 0 ? null : fx;
+}
+
+function drawBurst(target, fx) {
+    if (!fx || fx.ttl <= 0) return;
+    const life = fx.ttl / fx.max;
+    const [gr, gg, gb] = fx.glow || [255, 40, 70];
+    target.save();
+    target.globalAlpha = 0.55 * life;
+    const grd = target.createRadialGradient(fx.cx, fx.cy, 2, fx.cx, fx.cy, 16 + (1 - life) * 34);
+    grd.addColorStop(0, `rgba(${gr},${gg},${gb},0.9)`);
+    grd.addColorStop(0.45, `rgba(${gr},${gg},${gb},0.35)`);
+    grd.addColorStop(1, `rgba(${gr},${gg},${gb},0)`);
+    target.fillStyle = grd;
+    target.beginPath();
+    target.arc(fx.cx, fx.cy, 16 + (1 - life) * 34, 0, Math.PI * 2);
+    target.fill();
+    if (fx.kind === 'rewind') {
+        target.globalAlpha = 0.7 * life;
+        target.strokeStyle = `rgba(0,243,255,${0.85 * life})`;
+        target.lineWidth = 2;
+        target.beginPath();
+        target.arc(fx.cx, fx.cy, 8 + (1 - life) * 40, 0, Math.PI * 2);
+        target.stroke();
+    }
+    target.restore();
+    for (const s of fx.particles) {
+        if (s.life <= 0) continue;
+        const a = Math.max(0, Math.min(1, s.life / 22));
+        target.save();
+        target.translate(s.x, s.y);
+        target.rotate(s.rot);
+        target.globalAlpha = a;
+        target.fillStyle = s.color;
+        if (fx.vapor) target.fillRect(-s.size * 0.4, -s.size * 1.4, s.size * 0.8, s.size * 2.8);
+        else target.fillRect(-s.size / 2, -s.size / 2, s.size, s.size * 0.7);
+        target.restore();
+    }
+}
+
+function startShake(frames, mag) {
+    state.shakeTimer = frames;
+    state.shakeMax = frames;
+    state.shakeMag = mag;
+}
+
+function spawnFailFx(reason) {
+    const site = deathSite(reason);
+    const kind = failKindFromReason(reason);
+    const pal = failPalette(kind);
+    state.failFx = spawnBurst(site.x, site.y, {
+        count: 14,
+        speedMin: kind === 'laser' ? 2.2 : 1.8,
+        speedMax: kind === 'crack' ? 4.8 : 4.2,
+        lift: pal.vapor ? 1.1 : 0.45,
+        lifeMin: 18,
+        sizeMin: 2.2,
+        sizeMax: 3.2,
+        ttl: 42,
+        kind,
+        colors: pal.colors,
+        glow: pal.glow,
+        vapor: pal.vapor
+    });
+}
+
+function spawnRewindFx() {
+    const p = state.player;
+    const cx = p ? p.x + p.w / 2 : canvas.width / 2;
+    const cy = p ? p.y + p.h / 2 : canvas.height / 2;
+    state.rewindFx = spawnBurst(cx, cy, {
+        count: 16,
+        speedMin: 2.0,
+        speedMax: 3.4,
+        lift: 0,
+        lifeMin: 16,
+        sizeMin: 2,
+        sizeMax: 2.4,
+        ttl: 22,
+        kind: 'rewind',
+        colors: ['#00f3ff', '#7df9ff', '#ffffff'],
+        glow: [0, 243, 255],
+        vapor: true,
+        inward: true,
+        radius: 36
+    });
+}
+
+function beginRewindJuice() {
+    SFX.rewind();
+    spawnRewindFx();
+    startShake(18, 7);
+    state.rewindFreeze = 16;
+}
+
+function clearLoopFx() {
+    state.failFx = null;
+    state.rewindFx = null;
+    state.shakeTimer = 0;
+    state.shakeMax = 0;
+    state.shakeMag = 0;
+    state.rewindFreeze = 0;
+}
+
+function tickLoopFx() {
+    if (state.shakeTimer > 0) state.shakeTimer--;
+    if (state.failFx) state.failFx = tickBurst(state.failFx);
+    if (state.rewindFx) state.rewindFx = tickBurst(state.rewindFx);
+}
 
 let uiTitleScreen = document.getElementById('title-screen');
 let uiAppLayout = document.getElementById('app-layout');
@@ -274,7 +460,8 @@ export function startGame(levelIndex) {
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(lv, levelIndex);
-    state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.alarmState = false;
+    state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    clearLoopFx();
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
     uiAppLayout.classList.remove('hidden'); document.getElementById('loop-count').innerText = state.pastRuns.length; Object.assign(prevKeys, keys);
     document.getElementById('mobile-controls')?.classList.remove('hidden');
@@ -292,7 +479,8 @@ export function startGame(levelIndex) {
 
 export function resetRun() {
     if (state.currentTick > 0) state.pastRuns.push([...state.currentRun]);
-    state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.alarmState = false;
+    state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    clearLoopFx();
     if (LEVELS[state.currentLevelIndex].maxGhosts && state.pastRuns.length > LEVELS[state.currentLevelIndex].maxGhosts) state.pastRuns.shift();
     
     let setupData = getLevelSetup(state.currentLevelIndex);
@@ -303,6 +491,7 @@ export function resetRun() {
     state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
     document.getElementById('loop-count').innerText = state.pastRuns.length;
     updateDeliveryProgressUI();
+    beginRewindJuice();
 }
 
 export function restartLevel() {
@@ -314,7 +503,8 @@ export function restartLevel() {
     Object.assign(state, setupData);
     state.player.facingX = 1; state.player.facingY = 0; state.player.cloakTimer = 0; state.player.dashCooldown = 0;
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
-    state.failTimer = 0; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
+    state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
+    clearLoopFx();
     document.getElementById('loop-count').innerText = 0;
     updateDeliveryProgressUI();
     applyChallengeHud(lv, state.currentLevelIndex);
@@ -328,7 +518,14 @@ export function restartLevel() {
     Object.assign(prevKeys, keys);
 }
 
-export function levelFailed(reason) { if (state.failTimer > 0) return; SFX.fail(); state.failMessage = reason; state.failTimer = 120; }
+export function levelFailed(reason) {
+    if (state.failTimer > 0) return;
+    SFX.fail();
+    state.failMessage = reason;
+    state.failTimer = FAIL_HOLD_FRAMES;
+    spawnFailFx(reason);
+    startShake(32, 10);
+}
 export function returnToMenu() { stopDialogSpeech(); state.gameState = 'MENU'; initMenu(); }
 
 function update() {
@@ -360,16 +557,24 @@ function update() {
         updatePrevKeys(); return;
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
+
+    tickLoopFx();
     
     if (state.failTimer > 0) {
         state.failTimer--;
         for (const p of state.packages) if (p.breakFx) p.update();
         if (state.failTimer === 0) resetRun();
+        updatePrevKeys();
         return;
     }
     if (isKeyJustPressed('esc')) { returnToMenu(); return; }
     if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
     if (isKeyJustPressed('r')) { resetRun(); updatePrevKeys(); return; }
+    if (state.rewindFreeze > 0) {
+        state.rewindFreeze--;
+        updatePrevKeys();
+        return;
+    }
 
     let allActors = [state.player];
     for (let ghost of state.activeGhosts) {
@@ -603,6 +808,15 @@ function draw() {
     if (state.gameState !== 'PLAYING' && state.gameState !== 'LEVEL_COMPLETE' && state.gameState !== 'EDITOR' && state.gameState !== 'BOSS_INTRO' && state.gameState !== 'DIALOG') return;
     if (state.assetsLoaded < state.assetNames.length) { ctx.fillStyle = '#fff'; ctx.fillText("Loading Assets...", 400, 300); return; }
 
+    let shakeX = 0, shakeY = 0;
+    if (state.gameState === 'PLAYING' && state.shakeTimer > 0 && state.shakeMax > 0) {
+        const mag = state.shakeMag * (state.shakeTimer / state.shakeMax);
+        shakeX = (Math.random() * 2 - 1) * mag;
+        shakeY = (Math.random() * 2 - 1) * mag;
+    }
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx); state.plates.forEach(p => p.render(ctx)); state.walls.forEach(w => w.render(ctx));
     state.lasers.forEach(l => l.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
@@ -670,15 +884,35 @@ function draw() {
     
     state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => d.render(ctx));
+    if (state.failFx) drawBurst(ctx, state.failFx);
+    if (state.rewindFx) drawBurst(ctx, state.rewindFx);
+
+    ctx.restore();
     
     if (state.gameState === 'EDITOR') { drawEditorOverlay(ctx); return; }
 
     if (state.alarmState && state.currentTick % 60 === 0) SFX.alarm();
     if (state.alarmState) { ctx.fillStyle = 'rgba(255, 0, 0, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    if (state.rewindFx && state.rewindFx.ttl > 0) {
+        const u = state.rewindFx.ttl / state.rewindFx.max;
+        ctx.fillStyle = `rgba(0, 243, 255, ${0.2 * u})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
     if (state.failTimer > 0) {
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.4)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 36px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText("LOOP FAILED", 400, 250);
-        ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
+        const impact = state.failTimer > FAIL_HOLD_FRAMES - 8;
+        const showText = state.failTimer <= FAIL_HOLD_FRAMES - FAIL_TEXT_DELAY;
+        if (impact) {
+            const flash = (state.failTimer - (FAIL_HOLD_FRAMES - 8)) / 8;
+            ctx.fillStyle = `rgba(255, 220, 220, ${0.28 * flash})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.fillStyle = showText ? 'rgba(255, 0, 0, 0.4)' : 'rgba(255, 40, 40, 0.16)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (showText) {
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 36px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText("LOOP FAILED", 400, 250);
+            ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
+            ctx.textAlign = 'left';
+        }
     }
 }
 

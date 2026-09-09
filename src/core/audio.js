@@ -30,7 +30,16 @@ export const SFX = {
     laserHit: () => playTone(150, 'sawtooth', 0.4, 0.5, 50),
     alarm: () => { playTone(800, 'square', 0.3, 0.2); setTimeout(()=>playTone(600, 'square', 0.3, 0.2), 300); },
     robotShoot: () => playTone(900, 'sawtooth', 0.2, 0.3, 400),
-    fail: () => playTone(200, 'sawtooth', 1.0, 0.4, 50),
+    fail: () => {
+        playTone(240, 'sawtooth', 0.28, 0.42, 90);
+        setTimeout(() => playTone(150, 'square', 0.35, 0.3, 55), 80);
+        setTimeout(() => playTone(70, 'sawtooth', 0.45, 0.22, 28), 160);
+    },
+    rewind: () => {
+        playTone(90, 'sine', 0.2, 0.34, 380);
+        setTimeout(() => playTone(220, 'triangle', 0.18, 0.26, 640), 60);
+        setTimeout(() => playTone(540, 'sine', 0.22, 0.2, 980), 130);
+    },
     win: () => { playTone(400, 'sine', 0.2, 0.3); setTimeout(()=>playTone(500, 'sine', 0.2, 0.3), 200); setTimeout(()=>playTone(600, 'sine', 0.4, 0.3), 400); },
     door: () => playTone(100, 'square', 0.1, 0.2, 50),
     droneAlert: () => {

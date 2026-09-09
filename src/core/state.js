@@ -59,6 +59,12 @@ export const state = {
     currentLevelIndex: 0,
     failTimer: 0,
     failMessage: "",
+    failFx: null,
+    rewindFx: null,
+    shakeTimer: 0,
+    shakeMax: 0,
+    shakeMag: 0,
+    rewindFreeze: 0,
     alarmState: false,
     levelAbilityOverrides: [],
     currentLevelMeta: null,
@@ -69,6 +75,7 @@ export const state = {
     
     resetRunData: function() {
         this.walls=[]; this.doors=[]; this.plates=[]; this.packages=[]; this.lasers=[]; this.guards=[]; this.cameras=[]; this.drones=[]; this.winds=[]; this.statics=[]; this.cracks=[]; this.robots=[]; this.projectiles=[]; this.dashTrails=[]; this.deliveryZone=null; this.player=null;
+        this.failTimer=0; this.failMessage=""; this.failFx=null; this.rewindFx=null; this.shakeTimer=0; this.shakeMax=0; this.shakeMag=0; this.rewindFreeze=0;
     }
 };
 
