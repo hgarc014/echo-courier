@@ -165,7 +165,7 @@ export class ShooterRobot extends Entity {
             // Phase 2 or Phase 3 Multishot
             if (this.hp <= 2) {
                 let spread = 0.4;
-                state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a+spread)*8, Math.sin(a-spread)*8));
+                state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a+spread)*8, Math.sin(a+spread)*8));
                 state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a-spread)*8, Math.sin(a-spread)*8));
             }
             this.fireCooldown = this.hp === 3 ? 60 : (this.hp === 2 ? 45 : 30); 
