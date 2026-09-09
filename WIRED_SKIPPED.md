@@ -74,3 +74,4 @@ Courier frames (`PLAYER_FRAME_RECTS`) were already wired in #8 and are unchanged
 ## Draw fallback
 
 `resolveSprite(state, name)` uses `worldAtlas[name]`, then `playerAtlas[name]` (guard), then `state.assets[name]`.
+)
