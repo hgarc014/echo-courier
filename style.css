@@ -170,6 +170,34 @@ body {
     background: rgba(57, 255, 20, 0.1); padding: 6px 16px; border-radius: 4px; border: 1px solid rgba(57, 255, 20, 0.3);
 }
 
+#challenge-text {
+    font-size: 0.95rem;
+    margin-top: 5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+#challenge-text.challenge-open {
+    color: #fff6c2;
+    background: rgba(255, 221, 0, 0.12);
+    border: 1px solid rgba(255, 221, 0, 0.85);
+    text-shadow:
+        0 0 1px #05070a,
+        0 0 8px rgba(255, 221, 0, 0.65);
+    box-shadow: 0 0 12px rgba(255, 221, 0, 0.22);
+}
+#challenge-text.challenge-done {
+    color: gold;
+    background: rgba(255, 215, 0, 0.18);
+    border: 1px solid gold;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.85);
+    box-shadow: 0 0 16px rgba(255, 215, 0, 0.32);
+}
+#challenge-text.challenge-training {
+    color: #00f3ff;
+    background: rgba(0, 243, 255, 0.1);
+    border: 1px solid rgba(0, 243, 255, 0.4);
+}
+
 .play-stage { position: relative; width: 800px; }
 .game-area { position: relative; width: 800px; height: 600px; }
 #mobile-controls { display: none; }
@@ -322,6 +350,47 @@ h2 { color: var(--accent-safe); font-size: 2.5rem; margin-bottom: 16px; letter-s
     display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
 .level-btn span { font-size: 0.75rem; color: var(--text-dim); font-weight: 400; margin-top: 8px; text-transform: uppercase; }
+.level-btn .level-num {
+    margin-top: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: inherit;
+}
+.level-btn .level-star {
+    display: block;
+    margin: 0 0 2px;
+    color: gold;
+    font-size: 1.25rem;
+    line-height: 1;
+    text-transform: none;
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.95), 0 0 2px #000;
+}
+.level-btn .level-star-slot {
+    display: block;
+    height: 1.25rem;
+    margin: 0 0 2px;
+}
+.level-btn .level-lock {
+    display: block;
+    margin: 0 0 2px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+}
+.level-btn.gold-star {
+    border-color: gold;
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.4);
+    background: rgba(255, 215, 0, 0.08);
+}
+.level-btn.gold-star:not(:disabled):hover {
+    background: rgba(255, 215, 0, 0.16);
+    border-color: #ffe566;
+    box-shadow: 0 0 18px rgba(255, 215, 0, 0.55);
+}
 .level-btn:not(:disabled):hover {
     background: rgba(0, 243, 255, 0.1); border-color: var(--accent-ghost);
     box-shadow: 0 0 15px rgba(0, 243, 255, 0.2); transform: translateY(-2px);
@@ -880,5 +949,4 @@ body.touch-ui #sub-tutorials > .secondary-btn {
         display: flex;
     }
 }
-
 
