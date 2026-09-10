@@ -12,7 +12,10 @@ export function showSubMenu(menuId) {
     document.getElementById('sub-settings').classList.add('hidden');
     if (menuId === 'main') document.getElementById('main-menu-nav').classList.remove('hidden');
     else document.getElementById('sub-' + menuId).classList.remove('hidden');
-    document.getElementById('title-screen').classList.toggle('submenu-open', menuId !== 'main');
+    const title = document.getElementById('title-screen');
+    title.classList.toggle('submenu-open', menuId !== 'main');
+    title.classList.toggle('settings-open', menuId === 'settings');
+    if (menuId === 'settings') title.scrollTop = 0;
 }
 
 export function updateHUD() {
