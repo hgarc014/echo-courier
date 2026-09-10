@@ -1,65 +1,87 @@
-/* Short desktop (~800px): SYSTEM CONFIG — WIPE + BACK fully visible, separated, no sticky overlap. */
-@media (max-height: 900px) {
-    #title-screen.submenu-open {
-        justify-content: flex-start;
-        overflow-x: hidden;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        padding-top: 8px;
-        padding-bottom: 12px;
-    }
+/* SYSTEM CONFIG short-viewport fit (live Pages ~1280x800).
+   Uses .settings-open from showSubMenu — no :has() / max-height dependency for hide. */
 
-    /* Free vertical space so Settings fits on open without crowding WIPE/BACK. */
-    #title-screen:has(#sub-settings:not(.hidden)) .mega-logo,
-    #title-screen:has(#sub-settings:not(.hidden)) .subtitle {
-        display: none;
-    }
+#title-screen.settings-open {
+    justify-content: flex-start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-top: 10px;
+    padding-bottom: 12px;
+}
 
-    #sub-settings {
-        width: 100%;
-        max-width: 560px;
-        padding-bottom: 0;
-        gap: 0;
-    }
+/* Always reclaim header space while Settings is open (tall + short). */
+#title-screen.settings-open .mega-logo,
+#title-screen.settings-open .subtitle {
+    display: none !important;
+}
 
-    #sub-settings h2 {
-        font-size: clamp(1.05rem, 3.5vh, 1.45rem);
-        margin-bottom: 6px;
-        letter-spacing: 2px;
-    }
+#title-screen.settings-open #sub-settings {
+    width: 100%;
+    max-width: 560px;
+    padding-bottom: 0;
+}
 
-    #sub-settings .dev-mode-toggle {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        margin-top: 4px !important;
-        padding-bottom: 0;
-    }
+#title-screen.settings-open #sub-settings h2 {
+    font-size: clamp(1.05rem, 3.2vh, 1.4rem);
+    margin-bottom: 6px;
+    letter-spacing: 2px;
+}
 
-    #sub-settings br {
-        display: none;
-    }
+#title-screen.settings-open #sub-settings .dev-mode-toggle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px !important;
+    padding-bottom: 0;
+}
 
-    #sub-settings .dev-mode-toggle .primary-btn,
-    #sub-settings .dev-mode-toggle .secondary-btn {
-        margin-top: 0 !important;
-        padding: 8px 18px;
-        font-size: 0.85rem;
-    }
+#title-screen.settings-open #sub-settings br {
+    display: none !important;
+}
 
-    #sub-settings .dev-mode-toggle input[type="range"] {
-        margin-top: 4px !important;
-    }
+#title-screen.settings-open #sub-settings .dev-mode-toggle .primary-btn,
+#title-screen.settings-open #sub-settings .dev-mode-toggle .secondary-btn {
+    margin-top: 0 !important;
+    padding: 7px 16px;
+    font-size: 0.82rem;
+}
 
-    /* Normal flow — not sticky — so BACK never sits on top of WIPE. */
-    #sub-settings > .secondary-btn {
-        position: static;
-        margin-top: 16px !important;
-        padding: 8px 18px;
-        font-size: 0.85rem;
-        background: transparent;
-        z-index: auto;
+#title-screen.settings-open #sub-settings .dev-mode-toggle input[type="range"] {
+    margin-top: 2px !important;
+    width: min(280px, 70vw);
+}
+
+#title-screen.settings-open #sub-settings .dev-mode-toggle label {
+    font-size: 0.95rem !important;
+}
+
+/* Normal flow with clear separation — never sticky over WIPE. */
+#title-screen.settings-open #sub-settings > .secondary-btn {
+    position: static !important;
+    transform: none !important;
+    margin-top: 14px !important;
+    padding: 7px 16px;
+    font-size: 0.82rem;
+    background: transparent;
+    z-index: auto;
+}
+
+/* Extra tightening for default desktop height (~800px CSS viewport). */
+@media (max-height: 860px) {
+    #title-screen.settings-open #sub-settings .dev-mode-toggle {
+        gap: 4px;
+    }
+    #title-screen.settings-open #sub-settings h2 {
+        font-size: 1.15rem;
+        margin-bottom: 4px;
+    }
+    #title-screen.settings-open #sub-settings .dev-mode-toggle .primary-btn,
+    #title-screen.settings-open #sub-settings .dev-mode-toggle .secondary-btn,
+    #title-screen.settings-open #sub-settings > .secondary-btn {
+        padding: 6px 14px;
+        font-size: 0.78rem;
     }
 }
