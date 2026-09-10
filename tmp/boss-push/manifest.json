@@ -1,0 +1,23 @@
+[
+  {
+    "name": "hazards",
+    "dest": "src/entities/hazards.js",
+    "raw": 27253,
+    "gz": 6152,
+    "b64": 8204
+  },
+  {
+    "name": "audio",
+    "dest": "src/core/audio.js",
+    "raw": 28278,
+    "gz": 6293,
+    "b64": 8392
+  },
+  {
+    "name": "main",
+    "dest": "src/main.js",
+    "raw": 43391,
+    "gz": 10578,
+    "b64": 14104
+  }
+]
