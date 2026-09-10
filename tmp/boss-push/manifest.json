@@ -1,0 +1,26 @@
+[
+  {
+    "name": "hazards",
+    "dest": "src/entities/hazards.js",
+    "raw": 27253,
+    "sha256": "4d26e89f1e37f38b815bec12449e7b6f4dd1b7d68355497fa69d472758e5eab3",
+    "parts": 3,
+    "b64": 8204
+  },
+  {
+    "name": "audio",
+    "dest": "src/core/audio.js",
+    "raw": 28278,
+    "sha256": "6fbe862f21e8984163fa3b8d980686b024c217fb53ed191ef086194c0f77846c",
+    "parts": 3,
+    "b64": 8392
+  },
+  {
+    "name": "main",
+    "dest": "src/main.js",
+    "raw": 43391,
+    "sha256": "b190b4daa43649b3d051f254a846b2ccb0d0fabca63fdb79ae9726b7e19c15fa",
+    "parts": 5,
+    "b64": 14104
+  }
+]

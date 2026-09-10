@@ -1,0 +1,50 @@
+name: apply-boss-telegraphs
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/boss-telegraphs-final]
+    paths:
+      - 'tmp/boss-push/**'
+      - '.github/workflows/apply-boss-telegraphs.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/boss-telegraphs-final
+      - name: Assemble and write files
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, gzip, hashlib, json, pathlib
+          root = pathlib.Path('tmp/boss-push')
+          manifest = json.loads((root / 'manifest.json').read_text())
+          for entry in manifest:
+              parts = sorted(root.glob(f"{entry['name']}.gz.b64.*"))
+              assert parts, entry['name']
+              b64 = ''.join(p.read_text().strip() for p in parts)
+              raw = gzip.decompress(base64.b64decode(b64))
+              assert len(raw) == entry['raw'], (entry['name'], len(raw), entry['raw'])
+              assert hashlib.sha256(raw).hexdigest() == entry['sha256'], entry['name']
+              dest = pathlib.Path(entry['dest'])
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              dest.write_bytes(raw)
+              print('wrote', dest, len(raw))
+          PY
+      - name: Commit restored sources and cleanup
+        run: |
+          set -euo pipefail
+          rm -rf tmp/boss-push
+          rm -f .github/workflows/apply-boss-telegraphs.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "Add boss telegraphs, hurt flash, and phase-change beat"
+          git push
