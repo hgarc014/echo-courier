@@ -1,4 +1,4 @@
-/* Short desktop (~800px): keep SYSTEM CONFIG WIPE + BACK reachable. */
+/* Short desktop (~800px): SYSTEM CONFIG — WIPE + BACK fully visible, separated, no sticky overlap. */
 @media (max-height: 900px) {
     #title-screen.submenu-open {
         justify-content: flex-start;
@@ -6,41 +6,60 @@
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
-        padding-bottom: 16px;
+        padding-top: 8px;
+        padding-bottom: 12px;
     }
-    #title-screen.submenu-open .mega-logo {
-        font-size: clamp(1.2rem, 6vh, 2.4rem);
-        margin-bottom: 2px;
+
+    /* Free vertical space so Settings fits on open without crowding WIPE/BACK. */
+    #title-screen:has(#sub-settings:not(.hidden)) .mega-logo,
+    #title-screen:has(#sub-settings:not(.hidden)) .subtitle {
+        display: none;
     }
-    #title-screen.submenu-open .subtitle {
-        margin-bottom: 6px;
-        letter-spacing: 2px;
-    }
+
     #sub-settings {
         width: 100%;
         max-width: 560px;
-        padding-bottom: 8px;
+        padding-bottom: 0;
+        gap: 0;
     }
+
     #sub-settings h2 {
-        font-size: clamp(1.1rem, 4vh, 1.6rem);
-        margin-bottom: 8px;
+        font-size: clamp(1.05rem, 3.5vh, 1.45rem);
+        margin-bottom: 6px;
+        letter-spacing: 2px;
     }
+
     #sub-settings .dev-mode-toggle {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 10px;
-        margin-top: 8px !important;
-        padding-bottom: 4px;
+        gap: 8px;
+        margin-top: 4px !important;
+        padding-bottom: 0;
     }
+
     #sub-settings br {
         display: none;
     }
+
+    #sub-settings .dev-mode-toggle .primary-btn,
+    #sub-settings .dev-mode-toggle .secondary-btn {
+        margin-top: 0 !important;
+        padding: 8px 18px;
+        font-size: 0.85rem;
+    }
+
+    #sub-settings .dev-mode-toggle input[type="range"] {
+        margin-top: 4px !important;
+    }
+
+    /* Normal flow — not sticky — so BACK never sits on top of WIPE. */
     #sub-settings > .secondary-btn {
-        position: sticky;
-        bottom: 0;
-        margin-top: 12px !important;
-        background: rgba(5, 7, 10, 0.96);
-        z-index: 5;
+        position: static;
+        margin-top: 16px !important;
+        padding: 8px 18px;
+        font-size: 0.85rem;
+        background: transparent;
+        z-index: auto;
     }
 }
