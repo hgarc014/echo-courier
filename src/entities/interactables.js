@@ -3,13 +3,15 @@ import { Entity } from './base.js';
 import { AABB } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
 import { drawSprite, drawTiled } from '../core/sprites.js';
+import { resolveSprite } from '../core/atlas.js';
 
 export class Wall extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'wall'); }
     render(ctx) {
-        if (state.assets.wall) {
+        const img = resolveSprite(state, 'wall');
+        if (img) {
             const pulse = 0.92 + 0.08 * Math.sin(state.currentTick * 0.06);
-            drawTiled(ctx, state.assets.wall, this.x, this.y, this.w, this.h, 40, pulse);
+            drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, pulse);
             ctx.strokeStyle = '#00f3ff'; ctx.lineWidth=1; ctx.strokeRect(this.x, this.y, this.w, this.h);
         }
     }
@@ -218,11 +220,11 @@ export class Package extends Entity {
             }
         }
 
-        let img = state.assets.package;
+        let img = resolveSprite(state, 'package');
         let tint = null;
         let tintAlpha = 0;
-        if (this.type === 'heavy') { img = state.assets.heavy || img; tint = '#ffd27a'; tintAlpha = 0.16; }
-        else if (this.type === 'fragile') { img = state.assets.fragile || img; tint = '#ff6b6b'; tintAlpha = 0.14; }
+        if (this.type === 'heavy') { img = resolveSprite(state, 'heavy') || img; tint = '#ffd27a'; tintAlpha = 0.16; }
+        else if (this.type === 'fragile') { img = resolveSprite(state, 'fragile') || img; tint = '#ff6b6b'; tintAlpha = 0.14; }
         else if (this.type === 'contraband') { tint = '#b14bff'; tintAlpha = 0.28; }
         else if (this.type === 'decoy') { tint = '#00f3ff'; tintAlpha = 0.22; }
         else if (this.type === 'timed') { tint = '#ff3333'; tintAlpha = 0.2; }
@@ -296,7 +298,8 @@ export class PressurePlate extends Entity {
     }
     render(ctx) {
         const pulse = this.isPressed ? 1 : 0.88 + 0.08 * Math.sin(state.currentTick * 0.12);
-        if (state.assets.plate) drawSprite(ctx, state.assets.plate, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
+        const img = (this.isPressed && resolveSprite(state, 'platePressed')) || resolveSprite(state, 'plate');
+        if (img) drawSprite(ctx, img, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
         else super.render(ctx);
         if (this.isPressed) { ctx.strokeStyle='#ffdd00'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
     }
@@ -317,13 +320,21 @@ export class TemporalPlate extends PressurePlate {
         if (validActor && AABB(this.x, this.y, this.w, this.h, validActor.x, validActor.y, validActor.w, validActor.h)) this.isPressed = true;
     }
     render(ctx) {
-        if (this.requiredTimeline === 'present') ctx.fillStyle = 'rgba(0, 255, 0, 0.4)';
-        else if (this.requiredTimeline === 'first') ctx.fillStyle = 'rgba(255, 0, 255, 0.4)';
-        else if (this.requiredTimeline === 'last') ctx.fillStyle = 'rgba(0, 150, 255, 0.4)';
-        ctx.fillRect(this.x, this.y, this.w, this.h);
-        
+        const tintKey = this.requiredTimeline === 'present' ? 'platePresent'
+            : this.requiredTimeline === 'first' ? 'plateFirst'
+            : this.requiredTimeline === 'last' ? 'plateLast'
+            : null;
+        const tintImg = tintKey ? resolveSprite(state, tintKey) : null;
+        const img = tintImg || resolveSprite(state, 'plate');
+        if (!tintImg) {
+            if (this.requiredTimeline === 'present') ctx.fillStyle = 'rgba(0, 255, 0, 0.4)';
+            else if (this.requiredTimeline === 'first') ctx.fillStyle = 'rgba(255, 0, 255, 0.4)';
+            else if (this.requiredTimeline === 'last') ctx.fillStyle = 'rgba(0, 150, 255, 0.4)';
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+        }
+
         const pulse = this.isPressed ? 1 : 0.75;
-        if (state.assets.plate) drawSprite(ctx, state.assets.plate, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
+        if (img) drawSprite(ctx, img, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
         if (this.isPressed) { ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
     }
 }
@@ -332,7 +343,8 @@ export class Door extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'door'); this.id=id; this.isOpen=false; }
     render(ctx) {
         if (!this.isOpen) {
-            if (state.assets.door) drawTiled(ctx, state.assets.door, this.x, this.y, this.w, this.h, 40);
+            const img = resolveSprite(state, 'door');
+            if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40);
             else super.render(ctx);
             const pulse = 0.25 + 0.2 * Math.abs(Math.sin(state.currentTick * 0.14));
             ctx.fillStyle = `rgba(255,40,40,${pulse})`;
@@ -346,7 +358,8 @@ export class AlarmDoor extends Entity {
     render(ctx) {
         this.isOpen = !state.alarmState;
         if (!this.isOpen) {
-            if (state.assets.door) drawTiled(ctx, state.assets.door, this.x, this.y, this.w, this.h, 40);
+            const img = resolveSprite(state, 'door');
+            if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40);
             else super.render(ctx);
             ctx.fillStyle='rgba(255,0,0,0.28)'; ctx.fillRect(this.x, this.y, this.w, this.h);
         }
@@ -361,7 +374,8 @@ export class TimerDoor extends Entity {
         if (cycle === this.openT) SFX.door();
         this.isOpen = cycle < this.openT;
         if (!this.isOpen) {
-            if (state.assets.door) drawTiled(ctx, state.assets.door, this.x, this.y, this.w, this.h, 40);
+            const img = resolveSprite(state, 'door');
+            if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40);
             else super.render(ctx);
             ctx.fillStyle='rgba(255,100,0,0.28)'; ctx.fillRect(this.x,this.y,this.w,this.h);
         }

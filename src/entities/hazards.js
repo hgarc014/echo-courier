@@ -2,7 +2,8 @@ import { state } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB, checkWallCollision, lineOfSightBlocked } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
-import { drawSprite } from '../core/sprites.js';
+import { drawSprite, drawTiled } from '../core/sprites.js';
+import { resolveSprite } from '../core/atlas.js';
 
 function isPresentPlayer(actor) {
     return actor && actor.id === undefined && actor.assetName === 'player';
@@ -13,12 +14,13 @@ export class Laser extends Entity {
     render(ctx) {
         if (!this.isOpen) {
             const pulse = 0.78 + 0.22 * Math.abs(Math.sin(state.currentTick * 0.18));
-            if (state.assets.laser) {
+            const img = resolveSprite(state, 'laser');
+            if (img) {
                 ctx.save(); ctx.beginPath(); ctx.rect(this.x, this.y, this.w, this.h); ctx.clip();
                 ctx.globalAlpha = pulse;
                 const tile = 40;
-                for(let i=0; i<this.h; i+=tile) ctx.drawImage(state.assets.laser, this.x+(this.w/2 - 20), this.y+i, tile, tile);
-                for(let i=0; i<this.w; i+=tile) ctx.drawImage(state.assets.laser, this.x+i, this.y+(this.h/2 - 20), tile, tile);
+                for(let i=0; i<this.h; i+=tile) ctx.drawImage(img, this.x+(this.w/2 - 20), this.y+i, tile, tile);
+                for(let i=0; i<this.w; i+=tile) ctx.drawImage(img, this.x+i, this.y+(this.h/2 - 20), tile, tile);
                 ctx.restore();
             } else { ctx.fillStyle=`rgba(255,0,0,${0.35 * pulse})`; ctx.fillRect(this.x, this.y, this.w, this.h); }
         }
@@ -51,8 +53,9 @@ export class SweepCamera extends Entity {
     }
     render(ctx) {
         const bob = Math.sin(state.currentTick * 0.2) * 0.8;
-        if (state.assets.camera) {
-            drawSprite(ctx, state.assets.camera, this.x, this.y, this.w, this.h, { valign: 'bottom', bob });
+        const img = resolveSprite(state, 'camera');
+        if (img) {
+            drawSprite(ctx, img, this.x, this.y, this.w, this.h, { valign: 'bottom', bob });
         } else super.render(ctx);
         const blink = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(state.currentTick * 0.25));
         ctx.fillStyle = state.alarmState ? `rgba(255,40,40,${blink})` : `rgba(0,243,255,${blink})`;
@@ -267,8 +270,9 @@ export class Guard extends Entity {
         const moving = this.state === 'patrol';
         const t = state.currentTick;
         const walk = moving ? Math.sin(t * 0.4) : 0;
-        if (state.assets.guard) {
-            drawSprite(ctx, state.assets.guard, this.x, this.y, this.w, this.h, {
+        const img = resolveSprite(state, 'guard');
+        if (img) {
+            drawSprite(ctx, img, this.x, this.y, this.w, this.h, {
                 flipX: this.facingX < 0,
                 bob: moving ? Math.abs(walk) * 2.2 : Math.sin(t * 0.12) * 0.6,
                 scaleY: moving ? 1 + walk * 0.05 : 1,
@@ -286,7 +290,9 @@ export class Guard extends Entity {
 export class WindTunnel extends Entity {
     constructor(x, y, w, h, dx, dy) { super(x, y, w, h, 'wind'); this.vx = dx; this.vy = dy; }
     render(ctx) { 
-        ctx.fillStyle='rgba(200,200,255,0.15)'; ctx.fillRect(this.x,this.y,this.w,this.h); 
+        const img = resolveSprite(state, 'wind');
+        if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 0.72);
+        else { ctx.fillStyle='rgba(200,200,255,0.15)'; ctx.fillRect(this.x,this.y,this.w,this.h); }
         
         ctx.save(); ctx.beginPath(); ctx.rect(this.x, this.y, this.w, this.h); ctx.clip();
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -307,7 +313,11 @@ export class WindTunnel extends Entity {
 
 export class StaticZone extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'static'); }
-    render(ctx) { ctx.fillStyle='rgba(150,0,255,0.2)'; ctx.fillRect(this.x,this.y,this.w,this.h); }
+    render(ctx) {
+        const img = resolveSprite(state, 'static');
+        if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 0.72);
+        else { ctx.fillStyle='rgba(150,0,255,0.2)'; ctx.fillRect(this.x,this.y,this.w,this.h); }
+    }
 }
 
 export class Pit extends Entity {
@@ -321,7 +331,9 @@ export class Pit extends Entity {
         return null;
     }
     render(ctx) {
-        ctx.fillStyle='#000'; ctx.fillRect(this.x,this.y,this.w,this.h);
+        const img = resolveSprite(state, 'pit');
+        if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 1);
+        else { ctx.fillStyle='#000'; ctx.fillRect(this.x,this.y,this.w,this.h); }
         ctx.strokeStyle='#111'; ctx.strokeRect(this.x,this.y,this.w,this.h);
     }
 }
@@ -344,7 +356,15 @@ export class CrackedFloor extends Entity {
         return null;
     }
     render(ctx) {
-        if (this.broken) { ctx.fillStyle='#000'; ctx.fillRect(this.x,this.y,this.w,this.h); }
-        else { ctx.fillStyle=`rgba(150,100,50,${1 - this.ticks/100})`; ctx.fillRect(this.x,this.y,this.w,this.h); }
+        if (this.broken) {
+            const img = resolveSprite(state, 'pit');
+            if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 1);
+            else { ctx.fillStyle='#000'; ctx.fillRect(this.x,this.y,this.w,this.h); }
+        } else {
+            const img = resolveSprite(state, 'crack');
+            const fade = Math.max(0.35, 1 - this.ticks / 100);
+            if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, fade);
+            else { ctx.fillStyle=`rgba(150,100,50,${fade})`; ctx.fillRect(this.x,this.y,this.w,this.h); }
+        }
     }
 }

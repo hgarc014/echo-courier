@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, buildPlayerAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -50,6 +50,7 @@ export const state = {
     assetsLoaded: 0,
     assetNames: ['player', 'package', 'plate', 'door', 'wall', 'zone', 'guard', 'laser', 'camera', 'heavy', 'fragile'],
     playerAtlas: null,
+    worldAtlas: null,
     
     pastRuns: [],
     currentRun: [],
@@ -103,6 +104,28 @@ playerSheet.onload = () => {
 playerSheet.onerror = () => {
     state.playerAtlas = null;
 };
+
+const propsSheet = new Image();
+const envSheet = new Image();
+function tryBuildWorldAtlas() {
+    const propsOk = propsSheet.complete && (propsSheet.naturalWidth || propsSheet.width);
+    const envOk = envSheet.complete && (envSheet.naturalWidth || envSheet.width);
+    if (!propsOk && !envOk) return;
+    try {
+        state.worldAtlas = buildWorldAtlas(
+            propsOk ? propsSheet : null,
+            envOk ? envSheet : null
+        );
+    } catch {
+        state.worldAtlas = null;
+    }
+}
+propsSheet.onload = tryBuildWorldAtlas;
+envSheet.onload = tryBuildWorldAtlas;
+propsSheet.onerror = tryBuildWorldAtlas;
+envSheet.onerror = tryBuildWorldAtlas;
+propsSheet.src = PROPS_SHEET_PATH;
+envSheet.src = ENV_SHEET_PATH;
 
 export function getCredits() {
     let earned = (state.maxUnlockedLevel * 50) + (Object.keys(state.challengesCompleted).length * 50);
