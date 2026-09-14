@@ -30,6 +30,12 @@ export const SFX = {
     laserHit: () => playTone(150, 'sawtooth', 0.4, 0.5, 50),
     alarm: () => { playTone(800, 'square', 0.3, 0.2); setTimeout(()=>playTone(600, 'square', 0.3, 0.2), 300); },
     robotShoot: () => playTone(900, 'sawtooth', 0.2, 0.3, 400),
+    bossPhase: () => {
+        playTone(160, 'sawtooth', 0.28, 0.5, 50);
+        setTimeout(() => playTone(90, 'square', 0.35, 0.36, 40), 70);
+        setTimeout(() => playTone(420, 'triangle', 0.22, 0.3, 180), 140);
+        setTimeout(() => playTone(720, 'square', 0.16, 0.2, 260), 230);
+    },
     fail: () => {
         playTone(240, 'sawtooth', 0.28, 0.42, 90);
         setTimeout(() => playTone(150, 'square', 0.35, 0.3, 55), 80);

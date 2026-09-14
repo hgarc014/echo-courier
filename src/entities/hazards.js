@@ -90,6 +90,95 @@ export class LaserProjectile {
     }
 }
 
+const BOSS_HIT_STUN = 30;
+const BOSS_PHASE_FLASH = 36;
+const BOSS_SPREAD = 0.4;
+const BOSS_SHOT_SPEED = 8;
+const BOSS_LANE_LEN = 320;
+const BOSS_COOLDOWN = { 3: 60, 2: 45, 1: 30 };
+const BOSS_TELEGRAPH = { 3: 18, 2: 15, 1: 12 };
+
+function bossTelegraphTicks(hp) {
+    return BOSS_TELEGRAPH[hp] || BOSS_TELEGRAPH[3];
+}
+
+function bossFireCooldown(hp) {
+    return BOSS_COOLDOWN[hp] || BOSS_COOLDOWN[3];
+}
+
+function bossPhaseStyle(hp) {
+    if (hp === 1) {
+        return {
+            core: 'rgba(255, 16, 16, 0.9)',
+            stroke: '#ff1a1a',
+            aura: 'rgba(255, 36, 36, 0.42)',
+            bar: '#ff3344',
+            banner: 'PHASE 3'
+        };
+    }
+    if (hp === 2) {
+        return {
+            core: 'rgba(255, 152, 18, 0.82)',
+            stroke: '#ffaa22',
+            aura: 'rgba(255, 168, 36, 0.36)',
+            bar: '#ffaa22',
+            banner: 'PHASE 2'
+        };
+    }
+    return {
+        core: 'rgba(0, 243, 255, 0.4)',
+        stroke: '#00f3ff',
+        aura: 'rgba(0, 220, 255, 0.22)',
+        bar: '#33ee88',
+        banner: 'PHASE 1'
+    };
+}
+
+function drawBossShotLanes(ctx, cx, cy, angle, charge, multi) {
+    const len = 36 + charge * (BOSS_LANE_LEN - 36);
+    const spread = BOSS_SPREAD;
+    ctx.save();
+    ctx.lineCap = 'round';
+    const alpha = 0.2 + 0.62 * charge;
+
+    if (multi) {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, len, angle - spread, angle + spread);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(255, 48, 64, ${0.07 + 0.18 * charge})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255, 190, 90, ${0.3 + 0.45 * charge})`;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, len, angle - 0.07, angle + 0.07);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(255, 50, 70, ${0.06 + 0.14 * charge})`;
+        ctx.fill();
+    }
+
+    const angles = multi ? [angle - spread, angle, angle + spread] : [angle];
+    ctx.setLineDash([10, 7]);
+    ctx.lineDashOffset = -state.currentTick * (1.4 + charge * 2.2);
+    for (let i = 0; i < angles.length; i++) {
+        const a = angles[i];
+        const isCenter = !multi || i === 1;
+        ctx.strokeStyle = isCenter
+            ? `rgba(255, 255, 255, ${alpha})`
+            : `rgba(255, 90, 40, ${alpha * 0.88})`;
+        ctx.lineWidth = isCenter ? 2.6 : 1.9;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18);
+        ctx.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+}
+
 export class ShooterRobot extends Entity {
     constructor(path) {
         super(path[0].x, path[0].y, 35, 35, 'robot');
@@ -99,11 +188,35 @@ export class ShooterRobot extends Entity {
         this.engaged = true;
         this.isEmerging = false;
         this.emergeUntilPathIndex = 0;
+        this.windingUp = false;
+        this.telegraphArmed = false;
+        this.phaseChangeTimer = 0;
+        this.muzzleFlash = 0;
+    }
+    takeHit() {
+        if (this.hp <= 0) return;
+        this.hp--;
+        this.hitFlicker = BOSS_HIT_STUN;
+        this.windingUp = false;
+        this.telegraphArmed = false;
+        if (this.hp === 2 || this.hp === 1) {
+            this.phaseChangeTimer = BOSS_PHASE_FLASH;
+            this.fireCooldown = Math.max(this.fireCooldown, bossTelegraphTicks(this.hp));
+            SFX.bossPhase();
+        } else {
+            SFX.laserHit();
+        }
     }
     update(player, activeGhosts, walls) {
         if (this.hp <= 0) return;
+        if (this.muzzleFlash > 0) this.muzzleFlash--;
+        if (this.phaseChangeTimer > 0) this.phaseChangeTimer--;
         if (!this.engaged && !this.isEmerging) return;
-        if (this.hitFlicker > 0) { this.hitFlicker--; return; } // Stun
+        if (this.hitFlicker > 0) {
+            this.hitFlicker--;
+            this.windingUp = false;
+            return;
+        }
 
         const moveAlongPath = () => {
             if (this.path.length <= 1) return;
@@ -156,41 +269,185 @@ export class ShooterRobot extends Entity {
         }
 
         if (this.fireCooldown > 0) this.fireCooldown--;
+
+        const tele = bossTelegraphTicks(this.hp);
+        if (bestTarget && this.fireCooldown > 0 && this.fireCooldown <= tele) {
+            this.windingUp = true;
+            this.telegraphArmed = true;
+        } else {
+            this.windingUp = false;
+        }
         
         if (bestTarget && this.fireCooldown <= 0) {
-            let a = this.facingAngle;
-            SFX.robotShoot();
-            state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a)*8, Math.sin(a)*8));
-            
-            // Phase 2 or Phase 3 Multishot
-            if (this.hp <= 2) {
-                let spread = 0.4;
-                state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a+spread)*8, Math.sin(a+spread)*8));
-                state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a-spread)*8, Math.sin(a-spread)*8));
+            if (!this.telegraphArmed) {
+                // Instant-fire path (cooldown already 0): insert a readable wind-up.
+                this.fireCooldown = tele;
+                this.telegraphArmed = true;
+                this.windingUp = true;
+            } else {
+                let a = this.facingAngle;
+                SFX.robotShoot();
+                this.muzzleFlash = 6;
+                state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a)*BOSS_SHOT_SPEED, Math.sin(a)*BOSS_SHOT_SPEED));
+                
+                // Phase 2 or Phase 3 Multishot
+                if (this.hp <= 2) {
+                    let spread = BOSS_SPREAD;
+                    state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a+spread)*BOSS_SHOT_SPEED, Math.sin(a+spread)*BOSS_SHOT_SPEED));
+                    state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a-spread)*BOSS_SHOT_SPEED, Math.sin(a-spread)*BOSS_SHOT_SPEED));
+                }
+                this.fireCooldown = bossFireCooldown(this.hp);
+                this.telegraphArmed = false;
+                this.windingUp = false;
             }
-            this.fireCooldown = this.hp === 3 ? 60 : (this.hp === 2 ? 45 : 30); 
+        } else if (!bestTarget) {
+            this.telegraphArmed = false;
+            this.windingUp = false;
         }
     }
     render(ctx) {
         if (this.hp <= 0) return;
-        if (this.hitFlicker > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
-            ctx.fillStyle = 'red'; ctx.fillRect(this.x-5, this.y-5, this.w+10, this.h+10); return;
+        const cx = this.x + this.w / 2;
+        const cy = this.y + this.h / 2;
+        const style = bossPhaseStyle(this.hp);
+        const tele = bossTelegraphTicks(this.hp);
+        const charge = this.windingUp
+            ? Math.max(0, Math.min(1, 1 - (this.fireCooldown - 1) / tele))
+            : 0;
+        const stunned = this.hitFlicker > 0;
+        const phasing = this.phaseChangeTimer > 0;
+
+        if (this.hp <= 2) {
+            const pulseSpeed = this.hp === 1 ? 0.28 : 0.15;
+            const pulse = 0.55 + 0.45 * Math.abs(Math.sin(state.currentTick * pulseSpeed));
+            ctx.save();
+            ctx.strokeStyle = style.aura;
+            ctx.globalAlpha = 0.45 + 0.4 * pulse;
+            ctx.lineWidth = this.hp === 1 ? 3.2 : 2.2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 22 + pulse * (this.hp === 1 ? 7 : 4), 0, Math.PI * 2);
+            ctx.stroke();
+            if (this.hp === 1) {
+                ctx.globalAlpha = 0.22 + 0.18 * pulse;
+                ctx.lineWidth = 1.4;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 14 + pulse * 3, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
         }
-        ctx.save(); ctx.translate(this.x + this.w/2, this.y + this.h/2); ctx.rotate(this.facingAngle);
+
+        if (this.windingUp) {
+            drawBossShotLanes(ctx, cx, cy, this.facingAngle, charge, this.hp <= 2);
+        }
+
+        if (stunned) {
+            const t = 1 - this.hitFlicker / BOSS_HIT_STUN;
+            ctx.save();
+            ctx.strokeStyle = this.hitFlicker > 22
+                ? `rgba(255, 255, 255, ${1 - t * 0.4})`
+                : `rgba(255, 60, 50, ${1 - t})`;
+            ctx.lineWidth = 3.2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 18 + t * 36, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        if (phasing) {
+            const u = 1 - this.phaseChangeTimer / BOSS_PHASE_FLASH;
+            for (let i = 0; i < 3; i++) {
+                const r = 16 + u * 78 + i * 16;
+                ctx.save();
+                ctx.strokeStyle = i === 0 ? `rgba(255,255,255,${(1 - u) * 0.9})` : `rgba(255, 200, 120, ${(1 - u) * (0.7 - i * 0.18)})`;
+                ctx.lineWidth = 4.2 - i;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        let scale = 1;
+        if (stunned) {
+            if (this.hitFlicker > 22) scale = 1.1 + 0.16 * ((this.hitFlicker - 22) / 8);
+            else scale = 1 + 0.07 * Math.sin((this.hitFlicker / 22) * Math.PI);
+        }
+        if (this.phaseChangeTimer > 24) scale = Math.max(scale, 1.3);
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(this.facingAngle);
+        ctx.scale(scale, scale);
         ctx.fillStyle = '#222'; ctx.fillRect(-15, -18, 30, 8); ctx.fillRect(-15, 10, 30, 8);
         ctx.strokeStyle = '#444'; ctx.strokeRect(-15, -18, 30, 8); ctx.strokeRect(-15, 10, 30, 8);
         ctx.fillStyle = '#555'; ctx.fillRect(-10, -10, 20, 20);
-        ctx.fillStyle = this.hp === 1 ? 'rgba(255, 0, 0, 0.8)' : 'rgba(0, 243, 255, 0.4)'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = this.hp === 1 ? '#ff0000' : '#00f3ff'; ctx.lineWidth=2; ctx.stroke();
+        ctx.fillStyle = style.core; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = style.stroke; ctx.lineWidth=2; ctx.stroke();
         ctx.strokeStyle = '#888'; ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(15, -20); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(15, 20); ctx.stroke();
         ctx.fillStyle = '#ff0044'; ctx.beginPath(); ctx.arc(15, -20, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(15, 20, 4, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = (this.fireCooldown < 20 && this.fireCooldown > 0) ? '#fff' : '#ff0044';
-        ctx.beginPath(); ctx.arc(8, 0, 3, 0, Math.PI*2); ctx.fill();
+
+        const muzzleR = 3.2 + charge * 7.5 + (this.muzzleFlash > 0 ? 4 : 0);
+        ctx.shadowColor = (charge > 0 || this.muzzleFlash > 0) ? '#ffffff' : '#ff0044';
+        ctx.shadowBlur = 5 + charge * 18 + (this.muzzleFlash > 0 ? 14 : 0);
+        ctx.fillStyle = (charge > 0.28 || this.muzzleFlash > 0) ? '#fff' : '#ff0044';
+        ctx.beginPath(); ctx.arc(10, 0, muzzleR, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        if (charge > 0) {
+            ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.6 * charge})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(10, 0, 6 + charge * 9, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 90, 80, ${0.4 + 0.6 * charge})`;
+            ctx.lineWidth = 2 + charge * 3.2;
+            ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(20 + charge * 16, 0); ctx.stroke();
+        }
+
+        if (stunned) {
+            const white = this.hitFlicker > 22;
+            const blink = Math.floor(this.hitFlicker / 3) % 2 === 0;
+            if (white) {
+                ctx.fillStyle = `rgba(255,255,255,${0.42 + 0.38 * ((this.hitFlicker - 22) / 8)})`;
+                ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
+            } else if (blink) {
+                ctx.fillStyle = 'rgba(255, 36, 36, 0.28)';
+                ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.strokeStyle = white ? '#fff' : '#ff3311';
+            ctx.lineWidth = white ? 3.4 : 2.6;
+            ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.stroke();
+        }
         ctx.restore();
-        
-        ctx.fillStyle = '#f00'; ctx.fillRect(this.x, this.y - 12, this.w, 5);
-        ctx.fillStyle = '#0f0'; ctx.fillRect(this.x, this.y - 12, (this.hp/3)*this.w, 5);
+
+        const barW = this.w + 6;
+        const barX = cx - barW / 2;
+        const barY = this.y - 15;
+        const barPulse = this.hp === 1
+            ? 0.72 + 0.28 * Math.abs(Math.sin(state.currentTick * 0.28))
+            : (this.hp === 2 ? 0.84 + 0.16 * Math.abs(Math.sin(state.currentTick * 0.14)) : 1);
+        ctx.fillStyle = '#2a0000';
+        ctx.fillRect(barX, barY, barW, 6);
+        ctx.globalAlpha = phasing ? 0.7 + 0.3 * Math.abs(Math.sin(this.phaseChangeTimer * 0.55)) : barPulse;
+        ctx.fillStyle = style.bar;
+        ctx.fillRect(barX, barY, (this.hp / 3) * barW, 6);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = phasing ? '#fff' : style.stroke;
+        ctx.lineWidth = phasing ? 2 : 1;
+        ctx.strokeRect(barX, barY, barW, 6);
+
+        if (phasing) {
+            const fade = this.phaseChangeTimer / BOSS_PHASE_FLASH;
+            ctx.save();
+            ctx.globalAlpha = fade;
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.shadowColor = style.stroke;
+            ctx.shadowBlur = 8;
+            ctx.fillText(style.banner, cx, barY - 4);
+            ctx.restore();
+        }
     }
 }
 
