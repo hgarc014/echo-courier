@@ -732,7 +732,7 @@ function update() {
         if (!p.carriedBy && p.tossTicks > 0) {
             for (let r of state.robots) {
                 if (r.hp > 0 && AABB(p.x, p.y, p.w, p.h, r.x, r.y, r.w, r.h)) {
-                    r.hp--; r.hitFlicker = 30; SFX.laserHit();
+                    r.takeHit();
                     if (p.requiredForDelivery !== false) p.reset();
                     else p.breakApart('shatter');
                     if (r.hp <= 0) {
