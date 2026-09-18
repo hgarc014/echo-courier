@@ -27,28 +27,48 @@ export class Laser extends Entity {
     }
 }
 
+const CHASE_DRONE_LINGER = 75;
+const CHASE_DRONE_SPEED = 4.5;
+const GUARD_LOST_SIGHT = 60;
+const GUARD_CHASE_SPEED = 2.6;
+const GUARD_CATCH_PAD = 4;
+
 export class SweepCamera extends Entity {
     constructor(x, y, startAngle, sweepRange) {
         super(x, y, 30, 30, 'camera');
         this.baseAngle=startAngle; this.sweepRange=sweepRange; this.currentAngle=startAngle; this.sweepProgress=0; this.sweepDir=0.01;
+        this.seesPlayer = false;
+        this.chaseDrone = null;
+    }
+    _inCone(tx, ty) {
+        let dx=(tx+15)-(this.x+15); let dy=(ty+15)-(this.y+15);
+        if (Math.hypot(dx, dy) > 250) return false;
+        let diff=Math.atan2(dy, dx)-this.currentAngle;
+        while(diff>Math.PI) diff-=Math.PI*2; while(diff<-Math.PI) diff+=Math.PI*2;
+        return Math.abs(diff)<0.35;
+    }
+    _ensureChaseDrone() {
+        if (this.chaseDrone && this.chaseDrone.alive) return;
+        this.chaseDrone = new Drone([{ x: this.x, y: this.y }], { role: 'chase', ownerCamera: this });
+        state.drones.push(this.chaseDrone);
+        SFX.droneAlert();
     }
     update(player, pkgs) {
         this.sweepProgress+=this.sweepDir; if (this.sweepProgress>=1 || this.sweepProgress<=-1) this.sweepDir*=-1;
         this.currentAngle = this.baseAngle + (this.sweepProgress * this.sweepRange);
-        
-        let triggerAlarm = false;
-        const checkCone = (tx, ty) => {
-            let dx=(tx+15)-(this.x+15); let dy=(ty+15)-(this.y+15);
-            if (Math.hypot(dx, dy) > 250) return false;
-            let diff=Math.atan2(dy, dx)-this.currentAngle;
-            while(diff>Math.PI) diff-=Math.PI*2; while(diff<-Math.PI) diff+=Math.PI*2;
-            return Math.abs(diff)<0.35;
-        };
 
-        if (player.cloakTimer <= 0 && checkCone(player.x, player.y)) triggerAlarm=true;
-        for(let g of state.activeGhosts) if (!g.cloakActive && checkCone(g.x, g.y)) triggerAlarm=true;
-        for(let p of pkgs) if (p.type==='contraband' && checkCone(p.x, p.y)) triggerAlarm=true;
-        
+        // Body + cloak only. A carried box shares the carrier AABB and must not trip the cone by itself.
+        this.seesPlayer = player.cloakTimer <= 0 && this._inCone(player.x, player.y);
+        let triggerAlarm = this.seesPlayer;
+        for (let g of state.activeGhosts) {
+            if (g.isActive && !g.cloakActive && this._inCone(g.x, g.y)) triggerAlarm = true;
+        }
+        for (let p of pkgs) {
+            if (p.isDestroyed || p.carriedBy) continue;
+            if (p.type === 'contraband' && this._inCone(p.x, p.y)) triggerAlarm = true;
+        }
+
+        if (this.seesPlayer) this._ensureChaseDrone();
         if (triggerAlarm) { state.alarmState = true; state.runStats.alarms++; }
     }
     render(ctx) {
@@ -452,12 +472,49 @@ export class ShooterRobot extends Entity {
 }
 
 export class Drone extends Entity {
-    constructor(points) {
+    constructor(points, opts = {}) {
         super(points[0].x, points[0].y, 30, 30, 'drone');
         this.points=points; this.targetIndex=1; this.speed=2.5; this.state='patrol'; this.investTarget=null; this.investTimer=0; this.startX=this.x; this.startY=this.y;
+        this.role = opts.role || 'patrol';
+        this.ownerCamera = opts.ownerCamera || null;
+        this.alive = true;
+        this.lingerTimer = 0;
+        this.chaseSpeed = CHASE_DRONE_SPEED;
+        if (this.role === 'chase') {
+            this.state = 'chase';
+            this.lingerTimer = CHASE_DRONE_LINGER;
+        }
     }
-    reset() { this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.investTimer=0; }
+    reset() { this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state=this.role==='chase'?'chase':'patrol'; this.investTimer=0; this.lingerTimer=0; }
+    _moveToward(tx, ty, spd) {
+        let dx=tx-this.x; let dy=ty-this.y; let dist=Math.hypot(dx,dy);
+        if (dist < spd) { this.x=tx; this.y=ty; return dist; }
+        this.x+=(dx/dist)*spd; this.y+=(dy/dist)*spd;
+        return dist;
+    }
+    _updateChase(player) {
+        if (!this.alive) return null;
+        const cameraSees = !!(this.ownerCamera && this.ownerCamera.seesPlayer);
+        if (cameraSees) {
+            this.state = 'chase';
+            this.lingerTimer = CHASE_DRONE_LINGER;
+            this._moveToward(player.x, player.y, this.chaseSpeed);
+            if (state.currentTick % 10 === 0) SFX.dronePursuit();
+        } else {
+            this.state = 'return';
+            this.lingerTimer--;
+            const distHome = this._moveToward(this.startX, this.startY, this.speed);
+            if (this.lingerTimer <= 0 || distHome < this.speed) {
+                this.alive = false;
+                return null;
+            }
+        }
+        if (player.cloakTimer <= 0 && AABB(this.x, this.y, this.w, this.h, player.x, player.y, player.w, player.h)) return "Caught by Drone!";
+        return null;
+    }
     update(player, noiseSources) {
+        if (!this.alive) return null;
+        if (this.role === 'chase') return this._updateChase(player);
         for(let n of noiseSources) {
             if (Math.hypot(n.x - this.x, n.y - this.y) < 350) { 
                 if (this.state !== 'investigate') SFX.droneAlert();
@@ -486,8 +543,10 @@ export class Drone extends Entity {
         return null;
     }
     render(ctx) {
+        if (!this.alive) return;
         const hover = Math.sin(state.currentTick * 0.22) * 3;
-        ctx.fillStyle = this.state==='investigate'?'#ff00aa':'#ffffff';
+        const chasing = this.role === 'chase' && this.state === 'chase';
+        ctx.fillStyle = chasing || this.state==='investigate' ? '#ff00aa' : (this.state==='return' ? '#ff6688' : '#ffffff');
         ctx.beginPath(); ctx.arc(this.x+15, this.y+15 + hover, 15, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle='#00f3ff'; ctx.beginPath(); ctx.arc(this.x+15, this.y+15 + hover, 5, 0, Math.PI*2); ctx.fill();
         ctx.strokeStyle = 'rgba(0,243,255,0.35)';
@@ -499,22 +558,61 @@ export class Guard extends Entity {
     constructor(points) {
         super(points[0].x, points[0].y, 30, 30, 'guard');
         this.points=points; this.targetIndex=1; this.speed=1.5; this.state='patrol'; this.facingX=0; this.facingY=1; this.startX=this.x; this.startY=this.y;
+        this.lostSightTimer=0; this.lastSeenX=this.x; this.lastSeenY=this.y; this.chaseSpeed=GUARD_CHASE_SPEED;
     }
-    reset() { this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.facingX=0; this.facingY=1; }
-    update(player, ghosts) {
+    reset() { this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.facingX=0; this.facingY=1; this.lostSightTimer=0; }
+    _visionRect() {
         let vx=this.x,vy=this.y,vw=30,vh=30;
         if(this.facingX===1){vx+=30;vw=150;} else if(this.facingX===-1){vx-=150;vw=150;}
         if(this.facingY===1){vy+=30;vh=150;} else if(this.facingY===-1){vy-=150;vh=150;}
-        
-        this.state = 'patrol';
+        return {vx,vy,vw,vh};
+    }
+    _faceToward(tx, ty) {
+        if (Math.abs(tx-this.x)>Math.abs(ty-this.y)){this.facingX=tx>this.x?1:-1;this.facingY=0;}
+        else {this.facingY=ty>this.y?1:-1;this.facingX=0;}
+    }
+    update(player, ghosts) {
+        let vis = this._visionRect();
+
+        // Echoes still swing the guard's facing, which can pull vision off the player.
         for (let g of ghosts) {
-            if (AABB(vx, vy, vw, vh, g.x, g.y, g.w, g.h)) {
+            if (!g.isActive) continue;
+            if (AABB(vis.vx, vis.vy, vis.vw, vis.vh, g.x, g.y, g.w, g.h)) {
                 this.state='distracted';
-                if (Math.abs(g.x-this.x)>Math.abs(g.y-this.y)){this.facingX=g.x>this.x?1:-1;this.facingY=0;}else{this.facingY=g.y>this.y?1:-1;this.facingX=0;}
-                break;
+                this.lostSightTimer=0;
+                this._faceToward(g.x, g.y);
+                return null;
             }
         }
-        if (AABB(vx, vy, vw, vh, player.x, player.y, player.w, player.h)) return "Spotted by Guard!";
+
+        vis = this._visionRect();
+        const playerInVision = player.cloakTimer <= 0 && AABB(vis.vx, vis.vy, vis.vw, vis.vh, player.x, player.y, player.w, player.h);
+        if (playerInVision) {
+            this.state = 'chase';
+            this.lostSightTimer = GUARD_LOST_SIGHT;
+            this.lastSeenX = player.x;
+            this.lastSeenY = player.y;
+            this._faceToward(player.x, player.y);
+        } else if (this.state === 'chase') {
+            this.lostSightTimer--;
+            if (this.lostSightTimer <= 0) this.state = 'patrol';
+        }
+
+        if (this.state === 'chase') {
+            const pad = GUARD_CATCH_PAD;
+            if (AABB(this.x-pad, this.y-pad, this.w+pad*2, this.h+pad*2, player.x, player.y, player.w, player.h)) {
+                return "Caught by Guard!";
+            }
+            let dx=this.lastSeenX-this.x, dy=this.lastSeenY-this.y;
+            let dist=Math.hypot(dx,dy);
+            if (dist > this.chaseSpeed) {
+                const nx=(dx/dist)*this.chaseSpeed, ny=(dy/dist)*this.chaseSpeed;
+                if (!checkWallCollision(this.x+nx, this.y, this.w, this.h)) this.x += nx;
+                if (!checkWallCollision(this.x, this.y+ny, this.w, this.h)) this.y += ny;
+            }
+            return null;
+        }
+
         if (this.state==='patrol') {
             let target=this.points[this.targetIndex]; let dx=target.x-this.x, dy=target.y-this.y; let dist=Math.hypot(dx,dy);
             if (dist<this.speed) { this.x=target.x; this.y=target.y; this.targetIndex=(this.targetIndex+1)%this.points.length; }
@@ -524,7 +622,7 @@ export class Guard extends Entity {
         return null;
     }
     render(ctx) {
-        const moving = this.state === 'patrol';
+        const moving = this.state === 'patrol' || this.state === 'chase';
         const t = state.currentTick;
         const walk = moving ? Math.sin(t * 0.4) : 0;
         const img = resolveSprite(state, 'guard');
@@ -536,11 +634,11 @@ export class Guard extends Entity {
                 valign: 'bottom'
             });
         } else super.render(ctx);
-        ctx.fillStyle = this.state==='distracted'?'rgba(255,255,0,0.2)':'rgba(255,0,0,0.2)';
-        let vx=this.x,vy=this.y,vw=30,vh=30;
-        if(this.facingX===1){vx+=30;vw=150;}else if(this.facingX===-1){vx-=150;vw=150;}
-        if(this.facingY===1){vy+=30;vh=150;}else if(this.facingY===-1){vy-=150;vh=150;}
-        ctx.fillRect(vx,vy,vw,vh);
+        const vis = this._visionRect();
+        if (this.state === 'chase') ctx.fillStyle = 'rgba(255,40,40,0.34)';
+        else if (this.state === 'distracted') ctx.fillStyle = 'rgba(255,255,0,0.14)';
+        else ctx.fillStyle = 'rgba(255,0,0,0.06)';
+        ctx.fillRect(vis.vx, vis.vy, vis.vw, vis.vh);
     }
 }
 

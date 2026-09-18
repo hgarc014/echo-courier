@@ -622,7 +622,12 @@ function update() {
         if (stateIndex < g.runData.length && (g.runData[stateIndex].interact || g.runData[stateIndex].toss)) noiseSources.push({x: g.x, y: g.y});
     }
 
-    for(let d of state.drones) { let fail = d.update(state.player, noiseSources); if (fail) { levelFailed(fail); return; } }
+    for(let d of state.drones) {
+        if (d.alive === false) continue;
+        let fail = d.update(state.player, noiseSources);
+        if (fail) { levelFailed(fail); return; }
+    }
+    if (state.drones.some(d => d.alive === false)) state.drones = state.drones.filter(d => d.alive !== false);
 
     state.plates.forEach(plate => {
         plate.update(allActors, state.packages);
@@ -883,7 +888,7 @@ function draw() {
     });
     
     state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
-    state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => d.render(ctx));
+    state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     if (state.failFx) drawBurst(ctx, state.failFx);
     if (state.rewindFx) drawBurst(ctx, state.rewindFx);
 
