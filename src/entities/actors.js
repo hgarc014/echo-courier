@@ -70,6 +70,7 @@ export class PlayerEntity extends Entity {
         this.facingY = 0;
         this.cloakTimer = 0;
         this.dashCooldown = 0;
+        this.tossCooldown = 0;
     }
     render(ctx) {
         const t = state.currentTick;
