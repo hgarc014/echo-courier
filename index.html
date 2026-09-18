@@ -109,6 +109,8 @@
                 <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-mode-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Developer Mode (Unlock All)</label>
                 <br><br><br>
                 <button id="open-editor-btn" class="primary-btn" style="padding: 10px 20px; border-color: #39ff14; color: #39ff14;">LAUNCH LEVEL EDITOR</button>
+                <br><br>
+                <button id="open-sandbox-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0; border-color: #ffdd00; color: #ffdd00;">OPEN DEV SANDBOX</button>
                 <br><br><br>
                 <button id="reset-save-btn" class="secondary-btn" style="padding: 10px 20px; border-color: red; color: red;">WIPE ALL SAVE DATA</button>
             </div>
@@ -128,6 +130,7 @@
                 <div class="objective" id="objective-text">Deliver the package safely to the green zone.</div>
                 <span id="level-display" style="display:none;">1</span>
                 <div class="objective challenge-hud" id="challenge-text">☆ Challenge: None</div>
+                <button id="playtest-return-btn" class="secondary-btn hidden" type="button" style="margin-top:0; padding:8px 14px; font-size:0.8rem; border-color:#ffdd00; color:#ffdd00;">Return to Editor</button>
             </div>
             <div class="hud-actions">
                 <button id="hud-menu-btn" class="hud-audio-btn hud-menu-btn" type="button" data-key="esc" aria-label="Return to menu" title="Menu"></button>
@@ -205,14 +208,30 @@
     <div id="editor-overlay" class="hidden" style="position:absolute; right:0; top:0; width: 300px; height: 100%; background: #111; border-left: 2px solid var(--accent-safe); color: #fff; padding: 20px; z-index: 2000; overflow-y:auto; box-shadow: -5px 0 20px rgba(0,243,255,0.2);">
         <h3 style="color: var(--accent-safe); border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">LEVEL ARCHITECT</h3>
         <button class="primary-btn" id="editor-exit-btn" style="width:100%; margin-top:0; border-color: red; color: red;">Exit to Menu</button>
+        <button class="primary-btn" id="editor-play-btn" style="width:100%; margin-top:10px; border-color:#ffdd00; color:#ffdd00;">Test / Play Level</button>
         <hr style="border-color:#333; margin: 15px 0;">
         <h4 style="margin-bottom: 10px;">Load Level</h4>
         <select id="editor-load-level" style="width:100%; padding: 8px; background: #000; color: var(--text-main); border: 1px solid #444; margin-bottom: 10px;"></select>
         <button class="secondary-btn" id="editor-load-btn" style="width:100%; margin-top:0;">Import From Game</button>
         <hr style="border-color:#333; margin: 15px 0;">
+        <h4 style="margin-bottom: 10px;">Map Size</h4>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+            <label style="font-size:0.85rem;">W <input type="number" id="editor-map-w" min="800" step="40" value="800" style="width:72px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+            <label style="font-size:0.85rem;">H <input type="number" id="editor-map-h" min="600" step="40" value="600" style="width:72px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        </div>
+        <button class="secondary-btn" id="editor-map-apply" style="width:100%; margin-top:0;">Apply Map Size</button>
+        <p style="font-size:0.75rem; color:#7d8590; margin-top:8px;">Pan: WASD / arrows, middle-drag, or mouse at canvas edge.</p>
+        <hr style="border-color:#333; margin: 15px 0;">
         <button class="secondary-btn" id="editor-export" style="background:var(--accent-safe); color:#000; width:100%; border:none;">Export JSON</button>
         <textarea id="editor-json" style="width:100%; height:80px; background:#000; color:var(--accent-safe); margin-top:10px; border: 1px solid #333; font-family: monospace; font-size: 0.8rem; padding: 5px;"></textarea>
         <button class="secondary-btn" id="editor-import" style="width:100%; margin-top: 5px;">Import JSON</button>
+        <hr style="border-color:#333; margin: 15px 0;">
+        <h4 style="margin-bottom: 10px;">Save Slot</h4>
+        <input type="text" id="editor-save-name" value="default" placeholder="slot name" style="width:100%; padding:8px; background:#000; color:var(--text-main); border:1px solid #444; margin-bottom:10px;">
+        <select id="editor-save-slots" style="width:100%; padding:8px; background:#000; color:var(--text-main); border:1px solid #444; margin-bottom:10px;"></select>
+        <button class="secondary-btn" id="editor-save-btn" style="width:100%; margin-top:0; border-color:#39ff14; color:#39ff14;">Save</button>
+        <button class="secondary-btn" id="editor-load-save-btn" style="width:100%; margin-top:10px;">Load Saved</button>
+        <div id="editor-save-status" style="font-size:0.75rem; color:#7d8590; margin-top:8px;"></div>
         <hr style="border-color:#333; margin: 15px 0;">
         <h4 style="margin-bottom: 10px;">Spawn Entities</h4>
         <select id="editor-entity-type" style="width:100%; padding: 8px; background: #000; color: var(--text-main); border: 1px solid #444; margin-bottom: 10px;">

@@ -2,10 +2,11 @@ import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/st
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
-import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
+import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from './core/camera.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
-import { initEditor, drawEditorOverlay } from './ui/editor.js';
+import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi } from './ui/editor.js';
 import { drawSprite } from './core/sprites.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -18,6 +19,7 @@ const RECORDED_TRAIL_FRAMES = Math.floor(RECORDED_TRAIL_SECONDS * 60);
 const PROJECTED_TRAIL_FRAMES = Math.floor(PROJECTED_TRAIL_SECONDS * 60);
 const FAIL_HOLD_FRAMES = 120;
 const FAIL_TEXT_DELAY = 28;
+const TOSS_COOLDOWN_TICKS = 24;
 
 function failKindFromReason(reason) {
     const r = (reason || '').toLowerCase();
@@ -217,6 +219,8 @@ function showGameComplete() {
 }
 
 function getLevelDisplayLabel(levelIndex, levelDef) {
+    if (levelDef.isSandbox) return 'SB';
+    if (levelDef.isPlaytest) return 'ED';
     if (levelDef.isTutorial) return `T${levelDef.tutorialNumber}`;
     return `${levelIndex + 1}`;
 }
@@ -224,6 +228,7 @@ function getLevelDisplayLabel(levelIndex, levelDef) {
 function getNextLevelIndex(levelIndex) {
     const level = LEVELS[levelIndex];
     if (!level) return null;
+    if (level.isSandbox || level.isPlaytest) return null;
     if (level.isTutorial) {
         const tutorialPos = TUTORIAL_LEVEL_INDICES.indexOf(levelIndex);
         return tutorialPos >= 0 && tutorialPos < TUTORIAL_LEVEL_INDICES.length - 1 ? TUTORIAL_LEVEL_INDICES[tutorialPos + 1] : null;
@@ -378,8 +383,8 @@ function applyChallengeHud(level, levelIndex) {
     if (!el) return;
     el.classList.remove('challenge-done', 'challenge-open', 'challenge-training');
     el.style.color = '';
-    if (level.isTutorial) {
-        el.innerText = 'TRAINING MODULE';
+    if (level.isTutorial || level.isSandbox || level.isPlaytest) {
+        el.innerText = level.isPlaytest ? 'EDITOR PLAYTEST' : (level.isSandbox ? 'DEV SANDBOX' : 'TRAINING MODULE');
         el.classList.add('challenge-training');
         return;
     }
@@ -391,6 +396,35 @@ function applyChallengeHud(level, levelIndex) {
 function consumeDialogConfirmKeys() {
     consumeKey('space');
     consumeKey('enter');
+}
+
+function resetPlayerLoopState() {
+    if (!state.player) return;
+    state.player.facingX = 1;
+    state.player.facingY = 0;
+    state.player.cloakTimer = 0;
+    state.player.dashCooldown = 0;
+    state.player.tossCooldown = 0;
+}
+
+function loadCurrentEntities() {
+    if (state.playtesting && state.customLayout) return deserializeLevel(state.customLayout);
+    return getLevelSetup(state.currentLevelIndex);
+}
+
+function applyLoadedLevel(setupData) {
+    if (!setupData) return;
+    Object.assign(state, setupData);
+    setMapSize(setupData.mapWidth || DEFAULT_MAP_WIDTH, setupData.mapHeight || DEFAULT_MAP_HEIGHT);
+    resetPlayerLoopState();
+    if (state.gameState !== 'EDITOR' && state.player) {
+        followWorldPoint(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+    }
+}
+
+function syncGameplayCamera() {
+    if (state.gameState === 'EDITOR' || !state.player) return;
+    followWorldPoint(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
 }
 
 function startBossIntro(level) {
@@ -452,12 +486,13 @@ export function startGame(levelIndex) {
     let lv = LEVELS[levelIndex];
     state.levelAbilityOverrides = [...(lv.grants || [])];
     state.robots = []; state.projectiles = [];
+    state.playtesting = false;
+    state.customLayout = null;
+    state.editorReturnLayout = null;
+    document.getElementById('playtest-return-btn')?.classList.add('hidden');
     document.getElementById('level-display').innerText = getLevelDisplayLabel(levelIndex, lv); document.getElementById('objective-text').innerText = localizeControlHints(lv.obj); 
     
-    let setupData = getLevelSetup(levelIndex);
-    Object.assign(state, setupData);
-    
-    state.player.facingX=1; state.player.facingY=0; state.player.cloakTimer=0; state.player.dashCooldown=0;
+    applyLoadedLevel(getLevelSetup(levelIndex));
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(lv, levelIndex);
@@ -482,12 +517,10 @@ export function resetRun() {
     if (state.currentTick > 0) state.pastRuns.push([...state.currentRun]);
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
-    if (LEVELS[state.currentLevelIndex].maxGhosts && state.pastRuns.length > LEVELS[state.currentLevelIndex].maxGhosts) state.pastRuns.shift();
+    const loopLevel = state.currentLevelMeta || LEVELS[state.currentLevelIndex];
+    if (loopLevel?.maxGhosts && state.pastRuns.length > loopLevel.maxGhosts) state.pastRuns.shift();
     
-    let setupData = getLevelSetup(state.currentLevelIndex);
-    Object.assign(state, setupData);
-    
-    state.player.facingX=1; state.player.facingY=0; state.player.cloakTimer=0; state.player.dashCooldown=0;
+    applyLoadedLevel(loadCurrentEntities());
     if (state.currentLevelMeta?.isBoss) engageBossEncounter(state.currentLevelMeta);
     state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
     document.getElementById('loop-count').innerText = state.pastRuns.length;
@@ -496,13 +529,11 @@ export function resetRun() {
 }
 
 export function restartLevel() {
-    let lv = LEVELS[state.currentLevelIndex];
+    let lv = state.playtesting ? state.currentLevelMeta : LEVELS[state.currentLevelIndex];
     if (!lv) return;
     state.currentLevelMeta = lv;
     state.levelAbilityOverrides = [...(lv.grants || [])];
-    let setupData = getLevelSetup(state.currentLevelIndex);
-    Object.assign(state, setupData);
-    state.player.facingX = 1; state.player.facingY = 0; state.player.cloakTimer = 0; state.player.dashCooldown = 0;
+    applyLoadedLevel(loadCurrentEntities());
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     clearLoopFx();
@@ -527,12 +558,87 @@ export function levelFailed(reason) {
     spawnFailFx(reason);
     startShake(32, 10);
 }
-export function returnToMenu() { stopDialogSpeech(); state.gameState = 'MENU'; initMenu(); }
+export function returnToMenu() {
+    stopDialogSpeech();
+    state.playtesting = false;
+    state.customLayout = null;
+    state.editorReturnLayout = null;
+    document.getElementById('playtest-return-btn')?.classList.add('hidden');
+    document.getElementById('editor-overlay')?.classList.add('hidden');
+    state.gameState = 'MENU';
+    initMenu();
+}
+
+function setPlaytestReturnVisible(on) {
+    const btn = document.getElementById('playtest-return-btn');
+    if (btn) btn.classList.toggle('hidden', !on);
+}
+
+function handleEscape() {
+    if (state.playtesting) returnToEditor();
+    else returnToMenu();
+}
+
+export function startPlaytestFromEditor() {
+    const layout = serializeLevel(state);
+    state.editorReturnLayout = layout;
+    state.customLayout = layout;
+    state.playtesting = true;
+    document.getElementById('editor-overlay').classList.add('hidden');
+    document.querySelector('.top-hud').classList.remove('hidden');
+    document.querySelector('.bottom-hud').classList.remove('hidden');
+    document.getElementById('mobile-controls')?.classList.remove('hidden');
+    setPlaytestReturnVisible(true);
+
+    state.currentLevelMeta = {
+        name: 'Editor Playtest',
+        obj: 'Playtest the current editor layout.',
+        challenge: { desc: 'Playtest', check: () => false },
+        maxGhosts: 3,
+        grants: ['dash', 'toss', 'cloak', 'ghostShield'],
+        isPlaytest: true
+    };
+    state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
+    state.pendingBossIntro = null;
+    document.getElementById('max-loops').innerText = state.currentLevelMeta.maxGhosts + 1;
+    document.getElementById('level-display').innerText = getLevelDisplayLabel(0, state.currentLevelMeta);
+    document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
+
+    applyLoadedLevel(deserializeLevel(layout));
+    updateHUD();
+    state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
+    updateDeliveryProgressUI();
+    applyChallengeHud(state.currentLevelMeta, state.currentLevelIndex);
+    state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.failTimer = 0; state.failMessage = ""; state.alarmState = false;
+    clearLoopFx();
+    uiLevelComplete.classList.add('hidden');
+    uiGameOver.classList.add('hidden');
+    document.getElementById('loop-count').innerText = '0';
+    hideLevelDialog();
+    state.gameState = 'PLAYING';
+    Object.assign(prevKeys, keys);
+    startMusic();
+    syncTouchUi();
+}
+
+export function returnToEditor() {
+    const snapshot = state.editorReturnLayout;
+    state.playtesting = false;
+    state.customLayout = null;
+    uiLevelComplete.classList.add('hidden');
+    hideLevelDialog();
+    stopDialogSpeech();
+    setPlaytestReturnVisible(false);
+    const json = snapshot ? JSON.stringify(snapshot) : null;
+    state.editorReturnLayout = null;
+    window.startEditorMode(json);
+}
 
 function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
-        if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
+        if (isKeyJustPressed('esc')) { handleEscape(); updatePrevKeys(); return; }
         // SPACE is reserved for GRAB; dialog advances on Enter / overlay tap / CONTINUE.
         if (isKeyJustPressed('enter')) {
             startMusic();
@@ -546,7 +652,7 @@ function update() {
         updatePrevKeys(); return;
     }
     if (state.gameState === 'BOSS_INTRO') {
-        if (isKeyJustPressed('esc')) { returnToMenu(); updatePrevKeys(); return; }
+        if (isKeyJustPressed('esc')) { handleEscape(); updatePrevKeys(); return; }
         if (isKeyJustPressed('enter')) {
             hideLevelDialog();
             beginBossEncounter(state.currentLevelMeta);
@@ -556,6 +662,11 @@ function update() {
             return;
         }
         updatePrevKeys(); return;
+    }
+    if (state.gameState === 'EDITOR') {
+        tickEditor();
+        updatePrevKeys();
+        return;
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
 
@@ -568,7 +679,7 @@ function update() {
         updatePrevKeys();
         return;
     }
-    if (isKeyJustPressed('esc')) { returnToMenu(); return; }
+    if (isKeyJustPressed('esc')) { handleEscape(); updatePrevKeys(); return; }
     if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
     if (isKeyJustPressed('r')) { resetRun(); updatePrevKeys(); return; }
     if (state.rewindFreeze > 0) {
@@ -615,6 +726,7 @@ function update() {
         }
     }
     if (state.player.dashCooldown > 0) state.player.dashCooldown--;
+    if (state.player.tossCooldown > 0) state.player.tossCooldown--;
     state.dashTrails.forEach(t => t.life -= 0.1);
     state.dashTrails = state.dashTrails.filter(t => t.life > 0);
 
@@ -717,13 +829,16 @@ function update() {
         }
     }
 
-    if (tossJustPressed && carried) {
+    let tossFired = false;
+    if (tossJustPressed && carried && state.player.tossCooldown <= 0) {
         SFX.toss();
         const fx = state.player.facingX || 0;
         const fy = state.player.facingY || 0;
         carried.carriedBy = null;
         carried.onToss(fx, fy);
         noiseSources.push({x: state.player.x, y: state.player.y}); state.runStats.tosses++;
+        state.player.tossCooldown = TOSS_COOLDOWN_TICKS;
+        tossFired = true;
     }
 
     for (let p of state.packages) {
@@ -767,10 +882,23 @@ function update() {
     if (allDelivered && state.gameState === 'PLAYING') { 
         SFX.win(); state.gameState = 'LEVEL_COMPLETE'; uiLevelComplete.classList.remove('hidden'); 
         let chalMsg = document.getElementById('challenge-result');
-        if (state.currentLevelMeta?.isTutorial) {
+        let nextBtn = document.getElementById('next-level-btn');
+        let menuBtn = document.getElementById('menu-btn');
+        if (state.playtesting || state.currentLevelMeta?.isPlaytest) {
+            if (chalMsg) { chalMsg.innerHTML = "Playtest complete."; chalMsg.style.color = '#00f3ff'; }
+            nextBtn.innerText = "RETURN TO EDITOR";
+            if (menuBtn) menuBtn.innerText = "RETURN TO EDITOR";
+        } else if (state.currentLevelMeta?.isSandbox) {
+            if (chalMsg) { chalMsg.innerHTML = "Sandbox delivery complete."; chalMsg.style.color = '#00f3ff'; }
+            nextBtn.innerText = "RETURN TO MENU";
+            if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
+        } else if (state.currentLevelMeta?.isTutorial) {
             state.tutorialProgress[state.currentLevelIndex] = true;
             saveState();
             if (chalMsg) { chalMsg.innerHTML = "Tutorial complete. You can replay this module any time from TRAINING."; chalMsg.style.color = '#00f3ff'; }
+            let nextIndex = getNextLevelIndex(state.currentLevelIndex);
+            nextBtn.innerText = nextIndex !== null ? "NEXT TUTORIAL" : "RETURN TO MENU";
+            if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         } else {
             let isFirstTimeLevel = (state.currentLevelIndex == parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'));
             if (state.currentLevelIndex >= state.maxUnlockedLevel && state.currentLevelIndex < CAMPAIGN_LEVEL_COUNT - 1) {
@@ -787,12 +915,10 @@ function update() {
                 let previouslyDone = state.challengesCompleted[state.currentLevelIndex];
                 if (chalMsg) { chalMsg.innerHTML = earnedMsg + (previouslyDone ? "⭐ Challenge Already Claimed ⭐" : "Challenge Failed (Try again!)"); chalMsg.style.color = previouslyDone ? 'gold' : '#888'; }
             }
+            let nextIndex = getNextLevelIndex(state.currentLevelIndex);
+            nextBtn.innerText = nextIndex !== null ? "NEXT LEVEL" : "FINISH SHIFT";
+            if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         }
-        let nextIndex = getNextLevelIndex(state.currentLevelIndex);
-        let nextBtn = document.getElementById('next-level-btn');
-        nextBtn.innerText = state.currentLevelMeta?.isTutorial
-            ? (nextIndex !== null ? "NEXT TUTORIAL" : "RETURN TO MENU")
-            : (nextIndex !== null ? "NEXT LEVEL" : "FINISH SHIFT");
     }
     
     state.currentRun.push({
@@ -804,11 +930,47 @@ function update() {
         facingY: state.player.facingY,
         cloakTimer: state.player.cloakTimer,
         interact: interactJustPressed,
-        toss: tossJustPressed,
+        toss: tossFired,
         dash: dashFired,
         heavy: !!(carried && carried.type === 'heavy')
     });
     state.currentTick++; updatePrevKeys();
+}
+
+function ticksToSeconds(ticks) {
+    return (Math.max(0, ticks) / 60).toFixed(1);
+}
+
+function drawAbilityCooldowns(target) {
+    if (state.gameState !== 'PLAYING' || !state.player) return;
+    const unlocked = getUnlockedAbilities();
+    const parts = [];
+    if (unlocked.includes('dash') && state.player.dashCooldown > 0) {
+        parts.push(`DASH ${ticksToSeconds(state.player.dashCooldown)}s`);
+    }
+    if (unlocked.includes('toss') && state.player.tossCooldown > 0) {
+        parts.push(`TOSS ${ticksToSeconds(state.player.tossCooldown)}s`);
+    }
+    if (unlocked.includes('cloak') && state.player.cloakTimer > 0) {
+        parts.push(`CLOAK ${ticksToSeconds(state.player.cloakTimer)}s`);
+    }
+    if (!parts.length) return;
+    const text = parts.join('  |  ');
+    target.save();
+    target.font = 'bold 16px "Space Grotesk", sans-serif';
+    target.textAlign = 'center';
+    target.textBaseline = 'middle';
+    const width = target.measureText(text).width + 28;
+    const x = canvas.width / 2;
+    const y = 22;
+    target.fillStyle = 'rgba(5, 7, 10, 0.72)';
+    target.fillRect(x - width / 2, y - 14, width, 28);
+    target.strokeStyle = 'rgba(255, 221, 0, 0.55)';
+    target.lineWidth = 1;
+    target.strokeRect(x - width / 2, y - 14, width, 28);
+    target.fillStyle = '#ffdd00';
+    target.fillText(text, x, y);
+    target.restore();
 }
 
 function draw() {
@@ -822,8 +984,26 @@ function draw() {
         shakeX = (Math.random() * 2 - 1) * mag;
         shakeY = (Math.random() * 2 - 1) * mag;
     }
+    syncGameplayCamera();
+
     ctx.save();
-    ctx.translate(shakeX, shakeY);
+    applyCamera(ctx, shakeX, shakeY);
+
+    const map = getMapSize();
+    ctx.fillStyle = '#10151c';
+    ctx.fillRect(0, 0, map.w, map.h);
+    if (state.gameState === 'EDITOR') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 243, 255, 0.08)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= map.w; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, map.h); ctx.stroke();
+        }
+        for (let y = 0; y <= map.h; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(map.w, y); ctx.stroke();
+        }
+        ctx.restore();
+    }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx); state.plates.forEach(p => p.render(ctx)); state.walls.forEach(w => w.render(ctx));
@@ -894,10 +1074,13 @@ function draw() {
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     if (state.failFx) drawBurst(ctx, state.failFx);
     if (state.rewindFx) drawBurst(ctx, state.rewindFx);
+    if (state.gameState === 'EDITOR') drawEditorOverlay(ctx);
 
     ctx.restore();
     
-    if (state.gameState === 'EDITOR') { drawEditorOverlay(ctx); return; }
+    if (state.gameState === 'EDITOR') return;
+
+    drawAbilityCooldowns(ctx);
 
     if (state.alarmState && state.currentTick % 60 === 0) SFX.alarm();
     if (state.alarmState) { ctx.fillStyle = 'rgba(255, 0, 0, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
@@ -975,6 +1158,7 @@ window.onload = () => {
     
     window.startEditorMode = (jsonString, levelIndex = null) => {
         state.gameState = 'EDITOR';
+        state.playtesting = false;
         document.getElementById('title-screen').classList.add('hidden');
         document.getElementById('app-layout').classList.remove('hidden');
         document.getElementById('editor-overlay').classList.remove('hidden');
@@ -982,20 +1166,26 @@ window.onload = () => {
         document.querySelector('.top-hud').classList.add('hidden');
         document.querySelector('.bottom-hud').classList.add('hidden');
         document.getElementById('mobile-controls')?.classList.add('hidden');
+        document.getElementById('playtest-return-btn')?.classList.add('hidden');
         state.resetRunData();
-        
+
+        let setupData = null;
         if (jsonString) {
-            let customSetup = deserializeLevel(JSON.parse(jsonString));
-            Object.assign(state, customSetup);
+            const parsed = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+            setupData = deserializeLevel(parsed);
         } else if (levelIndex !== null) {
-            let setupData = getLevelSetup(levelIndex);
-            Object.assign(state, setupData);
+            setupData = getLevelSetup(levelIndex);
         } else {
-            let customSetup = deserializeLevel({});
-            Object.assign(state, customSetup);
+            setupData = deserializeLevel({});
         }
-        
+        applyLoadedLevel(setupData);
         if (!state.player) state.player = new PlayerEntity(50, 50, 30, 30, 'player');
+        if (!state.walls || state.walls.length === 0) {
+            const map = getMapSize();
+            state.walls = createBoundWalls(map.w, map.h);
+        }
+        setCamera(0, 0);
+        syncEditorUi();
     };
 
     window.showSubMenu = showSubMenu;
@@ -1003,16 +1193,32 @@ window.onload = () => {
     window.restartLevel = restartLevel;
     window.initMenu = initMenu;
     window.returnToMenu = returnToMenu;
-    
-    document.getElementById('open-editor-btn').onclick = () => window.startEditorMode();
-    document.getElementById('dev-mode-checkbox').onchange = () => initMenu();
-    
-    document.getElementById('next-level-btn').onclick = () => {
+    window.startPlaytestFromEditor = startPlaytestFromEditor;
+    window.returnToEditor = returnToEditor;
+    window.nextLevel = () => {
+        if (state.playtesting || state.currentLevelMeta?.isPlaytest) { returnToEditor(); return; }
         let nextIndex = getNextLevelIndex(state.currentLevelIndex);
         if (nextIndex !== null) startGame(nextIndex);
-        else if (state.currentLevelMeta?.isTutorial) initMenu();
+        else if (state.currentLevelMeta?.isTutorial || state.currentLevelMeta?.isSandbox) initMenu();
         else showGameComplete();
     };
+    
+    document.getElementById('open-editor-btn').onclick = () => window.startEditorMode();
+    document.getElementById('open-sandbox-btn')?.addEventListener('click', () => {
+        const { SANDBOX_LEVEL_INDEX } = window;
+        startGame(typeof SANDBOX_LEVEL_INDEX === 'number' ? SANDBOX_LEVEL_INDEX : LEVELS.findIndex(l => l.isSandbox));
+    });
+    document.getElementById('playtest-return-btn')?.addEventListener('click', () => returnToEditor());
+    document.getElementById('dev-mode-checkbox').onchange = () => initMenu();
+    
+    document.getElementById('next-level-btn').onclick = () => window.nextLevel();
+    document.getElementById('menu-btn')?.addEventListener('click', (e) => {
+        if (state.playtesting || state.currentLevelMeta?.isPlaytest) {
+            e.preventDefault();
+            e.stopPropagation();
+            returnToEditor();
+        }
+    });
     document.getElementById('reset-save-btn').onclick = () => { localStorage.clear(); location.reload(); };
     
     document.body.addEventListener('click', () => {

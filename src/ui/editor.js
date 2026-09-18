@@ -1,10 +1,121 @@
 import { state } from '../core/state.js';
-import { LEVELS } from '../data/levels.js';
-import { Wall, Door, PressurePlate, TemporalPlate, Package, AlarmDoor, TimerDoor } from '../entities/interactables.js';
-import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
+import { LEVELS, serializeLevel, createBoundWalls, isBoundWall } from '../data/levels.js';
+import { keys } from '../core/input.js';
+import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
+import { Wall, Door, PressurePlate, Package } from '../entities/interactables.js';
+import { Laser, SweepCamera, Guard, WindTunnel, StaticZone } from '../entities/hazards.js';
+
+export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
 export let selectedEntity = null;
 let dragX = 0; let dragY = 0; let isDragging = false;
+let isPanning = false;
+let panLastX = 0; let panLastY = 0;
+let mouseSX = 0; let mouseSY = 0;
+let mouseOnCanvas = false;
+
+const EDGE_PAN = 28;
+const EDGE_SPEED = 8;
+const KEY_PAN_SPEED = 12;
+
+function canvasPoint(canvas, e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        sx: (e.clientX - rect.left) * (canvas.width / rect.width),
+        sy: (e.clientY - rect.top) * (canvas.height / rect.height)
+    };
+}
+
+function isTypingTarget() {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+function sanitizeSlotName(name) {
+    const cleaned = String(name || 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
+    return cleaned || 'default';
+}
+
+function setSaveStatus(msg, ok = true) {
+    const el = document.getElementById('editor-save-status');
+    if (!el) return;
+    el.innerText = msg || '';
+    el.style.color = ok ? '#39ff14' : '#ff5555';
+}
+
+function listEditorSaves() {
+    const names = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(EDITOR_SAVE_PREFIX)) names.push(key.slice(EDITOR_SAVE_PREFIX.length));
+    }
+    names.sort();
+    return names;
+}
+
+function refreshSaveSlotList() {
+    const select = document.getElementById('editor-save-slots');
+    if (!select) return;
+    const current = sanitizeSlotName(document.getElementById('editor-save-name')?.value);
+    const names = listEditorSaves();
+    select.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.innerText = names.length ? 'Saved slots…' : 'No saves yet';
+    select.appendChild(placeholder);
+    for (const name of names) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.innerText = name;
+        if (name === current) opt.selected = true;
+        select.appendChild(opt);
+    }
+}
+
+function currentLayoutJson() {
+    return JSON.stringify(serializeLevel(state));
+}
+
+function applyEditorMapSize(w, h) {
+    const prev = getMapSize();
+    state.walls = (state.walls || []).filter(wall => !isBoundWall(wall, prev.w, prev.h));
+    const size = setMapSize(w, h);
+    state.walls.unshift(...createBoundWalls(size.w, size.h));
+    const wEl = document.getElementById('editor-map-w');
+    const hEl = document.getElementById('editor-map-h');
+    if (wEl) wEl.value = size.w;
+    if (hEl) hEl.value = size.h;
+    return size;
+}
+
+export function syncEditorUi() {
+    const { w, h } = getMapSize();
+    const wEl = document.getElementById('editor-map-w');
+    const hEl = document.getElementById('editor-map-h');
+    if (wEl) wEl.value = w;
+    if (hEl) hEl.value = h;
+    refreshSaveSlotList();
+}
+
+export function tickEditor() {
+    if (state.gameState !== 'EDITOR') return;
+    if (!isTypingTarget()) {
+        let dx = 0, dy = 0;
+        if (keys.a) dx -= KEY_PAN_SPEED;
+        if (keys.d) dx += KEY_PAN_SPEED;
+        if (keys.w) dy -= KEY_PAN_SPEED;
+        if (keys.s) dy += KEY_PAN_SPEED;
+        if (dx || dy) panCamera(dx, dy);
+    }
+    if (mouseOnCanvas && !isDragging && !isPanning) {
+        let edx = 0, edy = 0;
+        if (mouseSX < EDGE_PAN) edx -= EDGE_SPEED;
+        if (mouseSX > VIEW_WIDTH - EDGE_PAN) edx += EDGE_SPEED;
+        if (mouseSY < EDGE_PAN) edy -= EDGE_SPEED;
+        if (mouseSY > VIEW_HEIGHT - EDGE_PAN) edy += EDGE_SPEED;
+        if (edx || edy) panCamera(edx, edy);
+    }
+}
 
 export function initEditor(canvas, ctx) {
     document.getElementById('editor-exit-btn').onclick = () => {
@@ -25,10 +136,53 @@ export function initEditor(canvas, ctx) {
         window.startEditorMode(null, idx);
     };
 
+    document.getElementById('editor-map-apply')?.addEventListener('click', () => {
+        const w = parseInt(document.getElementById('editor-map-w').value, 10);
+        const h = parseInt(document.getElementById('editor-map-h').value, 10);
+        applyEditorMapSize(w, h);
+        setSaveStatus(`Map size ${getMapSize().w}×${getMapSize().h}`);
+    });
+
+    document.getElementById('editor-play-btn')?.addEventListener('click', () => {
+        window.startPlaytestFromEditor();
+    });
+
+    document.getElementById('editor-save-btn')?.addEventListener('click', () => {
+        const name = sanitizeSlotName(document.getElementById('editor-save-name')?.value);
+        const nameEl = document.getElementById('editor-save-name');
+        if (nameEl) nameEl.value = name;
+        try {
+            localStorage.setItem(EDITOR_SAVE_PREFIX + name, currentLayoutJson());
+            refreshSaveSlotList();
+            setSaveStatus(`Saved "${name}"`);
+        } catch (err) {
+            setSaveStatus('Save failed', false);
+        }
+    });
+
+    document.getElementById('editor-load-save-btn')?.addEventListener('click', () => {
+        const name = sanitizeSlotName(document.getElementById('editor-save-name')?.value);
+        const raw = localStorage.getItem(EDITOR_SAVE_PREFIX + name);
+        if (!raw) {
+            setSaveStatus(`No save named "${name}"`, false);
+            return;
+        }
+        window.startEditorMode(raw);
+        setSaveStatus(`Loaded "${name}"`);
+    });
+
+    document.getElementById('editor-save-slots')?.addEventListener('change', (e) => {
+        if (!e.target.value) return;
+        const nameEl = document.getElementById('editor-save-name');
+        if (nameEl) nameEl.value = e.target.value;
+    });
+
     document.getElementById('editor-spawn-btn').onclick = () => {
         let type = document.getElementById('editor-entity-type').value;
         let spawned = null;
-        let cx = 400; let cy = 300;
+        const cam = getCamera();
+        let cx = Math.round((cam.x + VIEW_WIDTH / 2) / 10) * 10;
+        let cy = Math.round((cam.y + VIEW_HEIGHT / 2) / 10) * 10;
         if (type === 'wall') { spawned = new Wall(cx, cy, 40, 40); state.walls.push(spawned); }
         else if (type === 'door') { spawned = new Door('d_'+Date.now(), cx, cy, 40, 80); state.doors.push(spawned); }
         else if (type === 'plate') { spawned = new PressurePlate('p_'+Date.now(), cx, cy, 'd_0'); state.plates.push(spawned); }
@@ -52,23 +206,7 @@ export function initEditor(canvas, ctx) {
     };
 
     document.getElementById('editor-export').onclick = () => {
-        let layout = {
-            player: { x: state.player.x, y: state.player.y },
-            deliveryZone: { x: state.deliveryZone.x, y: state.deliveryZone.y, w: state.deliveryZone.w, h: state.deliveryZone.h },
-            walls: state.walls.map(w => ({ x: w.x, y: w.y, w: w.w, h: w.h })),
-            doors: state.doors.map(d => ({ x: d.x, y: d.y, w: d.w, h: d.h, id: d.id, type: (d instanceof AlarmDoor)?'alarm':(d instanceof TimerDoor)?'timer':'standard' })),
-            plates: state.plates.map(p => ({ x: p.x, y: p.y, linkedIds: p.linkedIds, id: p.id, type: (p instanceof TemporalPlate)?'temporal':'standard', requiredTimeline: p.requiredTimeline })),
-            packages: state.packages.map(p => ({ x: p.startX, y: p.startY, id: p.id, packageType: p.type })),
-            lasers: state.lasers.map(l => ({ x: l.x, y: l.y, w: l.w, h: l.h, id: l.id })),
-            guards: state.guards.map(g => ({ path: g.path })),
-            cameras: state.cameras.map(c => ({ x: c.x, y: c.y, baseAngle: c.baseAngle, sweepRange: c.sweepRange })),
-            drones: state.drones.map(d => ({ path: d.path })),
-            winds: state.winds.map(w => ({ x: w.x, y: w.y, w: w.w, h: w.h, vx: w.vx, vy: w.vy })),
-            statics: state.statics.map(s => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
-            cracks: state.cracks.map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
-            robots: state.robots.map(r => ({ path: r.path }))
-        };
-        document.getElementById('editor-json').value = JSON.stringify(layout);
+        document.getElementById('editor-json').value = currentLayoutJson();
     };
 
     document.getElementById('editor-import').onclick = () => {
@@ -78,9 +216,18 @@ export function initEditor(canvas, ctx) {
 
     canvas.addEventListener('mousedown', e => {
         if (state.gameState !== 'EDITOR') return;
-        let rect = canvas.getBoundingClientRect(); 
-        let mx = (e.clientX - rect.left) * (canvas.width / rect.width); 
-        let my = (e.clientY - rect.top) * (canvas.height / rect.height);
+        const { sx, sy } = canvasPoint(canvas, e);
+        mouseSX = sx; mouseSY = sy; mouseOnCanvas = true;
+        if (e.button === 1) {
+            isPanning = true;
+            isDragging = false;
+            panLastX = sx;
+            panLastY = sy;
+            e.preventDefault();
+            return;
+        }
+        if (e.button !== 0) return;
+        const world = screenToWorld(sx, sy);
         selectedEntity = null;
         
         let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...state.drones];
@@ -88,25 +235,42 @@ export function initEditor(canvas, ctx) {
         for (let i = allEntities.length - 1; i >= 0; i--) {
             let ent = allEntities[i];
             let ew = ent.w || 30; let eh = ent.h || 30;
-            if (mx >= ent.x && mx <= ent.x + ew && my >= ent.y && my <= ent.y + eh) {
+            if (world.x >= ent.x && world.x <= ent.x + ew && world.y >= ent.y && world.y <= ent.y + eh) {
                 selectedEntity = ent;
-                isDragging = true; dragX = mx - ent.x; dragY = my - ent.y; break;
+                isDragging = true; dragX = world.x - ent.x; dragY = world.y - ent.y; break;
             }
         }
         updatePropertiesPanel();
     });
 
     canvas.addEventListener('mousemove', e => {
-        if (state.gameState !== 'EDITOR' || !isDragging || !selectedEntity) return;
-        let rect = canvas.getBoundingClientRect(); 
-        let mx = (e.clientX - rect.left) * (canvas.width / rect.width); 
-        let my = (e.clientY - rect.top) * (canvas.height / rect.height);
-        selectedEntity.x = Math.round((mx - dragX)/10)*10;
-        selectedEntity.y = Math.round((my - dragY)/10)*10;
+        if (state.gameState !== 'EDITOR') return;
+        const { sx, sy } = canvasPoint(canvas, e);
+        mouseSX = sx; mouseSY = sy; mouseOnCanvas = true;
+        if (isPanning) {
+            panCamera(panLastX - sx, panLastY - sy);
+            panLastX = sx;
+            panLastY = sy;
+            return;
+        }
+        if (!isDragging || !selectedEntity) return;
+        const world = screenToWorld(sx, sy);
+        selectedEntity.x = Math.round((world.x - dragX)/10)*10;
+        selectedEntity.y = Math.round((world.y - dragY)/10)*10;
         if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
     });
 
-    canvas.addEventListener('mouseup', () => { isDragging = false; });
+    const endPointer = () => { isDragging = false; isPanning = false; };
+    canvas.addEventListener('mouseup', endPointer);
+    canvas.addEventListener('mouseleave', () => { mouseOnCanvas = false; endPointer(); });
+    canvas.addEventListener('auxclick', e => {
+        if (state.gameState === 'EDITOR') e.preventDefault();
+    });
+    canvas.addEventListener('contextmenu', e => {
+        if (state.gameState === 'EDITOR') e.preventDefault();
+    });
+
+    refreshSaveSlotList();
 }
 
 function updatePropertiesPanel() {
