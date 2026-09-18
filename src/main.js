@@ -1,7 +1,7 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
-import { AABB, checkWallCollision, getDashDestination } from './core/physics.js';
+import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { getLevelSetup, LEVELS, deserializeLevel, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
@@ -262,10 +262,11 @@ function buildProjectedEchoPath(runData) {
             preview.y = dest.y;
         }
 
-        let speed = 4;
+        let speed = PLAYER_MOVE_SPEED;
+        if (step.heavy) speed *= HEAVY_SPEED_MULT;
         for (let z of state.statics) {
             if (AABB(preview.x, preview.y, preview.w, preview.h, z.x, z.y, z.w, z.h)) {
-                speed = 2;
+                speed *= 0.5;
                 break;
             }
         }
@@ -597,6 +598,7 @@ function update() {
     let tossJustPressed = hasToss && isKeyJustPressed('f');
     let dashJustPressed = hasDash && isKeyJustPressed('shift');
     let cloakJustPressed = hasCloak && isKeyJustPressed('c');
+    let dashFired = false;
 
     if (state.player.cloakTimer > 0) state.player.cloakTimer--;
     if (cloakJustPressed && state.player.cloakTimer <= 0) { SFX.cloak(); state.player.cloakTimer = 120; state.runStats.cloaks++; }
@@ -608,7 +610,8 @@ function update() {
             state.player.x = dest.x; 
             state.player.y = dest.y; 
             state.player.dashCooldown = 60; 
-            state.runStats.dashes++; 
+            state.runStats.dashes++;
+            dashFired = true;
         }
     }
     if (state.player.dashCooldown > 0) state.player.dashCooldown--;
@@ -636,9 +639,8 @@ function update() {
     let envVx = 0, envVy = 0;
     for(let w of state.winds) if (AABB(state.player.x, state.player.y, state.player.w, state.player.h, w.x, w.y, w.w, w.h)) { envVx += w.vx; envVy += w.vy; }
 
-    const baseSpeed = 4;
     let carried = state.packages.find(p => p.carriedBy === 'player');
-    let currentSpeed = (carried && carried.type === 'heavy') ? baseSpeed * 0.5 : baseSpeed;
+    let currentSpeed = (carried && carried.type === 'heavy') ? PLAYER_MOVE_SPEED * HEAVY_SPEED_MULT : PLAYER_MOVE_SPEED;
 
     const move = getMoveVector();
     let mx = move.x;
@@ -798,7 +800,8 @@ function update() {
         cloakTimer: state.player.cloakTimer,
         interact: interactJustPressed,
         toss: tossJustPressed,
-        dash: dashJustPressed
+        dash: dashFired,
+        heavy: !!(carried && carried.type === 'heavy')
     });
     state.currentTick++; updatePrevKeys();
 }
