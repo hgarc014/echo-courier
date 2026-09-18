@@ -1,6 +1,6 @@
 import { state, getPlayerRank } from '../core/state.js';
 import { Entity } from './base.js';
-import { AABB, getDashDestination } from '../core/physics.js';
+import { AABB, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
 import { pickCourierFrame } from '../core/atlas.js';
 
@@ -98,18 +98,20 @@ export class Ghost extends Entity {
         this.intendedDy = 0;
         this.trail = [];
         this.spawnTtl = 24;
+        this.dashCooldown = 0;
     }
     update(pkgs, staticZones, winds) {
         this.isActive = true;
         if (this.spawnTtl > 0) this.spawnTtl--;
-        let speed = 1.0;
-        for(let z of staticZones) if (AABB(this.x, this.y, this.w, this.h, z.x, z.y, z.w, z.h)) speed = 0.5;
-        this.localTick += speed;
+        this.localTick += 1;
         
         let stateIndex = Math.floor(this.localTick); let isPastEnd = false;
         if (stateIndex >= this.runData.length) { stateIndex = this.runData.length - 1; isPastEnd = true; }
         const step = this.runData[stateIndex];
-        if (!step) { this.intendedDx = 0; this.intendedDy = 0; return; }
+        if (!step) {
+            if (this.dashCooldown > 0) this.dashCooldown--;
+            this.intendedDx = 0; this.intendedDy = 0; return;
+        }
         
         this.cloakTimer = step.cloakTimer || 0;
         this.cloakActive = this.cloakTimer > 0;
@@ -120,24 +122,31 @@ export class Ghost extends Entity {
         let dashJustPressed = !isPastEnd && step.dash && this.lastStateIndex !== stateIndex;
         this.lastStateIndex = stateIndex;
 
-        if (dashJustPressed) {
+        if (dashJustPressed && this.dashCooldown <= 0) {
             let dest = getDashDestination(this.x, this.y, this.facingX || 1, this.facingY || 0, 120, this.w, this.h);
             this.x = dest.x;
             this.y = dest.y;
+            this.dashCooldown = 60;
         }
+        if (this.dashCooldown > 0) this.dashCooldown--;
 
         let envVx = 0, envVy = 0;
         for (let w of winds) if (AABB(this.x, this.y, this.w, this.h, w.x, w.y, w.w, w.h)) { envVx += w.vx; envVy += w.vy; }
 
+        let inStatic = false;
+        for (let z of staticZones) if (AABB(this.x, this.y, this.w, this.h, z.x, z.y, z.w, z.h)) { inStatic = true; break; }
+
         let carried = pkgs.find(p => p.carriedBy === 'ghost_' + this.id);
-        let currentSpeed = (carried && carried.type === 'heavy') ? 2 : 4;
+        let currentSpeed = PLAYER_MOVE_SPEED;
+        if (carried && carried.type === 'heavy') currentSpeed *= HEAVY_SPEED_MULT;
+        if (inStatic) currentSpeed *= 0.5;
         let inputX = isPastEnd ? 0 : (step.moveX || 0);
         let inputY = isPastEnd ? 0 : (step.moveY || 0);
         let moveMagnitude = Math.hypot(inputX, inputY);
         if (moveMagnitude > 1) { inputX /= moveMagnitude; inputY /= moveMagnitude; }
 
-        this.intendedDx = (envVx + inputX * currentSpeed) * speed;
-        this.intendedDy = (envVy + inputY * currentSpeed) * speed;
+        this.intendedDx = envVx + inputX * currentSpeed;
+        this.intendedDy = envVy + inputY * currentSpeed;
         this.trail.push({ x: this.x, y: this.y });
         if (this.trail.length > 24) this.trail.shift();
 
