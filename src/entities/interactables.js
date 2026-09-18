@@ -118,7 +118,8 @@ export class Package extends Entity {
             }
         }
         if (this.type === 'timed' && this.wasPickedUp && !AABB(state.deliveryZone.x, state.deliveryZone.y, state.deliveryZone.w, state.deliveryZone.h, this.x, this.y, this.w, this.h)) {
-            this.countdown--;
+            // Held by the present courier drains slower than a planted/unattended crate.
+            this.countdown -= this.carriedBy === 'player' ? 0.5 : 1;
             if (this.countdown <= 0) {
                 this.breakApart('boom');
                 return "Timed Package Exploded!";
@@ -280,11 +281,19 @@ export class Package extends Entity {
         }
         if (this.type === 'timed') {
             const urgent = this.wasPickedUp && this.countdown < 90;
-            ctx.fillStyle = urgent ? '#ffeeee' : '#fff';
-            ctx.font = urgent ? 'bold 11px Space Grotesk, sans-serif' : '10px Space Grotesk, sans-serif';
+            const label = String(Math.ceil(this.countdown / 60));
+            const cx = this.x + this.w / 2;
+            const cy = drawY - 2;
+            ctx.save();
+            ctx.font = urgent ? 'bold 20px Space Grotesk, sans-serif' : 'bold 16px Space Grotesk, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(String(Math.ceil(this.countdown / 60)), this.x + this.w / 2, drawY + 18);
-            ctx.textAlign = 'start';
+            ctx.textBaseline = 'bottom';
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+            ctx.strokeText(label, cx, cy);
+            ctx.fillStyle = urgent ? '#ffeeee' : '#fff';
+            ctx.fillText(label, cx, cy);
+            ctx.restore();
         }
     }
 }
