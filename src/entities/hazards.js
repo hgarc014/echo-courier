@@ -33,6 +33,8 @@ const CAMERA_TRACK_TURN = 0.08;
 const GUARD_LOST_SIGHT = 60;
 const GUARD_CHASE_SPEED = 2.6;
 const GUARD_CATCH_PAD = 4;
+const GUARD_VISION_RANGE = 220; // was 150 — longer detection
+const GUARD_VISION_HALF_W = 45; // total width 90 vs old body-width 30 — wider FOV
 
 export class SweepCamera extends Entity {
     constructor(x, y, startAngle, sweepRange) {
@@ -612,10 +614,25 @@ export class Guard extends Entity {
     }
     reset() { this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.facingX=0; this.facingY=1; this.lostSightTimer=0; }
     _visionRect() {
-        let vx=this.x,vy=this.y,vw=30,vh=30;
-        if(this.facingX===1){vx+=30;vw=150;} else if(this.facingX===-1){vx-=150;vw=150;}
-        if(this.facingY===1){vy+=30;vh=150;} else if(this.facingY===-1){vy-=150;vh=150;}
-        return {vx,vy,vw,vh};
+        const range = GUARD_VISION_RANGE;
+        const halfW = GUARD_VISION_HALF_W;
+        const cx = this.x + this.w / 2;
+        const cy = this.y + this.h / 2;
+        let vx = this.x, vy = this.y, vw = this.w, vh = this.h;
+        if (this.facingX === 1) {
+            vx = this.x + this.w; vw = range;
+            vy = cy - halfW; vh = halfW * 2;
+        } else if (this.facingX === -1) {
+            vx = this.x - range; vw = range;
+            vy = cy - halfW; vh = halfW * 2;
+        } else if (this.facingY === 1) {
+            vy = this.y + this.h; vh = range;
+            vx = cx - halfW; vw = halfW * 2;
+        } else if (this.facingY === -1) {
+            vy = this.y - range; vh = range;
+            vx = cx - halfW; vw = halfW * 2;
+        }
+        return { vx, vy, vw, vh };
     }
     _faceToward(tx, ty) {
         if (Math.abs(tx-this.x)>Math.abs(ty-this.y)){this.facingX=tx>this.x?1:-1;this.facingY=0;}
