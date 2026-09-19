@@ -24,6 +24,7 @@ export const SFX = {
     pickup: () => playTone(520, 'triangle', 0.12, 0.28, 760),
     drop: () => playTone(280, 'sine', 0.1, 0.25, 140),
     break: () => { playTone(180, 'sawtooth', 0.25, 0.45, 60); setTimeout(() => playTone(90, 'square', 0.15, 0.2), 80); },
+    crack: () => { playTone(360, 'sawtooth', 0.14, 0.32, 140); setTimeout(() => playTone(190, 'square', 0.12, 0.22, 70), 50); },
     toss: () => playTone(300, 'triangle', 0.2, 0.4, 100),
     dash: () => playTone(800, 'square', 0.15, 0.3, 200),
     cloak: () => playTone(200, 'sine', 0.5, 0.4, 100),

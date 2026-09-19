@@ -748,8 +748,10 @@ function update() {
 
     state.plates.forEach(plate => {
         plate.update(allActors, state.packages);
-        state.doors.filter(d => d.id === plate.linkedIds[0]).forEach(d => d.isOpen = plate.isPressed);
-        state.lasers.filter(l => plate.linkedIds[0] === l.id).forEach(l => l.isOpen = plate.isPressed);
+        for (const id of plate.linkedIds || []) {
+            state.doors.filter(d => d.id === id).forEach(d => d.isOpen = plate.isPressed);
+            state.lasers.filter(l => l.id === id).forEach(l => l.isOpen = plate.isPressed);
+        }
     });
 
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }

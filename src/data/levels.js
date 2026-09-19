@@ -123,11 +123,47 @@ const LEVEL2_LAYOUT = {
     lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
+
+const LEVEL4_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 50, y: 300 },
+    deliveryZone: { x: 650, y: 300, w: 100, h: 100 },
+    walls: [
+        { x: 0, y: 200, w: 800, h: 20 },
+        { x: 0, y: 420, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        { x: 550, y: 0, w: 40, h: 250 },
+        { x: 550, y: 330, w: 40, h: 270 }
+    ],
+    doors: [{ x: 550, y: 250, w: 40, h: 80, id: "d1", type: "standard" }],
+    plates: [{ x: 500, y: 220, linkedIds: ["d1"], id: "p1", type: "standard" }],
+    packages: [{ x: 500, y: 350, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
+    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [],
+    cracks: [
+        { x: 420, y: 340, w: 40, h: 40 },
+        { x: 420, y: 380, w: 40, h: 40 },
+        { x: 460, y: 340, w: 40, h: 40 },
+        { x: 460, y: 220, w: 40, h: 40 },
+        { x: 420, y: 220, w: 40, h: 40 },
+        { x: 460, y: 380, w: 40, h: 40 },
+        { x: 500, y: 380, w: 40, h: 40 },
+        { x: 500, y: 340, w: 40, h: 40 },
+        { x: 420, y: 260, w: 40, h: 40 },
+        { x: 420, y: 300, w: 40, h: 40 },
+        { x: 460, y: 300, w: 40, h: 40 },
+        { x: 500, y: 300, w: 40, h: 40 },
+        { x: 460, y: 260, w: 40, h: 40 },
+        { x: 500, y: 260, w: 40, h: 40 }
+    ],
+    robots: []
+};
+
 export const LEVELS = [
     { name: "Level 1: The Basics", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, welcome to your shift. Route efficiency is down 4%. Deploy your Temporal Payload to generate a logistics artifact (Echo). Echoes are non-sentient and property of ChronoHaul." }, obj: "Deliver the package using an echo to hold the door.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 1, mapWidth: 800, mapHeight: 600, layout: LEVEL1_LAYOUT },
     { name: "Level 2: The Airlock", story: { speaker: "Local Hub Manager", text: "We’ve authorized a double-echo payload for this route. Remember, overlapping timelines are unstable. Don't think about it too much, just deliver the box." }, obj: "Two ghosts unlocked! Coordinate them to hold both doors.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 2, layout: LEVEL2_LAYOUT },
     { name: "Level 3: Heavy Lifting", story: { speaker: "Local Hub Manager", text: "High-density cargo pending. It will severely slow your physical traversal. Build an echo timeline to handle the door systems so you can focus entirely on dragging the payload." }, obj: "Heavy packages cut your speed in half. Plan accordingly.", challenge: { desc: "Finish final loop in under 600 ticks", check: () => state.currentTick < 600 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(100,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(380,0,40,200),new Wall(380,400,40,200)]; doors=[new TimerDoor('td1',380,200,40,200,60,60)]; plates=[]; packages=[new Package('pkg1',200,300,'heavy')]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; robots=[]; projectiles=[]; } },
-    { name: "Level 4: Gap Bypass", grants: ['dash'], story: { speaker: "Local Hub Manager", text: "We received funding for a cybernetic implant. The Dash Module. Teleports you seamlessly. But it's locked behind a paywall. You might have to sprint across this collapsing foundation if you can't afford it." }, obj: "Dash across the collapsing gap to reach the plate and the delivery zone.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(550,0,40,250), new Wall(550,330,40,270)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,40,40)); doors=[new Door('d1',550,250,40,80)]; plates=[new PressurePlate('p1',450,150,'d1')]; packages=[new Package('pkg1',100,300,'standard')]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; } },
+    { name: "Level 4: Gap Bypass", grants: ['dash'], story: { speaker: "Local Hub Manager", text: "We received funding for a cybernetic implant. The Dash Module. Teleports you seamlessly. But it's locked behind a paywall. You might have to sprint across this collapsing foundation if you can't afford it." }, obj: "Dash across the collapsing gap to reach the plate and the delivery zone.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT },
     
     { name: "Level 5: Fragile Handling", story: { speaker: "Local Hub Manager", text: "You’re handling Class-4 fragile tech. The security lasers in Transit Yard B will vaporize it instantly. Ensure the grid is disabled before you expose the cargo." }, obj: "Fragile packages break in lasers. Escort them with care.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(50,50,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; lasers=[new Laser('ls1',300,20,20,560), new Laser('ls2',550,20,20,560)]; plates=[new PressurePlate('p1',150,300,'ls1'), new PressurePlate('p2',400,300,'ls2')]; packages=[new Package('pkg1',700,300,'fragile')]; doors=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; robots=[]; projectiles=[]; } },
     { name: "Level 6: The Toss", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Delivery zone inaccessible by foot. Arm upgrade required. The Toss Protocol allows package projection across chasms. Again, if you're broke, try sprinting the collapsing walkway." }, obj: "Throw packages over the massive gap with Toss.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,250,100,200); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(550,20,40,230), new Wall(550,350,40,230)]; doors=[new Door('d1',550,250,40,100)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,120,40)); plates=[new PressurePlate('p1',150,150,'d1')]; packages=[new Package('pkg1',100,300,'standard')]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; } },

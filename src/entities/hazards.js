@@ -743,33 +743,125 @@ export class Pit extends Entity {
     }
 }
 
+const CRACK_STAGE_TICKS = 60;
+const CRACK_STAGES = 3;
+
+function isOrthoCrackNeighbor(a, b) {
+    const eps = 1;
+    const overlapX = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const overlapY = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    const touchX = Math.abs((a.x + a.w) - b.x) <= eps || Math.abs((b.x + b.w) - a.x) <= eps;
+    const touchY = Math.abs((a.y + a.h) - b.y) <= eps || Math.abs((b.y + b.h) - a.y) <= eps;
+    return (touchX && overlapY > eps) || (touchY && overlapX > eps);
+}
+
 export class CrackedFloor extends Entity {
-    constructor(x, y, w, h) { super(x, y, w, h, 'crack'); this.ticks=0; this.broken=false; }
+    constructor(x, y, w, h) {
+        super(x, y, w, h, 'crack');
+        this.ticks = 0;
+        this.stage = 0;
+        this.collapsing = false;
+        this.broken = false;
+    }
+    startCollapse() {
+        if (this.broken || this.collapsing) return;
+        this.collapsing = true;
+        this.ticks = 0;
+        this.stage = 1;
+        SFX.crack();
+    }
+    cascadeNeighbors() {
+        for (const other of state.cracks || []) {
+            if (other === this || other.broken || other.collapsing) continue;
+            if (isOrthoCrackNeighbor(this, other)) other.startCollapse();
+        }
+    }
     update(actors) {
         if (this.broken) {
-            for(let a of actors) {
-                if (!AABB(a.x,a.y,a.w,a.h, this.x,this.y,this.w,this.h)) continue;
+            for (let a of actors) {
+                if (!AABB(a.x, a.y, a.w, a.h, this.x, this.y, this.w, this.h)) continue;
                 if (isPresentPlayer(a)) return "Fell into pit!";
                 if (a.id !== undefined) a.isActive = false;
             }
             return null;
         }
-        let touched=false;
-        for(let a of actors) if (AABB(a.x,a.y,a.w,a.h, this.x,this.y,this.w,this.h)) touched=true;
-        if (touched) this.ticks++;
-        if (this.ticks>60) this.broken=true;
+        if (!this.collapsing) {
+            for (let a of actors) {
+                if (AABB(a.x, a.y, a.w, a.h, this.x, this.y, this.w, this.h)) {
+                    this.startCollapse();
+                    break;
+                }
+            }
+        }
+        if (this.collapsing && !this.broken) {
+            this.ticks++;
+            if (this.ticks >= CRACK_STAGE_TICKS * CRACK_STAGES) {
+                this.broken = true;
+                this.stage = CRACK_STAGES + 1;
+                SFX.break();
+                this.cascadeNeighbors();
+            } else {
+                const next = 1 + Math.floor(this.ticks / CRACK_STAGE_TICKS);
+                if (next !== this.stage) {
+                    this.stage = next;
+                    SFX.crack();
+                }
+            }
+        }
         return null;
+    }
+    drawFractures(ctx, count, color, width) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.x, this.y, this.w, this.h);
+        ctx.clip();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'square';
+        const cx = this.x + this.w / 2;
+        const cy = this.y + this.h / 2;
+        for (let i = 0; i < count; i++) {
+            const ang = (i / count) * Math.PI + 0.35;
+            const len = Math.max(this.w, this.h) * (0.45 + (i % 2) * 0.25);
+            ctx.beginPath();
+            ctx.moveTo(cx - Math.cos(ang) * len, cy - Math.sin(ang) * len);
+            ctx.lineTo(cx + Math.cos(ang) * len * 0.7, cy + Math.sin(ang) * len * 0.7);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+    renderPit(ctx) {
+        const img = resolveSprite(state, 'pit');
+        if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 1);
+        else { ctx.fillStyle = '#000'; ctx.fillRect(this.x, this.y, this.w, this.h); }
+    }
+    renderFloor(ctx, inset, fallback) {
+        const img = resolveSprite(state, 'crack');
+        const x = this.x + inset, y = this.y + inset;
+        const w = Math.max(2, this.w - inset * 2), h = Math.max(2, this.h - inset * 2);
+        if (img) drawTiled(ctx, img, x, y, w, h, 40, 1);
+        else { ctx.fillStyle = fallback; ctx.fillRect(x, y, w, h); }
     }
     render(ctx) {
         if (this.broken) {
-            const img = resolveSprite(state, 'pit');
-            if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 1);
-            else { ctx.fillStyle='#000'; ctx.fillRect(this.x,this.y,this.w,this.h); }
+            this.renderPit(ctx);
+            return;
+        }
+        const stage = this.collapsing ? this.stage : 0;
+        if (stage === 0) {
+            this.renderFloor(ctx, 0, '#966432');
+            return;
+        }
+        if (stage >= 2) this.renderPit(ctx);
+        if (stage === 1) {
+            this.renderFloor(ctx, 0, '#c9893a');
+            this.drawFractures(ctx, 3, '#3a2010', 2);
+        } else if (stage === 2) {
+            this.renderFloor(ctx, 8, '#6a4020');
+            this.drawFractures(ctx, 5, '#1a0800', 3);
         } else {
-            const img = resolveSprite(state, 'crack');
-            const fade = Math.max(0.35, 1 - this.ticks / 100);
-            if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, fade);
-            else { ctx.fillStyle=`rgba(150,100,50,${fade})`; ctx.fillRect(this.x,this.y,this.w,this.h); }
+            this.renderFloor(ctx, 14, '#3a2010');
+            this.drawFractures(ctx, 7, '#000', 4);
         }
     }
 }
