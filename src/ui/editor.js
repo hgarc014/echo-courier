@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, createBoundWalls, isBoundWall } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, PressurePlate, Package } from '../entities/interactables.js';
@@ -13,10 +13,33 @@ let isPanning = false;
 let panLastX = 0; let panLastY = 0;
 let mouseSX = 0; let mouseSY = 0;
 let mouseOnCanvas = false;
+let dragStartSnapshot = null;
+let dragStartX = 0;
+let dragStartY = 0;
 
 const EDGE_PAN = 28;
 const EDGE_SPEED = 8;
 const KEY_PAN_SPEED = 12;
+const UNDO_CAP = 50;
+const PASTE_OFFSET = 20;
+const ENTITY_LISTS = [
+    ['walls', 'wall'],
+    ['doors', 'door'],
+    ['plates', 'plate'],
+    ['packages', 'package'],
+    ['lasers', 'laser'],
+    ['guards', 'guard'],
+    ['cameras', 'camera'],
+    ['drones', 'drone'],
+    ['winds', 'wind'],
+    ['statics', 'static'],
+    ['cracks', 'crack'],
+    ['robots', 'robot']
+];
+
+let undoStack = [];
+let redoStack = [];
+let clipboard = null;
 
 function canvasPoint(canvas, e) {
     const rect = canvas.getBoundingClientRect();
@@ -27,8 +50,11 @@ function canvasPoint(canvas, e) {
 }
 
 function isTypingTarget() {
-    const tag = (document.activeElement && document.activeElement.tagName) || '';
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = (el.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    return !!el.isContentEditable;
 }
 
 function sanitizeSlotName(name) {
@@ -74,6 +100,87 @@ function refreshSaveSlotList() {
 
 function currentLayoutJson() {
     return JSON.stringify(serializeLevel(state));
+}
+
+function findEntityKind(ent) {
+    if (!ent) return null;
+    if (ent === state.player) return { list: null, type: 'player' };
+    if (ent === state.deliveryZone) return { list: null, type: 'deliveryZone' };
+    for (const [list, type] of ENTITY_LISTS) {
+        if ((state[list] || []).includes(ent)) return { list, type };
+    }
+    return null;
+}
+
+function pushUndo(snapshot) {
+    undoStack.push(snapshot !== undefined ? snapshot : currentLayoutJson());
+    if (undoStack.length > UNDO_CAP) undoStack.shift();
+    redoStack.length = 0;
+}
+
+function restoreLayout(json) {
+    let parsed;
+    try { parsed = typeof json === 'string' ? JSON.parse(json) : json; }
+    catch { return; }
+    const setupData = deserializeLevel(parsed);
+    Object.assign(state, setupData);
+    setMapSize(setupData.mapWidth, setupData.mapHeight);
+    selectedEntity = null;
+    updatePropertiesPanel();
+    syncEditorUi();
+}
+
+function editorUndo() {
+    if (!undoStack.length) return;
+    redoStack.push(currentLayoutJson());
+    restoreLayout(undoStack.pop());
+}
+
+function editorRedo() {
+    if (!redoStack.length) return;
+    undoStack.push(currentLayoutJson());
+    if (undoStack.length > UNDO_CAP) undoStack.shift();
+    restoreLayout(redoStack.pop());
+}
+
+function copySelected() {
+    if (!selectedEntity) return;
+    const kind = findEntityKind(selectedEntity);
+    if (!kind) return;
+    const snapshot = serializeLevel(state);
+    let data;
+    if (kind.list) {
+        const idx = state[kind.list].indexOf(selectedEntity);
+        if (idx < 0) return;
+        data = snapshot[kind.list][idx];
+    } else {
+        data = snapshot[kind.type];
+    }
+    clipboard = { type: kind.type, list: kind.list, data: JSON.parse(JSON.stringify(data)) };
+}
+
+function offsetClipData(data, dx, dy) {
+    const next = JSON.parse(JSON.stringify(data));
+    if (next.x !== undefined) next.x += dx;
+    if (next.y !== undefined) next.y += dy;
+    if (Array.isArray(next.path)) next.path = next.path.map(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+    return next;
+}
+
+function pasteClipboard() {
+    if (!clipboard || !clipboard.list) return;
+    pushUndo();
+    const data = offsetClipData(clipboard.data, PASTE_OFFSET, PASTE_OFFSET);
+    if (clipboard.list === 'doors') data.id = 'd_' + Date.now();
+    else if (clipboard.list === 'plates') data.id = 'p_' + Date.now();
+    else if (clipboard.list === 'packages') data.id = 'pkg_' + Date.now();
+    else if (clipboard.list === 'lasers') data.id = 'l_' + Date.now();
+    const spawned = (deserializeLevel({ [clipboard.list]: [data] })[clipboard.list] || [])[0];
+    if (!spawned) return;
+    state[clipboard.list].push(spawned);
+    selectedEntity = spawned;
+    updatePropertiesPanel();
+    clipboard = { ...clipboard, data };
 }
 
 function applyEditorMapSize(w, h) {
@@ -139,6 +246,7 @@ export function initEditor(canvas, ctx) {
     document.getElementById('editor-map-apply')?.addEventListener('click', () => {
         const w = parseInt(document.getElementById('editor-map-w').value, 10);
         const h = parseInt(document.getElementById('editor-map-h').value, 10);
+        pushUndo();
         applyEditorMapSize(w, h);
         setSaveStatus(`Map size ${getMapSize().w}×${getMapSize().h}`);
     });
@@ -178,6 +286,7 @@ export function initEditor(canvas, ctx) {
     });
 
     document.getElementById('editor-spawn-btn').onclick = () => {
+        pushUndo();
         let type = document.getElementById('editor-entity-type').value;
         let spawned = null;
         const cam = getCamera();
@@ -199,6 +308,7 @@ export function initEditor(canvas, ctx) {
 
     function deleteSelectedEntity() {
         if (!selectedEntity) return;
+        pushUndo();
         ['walls','doors','plates','lasers','packages','guards','cameras','winds','statics','cracks','robots','drones'].forEach(list => {
             state[list] = state[list].filter(e => e !== selectedEntity);
         });
@@ -210,9 +320,30 @@ export function initEditor(canvas, ctx) {
     // Mac Delete key often emits Backspace; honor both when not typing in a field.
     window.addEventListener('keydown', (e) => {
         if (state.gameState !== 'EDITOR') return;
+        if (isTypingTarget()) return;
+        const mod = e.metaKey || e.ctrlKey;
+        if (mod && e.code === 'KeyC') {
+            e.preventDefault();
+            if (!e.repeat) copySelected();
+            return;
+        }
+        if (mod && e.code === 'KeyV') {
+            e.preventDefault();
+            if (!e.repeat) pasteClipboard();
+            return;
+        }
+        if (mod && e.code === 'KeyZ') {
+            e.preventDefault();
+            if (e.shiftKey) editorRedo();
+            else editorUndo();
+            return;
+        }
+        if (mod && e.code === 'KeyY') {
+            e.preventDefault();
+            editorRedo();
+            return;
+        }
         if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-        if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
         e.preventDefault();
         deleteSelectedEntity();
     });
@@ -249,7 +380,10 @@ export function initEditor(canvas, ctx) {
             let ew = ent.w || 30; let eh = ent.h || 30;
             if (world.x >= ent.x && world.x <= ent.x + ew && world.y >= ent.y && world.y <= ent.y + eh) {
                 selectedEntity = ent;
-                isDragging = true; dragX = world.x - ent.x; dragY = world.y - ent.y; break;
+                isDragging = true; dragX = world.x - ent.x; dragY = world.y - ent.y;
+                dragStartSnapshot = currentLayoutJson();
+                dragStartX = ent.x; dragStartY = ent.y;
+                break;
             }
         }
         updatePropertiesPanel();
@@ -272,7 +406,15 @@ export function initEditor(canvas, ctx) {
         if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
     });
 
-    const endPointer = () => { isDragging = false; isPanning = false; };
+    const endPointer = () => {
+        if (isDragging && selectedEntity && dragStartSnapshot &&
+            (selectedEntity.x !== dragStartX || selectedEntity.y !== dragStartY)) {
+            pushUndo(dragStartSnapshot);
+        }
+        isDragging = false;
+        isPanning = false;
+        dragStartSnapshot = null;
+    };
     canvas.addEventListener('mouseup', endPointer);
     canvas.addEventListener('mouseleave', () => { mouseOnCanvas = false; endPointer(); });
     canvas.addEventListener('auxclick', e => {
@@ -287,6 +429,7 @@ export function initEditor(canvas, ctx) {
 
 function updatePropertiesPanel() {
     let panel = document.getElementById('editor-properties');
+    if (!panel) return;
     if (!selectedEntity) { panel.innerHTML = 'Click an entity on canvas to edit.'; return; }
     
     let html = `<label>X: <input type="number" id="prop-x" value="${selectedEntity.x}" style="width:60px"></label> `;
@@ -302,12 +445,14 @@ function updatePropertiesPanel() {
     panel.innerHTML = html;
     
     document.getElementById('prop-save').onclick = () => {
+        pushUndo();
         selectedEntity.x = parseFloat(document.getElementById('prop-x').value);
         selectedEntity.y = parseFloat(document.getElementById('prop-y').value);
         if (document.getElementById('prop-w')) selectedEntity.w = parseFloat(document.getElementById('prop-w').value);
         if (document.getElementById('prop-h')) selectedEntity.h = parseFloat(document.getElementById('prop-h').value);
         if (document.getElementById('prop-id')) selectedEntity.id = document.getElementById('prop-id').value;
         if (document.getElementById('prop-link')) selectedEntity.linkedIds = [document.getElementById('prop-link').value];
+        if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
     };
 }
 
