@@ -1,7 +1,7 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
-import { AABB, checkWallCollision, getDashDestination, resolveDashFacing, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
+import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -236,83 +236,23 @@ function getNextLevelIndex(levelIndex) {
     return levelIndex < CAMPAIGN_LEVEL_COUNT - 1 ? levelIndex + 1 : null;
 }
 
-function checkProjectedWallCollision(x, y, w, h, walls) {
-    return walls.some(wall => AABB(x, y, w, h, wall.x, wall.y, wall.w, wall.h));
-}
-
 function buildProjectedEchoPath(runData) {
     if (!runData || runData.length === 0 || !state.player) return null;
 
-    const firstStep = runData[0];
-    const firstFacing = resolveDashFacing(firstStep.facingX, firstStep.facingY);
-    let preview = {
-        x: firstStep.x,
-        y: firstStep.y,
-        w: state.player.w,
-        h: state.player.h,
-        facingX: firstFacing.x,
-        facingY: firstFacing.y
-    };
-    let points = [{ x: preview.x, y: preview.y }];
-
-    for (let i = 1; i < runData.length; i++) {
+    const points = [];
+    for (let i = 0; i < runData.length; i++) {
         const step = runData[i];
         if (!step) continue;
-
-        const facing = resolveDashFacing(step.facingX ?? preview.facingX, step.facingY ?? preview.facingY);
-        preview.facingX = facing.x;
-        preview.facingY = facing.y;
-
-        if (step.dash) {
-            let dest = getDashDestination(preview.x, preview.y, preview.facingX, preview.facingY, 120, preview.w, preview.h);
-            preview.x = dest.x;
-            preview.y = dest.y;
-        }
-
-        let speed = PLAYER_MOVE_SPEED;
-        if (step.heavy) speed *= HEAVY_SPEED_MULT;
-        for (let z of state.statics) {
-            if (AABB(preview.x, preview.y, preview.w, preview.h, z.x, z.y, z.w, z.h)) {
-                speed *= 0.5;
-                break;
-            }
-        }
-
-        let envVx = 0;
-        let envVy = 0;
-        for (let w of state.winds) {
-            if (AABB(preview.x, preview.y, preview.w, preview.h, w.x, w.y, w.w, w.h)) {
-                envVx += w.vx;
-                envVy += w.vy;
-            }
-        }
-
-        let moveX = step.moveX || 0;
-        let moveY = step.moveY || 0;
-        let magnitude = Math.hypot(moveX, moveY);
-        if (magnitude > 1) {
-            moveX /= magnitude;
-            moveY /= magnitude;
-        }
-
-        let dx = envVx + moveX * speed;
-        let dy = envVy + moveY * speed;
-
-        if (!checkProjectedWallCollision(preview.x + dx, preview.y, preview.w, preview.h, state.walls)) {
-            preview.x += dx;
-        }
-        if (!checkProjectedWallCollision(preview.x, preview.y + dy, preview.w, preview.h, state.walls)) {
-            preview.y += dy;
-        }
-
-        points.push({ x: preview.x, y: preview.y });
+        points.push({ x: step.x, y: step.y });
     }
+    if (points.length === 0) return null;
 
     const visiblePoints = points.slice(-PROJECTED_TRAIL_FRAMES);
+    const last = visiblePoints[visiblePoints.length - 1];
 
     return {
         points: visiblePoints,
-        final: preview
+        final: last
     };
 }
 
@@ -735,8 +675,8 @@ function update() {
     let noiseSources = [];
     if (interactJustPressed || tossJustPressed) noiseSources.push({x: state.player.x, y: state.player.y});
     for(let g of state.activeGhosts) {
-        let stateIndex = Math.floor(g.localTick); 
-        if (stateIndex < g.runData.length && (g.runData[stateIndex].interact || g.runData[stateIndex].toss)) noiseSources.push({x: g.x, y: g.y});
+        let stateIndex = g.lastStateIndex;
+        if (stateIndex >= 0 && stateIndex < g.runData.length && (g.runData[stateIndex].interact || g.runData[stateIndex].toss)) noiseSources.push({x: g.x, y: g.y});
     }
 
     for(let d of state.drones) {
