@@ -1,7 +1,7 @@
 import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
-import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
+import { AABB, checkWallCollision, getDashDestination, resolveDashFacing, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -244,13 +244,14 @@ function buildProjectedEchoPath(runData) {
     if (!runData || runData.length === 0 || !state.player) return null;
 
     const firstStep = runData[0];
+    const firstFacing = resolveDashFacing(firstStep.facingX, firstStep.facingY);
     let preview = {
         x: firstStep.x,
         y: firstStep.y,
         w: state.player.w,
         h: state.player.h,
-        facingX: firstStep.facingX || 1,
-        facingY: firstStep.facingY || 0
+        facingX: firstFacing.x,
+        facingY: firstFacing.y
     };
     let points = [{ x: preview.x, y: preview.y }];
 
@@ -258,8 +259,9 @@ function buildProjectedEchoPath(runData) {
         const step = runData[i];
         if (!step) continue;
 
-        preview.facingX = step.facingX || preview.facingX || 1;
-        preview.facingY = step.facingY || preview.facingY || 0;
+        const facing = resolveDashFacing(step.facingX ?? preview.facingX, step.facingY ?? preview.facingY);
+        preview.facingX = facing.x;
+        preview.facingY = facing.y;
 
         if (step.dash) {
             let dest = getDashDestination(preview.x, preview.y, preview.facingX, preview.facingY, 120, preview.w, preview.h);
@@ -694,7 +696,7 @@ function update() {
         if (ghost.isActive) allActors.push(ghost);
     }
 
-    state.alarmState = false; state.cameras.forEach(c => c.update(state.player, state.packages));
+    state.alarmState = false; state.cameras.forEach(c => c.update(state.player));
     state.robots.forEach(r => r.update(state.player, state.activeGhosts, state.walls));
     for (let p of state.projectiles) {
         let fail = p.update(state.walls, state.activeGhosts, state.player, state.packages);

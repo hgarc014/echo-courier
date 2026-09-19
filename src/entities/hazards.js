@@ -53,19 +53,15 @@ export class SweepCamera extends Entity {
         state.drones.push(this.chaseDrone);
         SFX.droneAlert();
     }
-    update(player, pkgs) {
+    update(player) {
         this.sweepProgress+=this.sweepDir; if (this.sweepProgress>=1 || this.sweepProgress<=-1) this.sweepDir*=-1;
         this.currentAngle = this.baseAngle + (this.sweepProgress * this.sweepRange);
 
-        // Body + cloak only. A carried box shares the carrier AABB and must not trip the cone by itself.
+        // Body + cloak only. Packages (including grounded contraband) do not trip the cone.
         this.seesPlayer = player.cloakTimer <= 0 && this._inCone(player.x, player.y);
         let triggerAlarm = this.seesPlayer;
         for (let g of state.activeGhosts) {
             if (g.isActive && !g.cloakActive && this._inCone(g.x, g.y)) triggerAlarm = true;
-        }
-        for (let p of pkgs) {
-            if (p.isDestroyed || p.carriedBy) continue;
-            if (p.type === 'contraband' && this._inCone(p.x, p.y)) triggerAlarm = true;
         }
 
         if (this.seesPlayer) this._ensureChaseDrone();

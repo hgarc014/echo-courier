@@ -21,6 +21,13 @@ export function lineOfSightBlocked(x1, y1, x2, y2) {
     return false;
 }
 
+export function resolveDashFacing(facingX, facingY) {
+    const fx = facingX ?? 0;
+    const fy = facingY ?? 0;
+    if (fx === 0 && fy === 0) return { x: 1, y: 0 };
+    return { x: fx, y: fy };
+}
+
 export function getDashDestination(startX, startY, dx, dy, maxDist, w, h) {
     let currentX = startX;
     let currentY = startY;
