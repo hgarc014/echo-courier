@@ -236,18 +236,44 @@
         <h4 style="margin-bottom: 10px;">Spawn Entities</h4>
         <select id="editor-entity-type" style="width:100%; padding: 8px; background: #000; color: var(--text-main); border: 1px solid #444; margin-bottom: 10px;">
             <option value="wall">Wall</option>
-            <option value="door">Door</option>
+            <option value="door">Door (standard)</option>
+            <option value="door_alarm">Door (alarm/flashing)</option>
+            <option value="door_timer">Door (timer)</option>
             <option value="plate">Pressure Plate</option>
+            <option value="plate_temporal">Temporal Plate</option>
+            <option value="package">Package (standard)</option>
+            <option value="package_heavy">Package (heavy)</option>
+            <option value="package_fragile">Package (fragile)</option>
+            <option value="package_timed">Package (timed)</option>
+            <option value="package_decoy">Package (decoy)</option>
+            <option value="package_contraband">Package (contraband)</option>
             <option value="laser">Laser</option>
-            <option value="package">Package</option>
             <option value="guard">Guard</option>
             <option value="camera">Camera</option>
+            <option value="drone">Drone</option>
             <option value="wind">Wind Tunnel</option>
             <option value="static">Static Zone</option>
+            <option value="crack">Cracked Floor</option>
+            <option value="robot">Shooter Robot</option>
+            <option value="player">Player Start</option>
+            <option value="delivery">Delivery Zone</option>
         </select>
         <button class="secondary-btn" id="editor-spawn-btn" style="width:100%; margin-top:0; border-color: #fff; color: #fff;">Spawn Entity</button>
         <button class="secondary-btn" id="editor-delete-btn" style="width:100%; margin-top:10px; border-color: red; color: red;">Delete Selected [Del/Backspace]</button>
         <p style="font-size:0.75rem; color:#7d8590; margin-top:8px;">Cmd/Ctrl+C copy · V paste · Z undo · Shift+Z / Y redo</p>
+        <hr style="border-color:#333; margin: 15px 0;">
+        <h4 style="margin-bottom: 10px;">Level Config</h4>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Speaker <input id="editor-meta-speaker" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Briefing<textarea id="editor-meta-text" rows="3" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></textarea></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Objective <input id="editor-meta-obj" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Max Ghosts <input id="editor-meta-maxghosts" type="number" min="0" max="8" value="3" style="width:72px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <div style="font-size:0.8rem; margin:8px 0;">Skills:
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-dash"> dash</label>
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-toss"> toss</label>
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-cloak"> cloak</label>
+          <label><input type="checkbox" id="editor-meta-ghostShield"> ghostShield</label>
+        </div>
+        <button class="secondary-btn" id="editor-meta-apply" style="width:100%; margin-top:0; border-color:#0ff; color:#0ff;">Apply Level Config</button>
         <hr style="border-color:#333; margin: 15px 0;">
         <h4 style="margin-bottom: 10px;">Properties Inspector</h4>
         <div id="editor-properties" style="background: #0d1117; padding: 10px; border: 1px solid #444; font-size: 0.9rem; min-height: 100px;">

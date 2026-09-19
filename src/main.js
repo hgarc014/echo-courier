@@ -532,12 +532,14 @@ export function startPlaytestFromEditor() {
     document.getElementById('mobile-controls')?.classList.remove('hidden');
     setPlaytestReturnVisible(true);
 
+        const em = state.editorLevelMeta || {};
     state.currentLevelMeta = {
-        name: 'Editor Playtest',
-        obj: 'Playtest the current editor layout.',
+        name: em.name || 'Editor Playtest',
+        story: em.story || null,
+        obj: em.obj || 'Playtest the current editor layout.',
         challenge: { desc: 'Playtest', check: () => false },
-        maxGhosts: 3,
-        grants: ['dash', 'toss', 'cloak', 'ghostShield'],
+        maxGhosts: em.maxGhosts ?? 3,
+        grants: Array.isArray(em.grants) && em.grants.length ? [...em.grants] : ['dash', 'toss', 'cloak', 'ghostShield'],
         isPlaytest: true
     };
     state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
@@ -557,10 +559,15 @@ export function startPlaytestFromEditor() {
     uiLevelComplete.classList.add('hidden');
     uiGameOver.classList.add('hidden');
     document.getElementById('loop-count').innerText = '0';
-    hideLevelDialog();
-    state.gameState = 'PLAYING';
+    if (state.currentLevelMeta?.story?.text) {
+        showLevelDialog(state.currentLevelMeta.story.speaker || 'Briefing', state.currentLevelMeta.story.text);
+        state.gameState = 'DIALOG';
+    } else {
+        hideLevelDialog();
+        state.gameState = 'PLAYING';
+        startMusic();
+    }
     Object.assign(prevKeys, keys);
-    startMusic();
     syncTouchUi();
 }
 
@@ -1119,10 +1126,30 @@ window.onload = () => {
             setupData = deserializeLevel(parsed);
         } else if (levelIndex !== null) {
             setupData = getLevelSetup(levelIndex);
+            const lv = LEVELS[levelIndex];
+            if (lv) {
+                state.editorLevelMeta = {
+                    name: lv.name || 'Editor Level',
+                    story: { speaker: lv.story?.speaker || '', text: lv.story?.text || '' },
+                    obj: lv.obj || '',
+                    grants: [...(lv.grants || [])],
+                    maxGhosts: lv.maxGhosts ?? 3
+                };
+            }
         } else {
             setupData = deserializeLevel({});
+            if (!state.editorLevelMeta) {
+                state.editorLevelMeta = {
+                    name: 'Editor Level',
+                    story: { speaker: '', text: '' },
+                    obj: '',
+                    grants: [],
+                    maxGhosts: 3
+                };
+            }
         }
         applyLoadedLevel(setupData);
+        try { window.refreshEditorLevelConfigForm?.(); } catch (_) {}
         if (!state.player) state.player = new PlayerEntity(50, 50, 30, 30, 'player');
         if (!state.walls || state.walls.length === 0) {
             const map = getMapSize();

@@ -229,7 +229,18 @@ export function serializeLevel(src = state) {
         winds: (src.winds || []).map(w => ({ x: w.x, y: w.y, w: w.w, h: w.h, vx: w.vx, vy: w.vy })),
         statics: (src.statics || []).map(s => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
         cracks: (src.cracks || []).map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
-        robots: (src.robots || []).map(r => ({ path: r.path || [{ x: r.x, y: r.y }] }))
+        robots: (src.robots || []).map(r => ({ path: r.path || [{ x: r.x, y: r.y }] })),
+        meta: (() => {
+            const m = src.meta || src.editorLevelMeta || (typeof state !== 'undefined' ? state.editorLevelMeta : null);
+            if (!m) return undefined;
+            return {
+                name: m.name || 'Editor Level',
+                story: { speaker: m.story?.speaker || '', text: m.story?.text || '' },
+                obj: m.obj || '',
+                grants: [...(m.grants || [])],
+                maxGhosts: m.maxGhosts ?? 3
+            };
+        })()
     };
 }
 
@@ -268,6 +279,16 @@ export function deserializeLevel(data) {
         return new ShooterRobot(path.length ? path : [{ x: 50, y: 50 }]);
     });
     projectiles = [];
+
+    if (data.meta && typeof state !== 'undefined') {
+        state.editorLevelMeta = {
+            name: data.meta.name || 'Editor Level',
+            story: { speaker: data.meta.story?.speaker || '', text: data.meta.story?.text || '' },
+            obj: data.meta.obj || '',
+            grants: [...(data.meta.grants || [])],
+            maxGhosts: data.meta.maxGhosts ?? 3
+        };
+    }
     
     return withMapSize({ player, deliveryZone, walls, doors, plates, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, projectiles }, size);
 }

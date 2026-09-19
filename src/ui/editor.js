@@ -2,8 +2,10 @@ import { state } from '../core/state.js';
 import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
-import { Wall, Door, PressurePlate, Package } from '../entities/interactables.js';
-import { Laser, SweepCamera, Guard, WindTunnel, StaticZone } from '../entities/hazards.js';
+import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package } from '../entities/interactables.js';
+import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
+import { DeliveryZone } from '../entities/zones.js';
+import { PlayerEntity } from '../entities/actors.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -36,6 +38,74 @@ const ENTITY_LISTS = [
     ['cracks', 'crack'],
     ['robots', 'robot']
 ];
+
+const DEFAULT_EDITOR_META = () => ({
+    name: 'Editor Level',
+    story: { speaker: '', text: '' },
+    obj: '',
+    grants: [],
+    maxGhosts: 3
+});
+
+export function ensureEditorLevelMeta() {
+    if (!state.editorLevelMeta) state.editorLevelMeta = DEFAULT_EDITOR_META();
+    return state.editorLevelMeta;
+}
+
+export function setEditorLevelMetaFromLevel(level) {
+    if (!level) {
+        state.editorLevelMeta = DEFAULT_EDITOR_META();
+        return state.editorLevelMeta;
+    }
+    state.editorLevelMeta = {
+        name: level.name || 'Editor Level',
+        story: {
+            speaker: level.story?.speaker || '',
+            text: level.story?.text || ''
+        },
+        obj: level.obj || '',
+        grants: [...(level.grants || [])],
+        maxGhosts: level.maxGhosts ?? 3
+    };
+    return state.editorLevelMeta;
+}
+
+function syncLevelConfigForm() {
+    const meta = ensureEditorLevelMeta();
+    const speaker = document.getElementById('editor-meta-speaker');
+    const text = document.getElementById('editor-meta-text');
+    const obj = document.getElementById('editor-meta-obj');
+    const maxG = document.getElementById('editor-meta-maxghosts');
+    if (speaker) speaker.value = meta.story?.speaker || '';
+    if (text) text.value = meta.story?.text || '';
+    if (obj) obj.value = meta.obj || '';
+    if (maxG) maxG.value = meta.maxGhosts ?? 3;
+    const grants = new Set(meta.grants || []);
+    for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
+        const el = document.getElementById('editor-meta-' + id);
+        if (el) el.checked = grants.has(id);
+    }
+}
+
+function applyLevelConfigForm() {
+    const grants = [];
+    for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
+        if (document.getElementById('editor-meta-' + id)?.checked) grants.push(id);
+    }
+    state.editorLevelMeta = {
+        name: ensureEditorLevelMeta().name || 'Editor Level',
+        story: {
+            speaker: document.getElementById('editor-meta-speaker')?.value || '',
+            text: document.getElementById('editor-meta-text')?.value || ''
+        },
+        obj: document.getElementById('editor-meta-obj')?.value || '',
+        grants,
+        maxGhosts: parseInt(document.getElementById('editor-meta-maxghosts')?.value, 10) || 0
+    };
+    setSaveStatus('Level config applied');
+}
+
+
 
 let undoStack = [];
 let redoStack = [];
@@ -201,8 +271,20 @@ export function syncEditorUi() {
     const hEl = document.getElementById('editor-map-h');
     if (wEl) wEl.value = w;
     if (hEl) hEl.value = h;
+    document.getElementById('editor-meta-apply')?.addEventListener('click', () => {
+        applyLevelConfigForm();
+    });
+    ensureEditorLevelMeta();
+    syncLevelConfigForm();
+    window.refreshEditorLevelConfigForm = syncLevelConfigForm;
+
     refreshSaveSlotList();
 }
+
+export function refreshEditorLevelConfigForm() {
+    syncLevelConfigForm();
+}
+
 
 export function tickEditor() {
     if (state.gameState !== 'EDITOR') return;
@@ -240,7 +322,9 @@ export function initEditor(canvas, ctx) {
 
     document.getElementById('editor-load-btn').onclick = () => {
         let idx = parseInt(document.getElementById('editor-load-level').value);
+        setEditorLevelMetaFromLevel(LEVELS[idx]);
         window.startEditorMode(null, idx);
+        syncLevelConfigForm();
     };
 
     document.getElementById('editor-map-apply')?.addEventListener('click', () => {
@@ -292,16 +376,38 @@ export function initEditor(canvas, ctx) {
         const cam = getCamera();
         let cx = Math.round((cam.x + VIEW_WIDTH / 2) / 10) * 10;
         let cy = Math.round((cam.y + VIEW_HEIGHT / 2) / 10) * 10;
+        const id = Date.now();
         if (type === 'wall') { spawned = new Wall(cx, cy, 40, 40); state.walls.push(spawned); }
-        else if (type === 'door') { spawned = new Door('d_'+Date.now(), cx, cy, 40, 80); state.doors.push(spawned); }
-        else if (type === 'plate') { spawned = new PressurePlate('p_'+Date.now(), cx, cy, 'd_0'); state.plates.push(spawned); }
-        else if (type === 'laser') { spawned = new Laser('l_'+Date.now(), cx, cy, 20, 80); state.lasers.push(spawned); }
-        else if (type === 'package') { spawned = new Package('pkg_'+Date.now(), cx, cy, 'standard'); state.packages.push(spawned); }
+        else if (type === 'door') { spawned = new Door('d_'+id, cx, cy, 40, 80); state.doors.push(spawned); }
+        else if (type === 'door_alarm') { spawned = new AlarmDoor('d_'+id, cx, cy, 40, 80); state.doors.push(spawned); }
+        else if (type === 'door_timer') { spawned = new TimerDoor('d_'+id, cx, cy, 40, 80, 60, 60); state.doors.push(spawned); }
+        else if (type === 'plate') { spawned = new PressurePlate('p_'+id, cx, cy, 'd_0'); state.plates.push(spawned); }
+        else if (type === 'plate_temporal') { spawned = new TemporalPlate('p_'+id, cx, cy, 'd_0', 'present'); state.plates.push(spawned); }
+        else if (type === 'package') { spawned = new Package('pkg_'+id, cx, cy, 'standard'); state.packages.push(spawned); }
+        else if (type === 'package_heavy') { spawned = new Package('pkg_'+id, cx, cy, 'heavy'); state.packages.push(spawned); }
+        else if (type === 'package_fragile') { spawned = new Package('pkg_'+id, cx, cy, 'fragile'); state.packages.push(spawned); }
+        else if (type === 'package_timed') { spawned = new Package('pkg_'+id, cx, cy, 'timed'); state.packages.push(spawned); }
+        else if (type === 'package_decoy') { spawned = new Package('pkg_'+id, cx, cy, 'decoy'); state.packages.push(spawned); }
+        else if (type === 'package_contraband') { spawned = new Package('pkg_'+id, cx, cy, 'contraband'); state.packages.push(spawned); }
+        else if (type === 'laser') { spawned = new Laser('l_'+id, cx, cy, 20, 80); state.lasers.push(spawned); }
         else if (type === 'guard') { spawned = new Guard([{x:cx,y:cy}, {x:cx+50,y:cy}]); state.guards.push(spawned); }
         else if (type === 'camera') { spawned = new SweepCamera(cx, cy, 0, Math.PI/2); state.cameras.push(spawned); }
+        else if (type === 'drone') { spawned = new Drone([{x:cx,y:cy}, {x:cx+60,y:cy}]); state.drones.push(spawned); }
         else if (type === 'wind') { spawned = new WindTunnel(cx, cy, 40, 80, 0, 5); state.winds.push(spawned); }
         else if (type === 'static') { spawned = new StaticZone(cx, cy, 80, 80); state.statics.push(spawned); }
-        
+        else if (type === 'crack') { spawned = new CrackedFloor(cx, cy, 40, 40); state.cracks.push(spawned); }
+        else if (type === 'robot') { spawned = new ShooterRobot([{x:cx,y:cy}, {x:cx+40,y:cy}]); state.robots.push(spawned); }
+        else if (type === 'player') {
+            if (!state.player) state.player = new PlayerEntity(cx, cy, 30, 30, 'player');
+            else { state.player.x = cx; state.player.y = cy; }
+            spawned = state.player;
+        }
+        else if (type === 'delivery') {
+            if (!state.deliveryZone) state.deliveryZone = new DeliveryZone(cx, cy, 100, 100);
+            else { state.deliveryZone.x = cx; state.deliveryZone.y = cy; }
+            spawned = state.deliveryZone;
+        }
+
         selectedEntity = spawned;
         updatePropertiesPanel();
     };
@@ -424,6 +530,10 @@ export function initEditor(canvas, ctx) {
         if (state.gameState === 'EDITOR') e.preventDefault();
     });
 
+    
+    ensureEditorLevelMeta();
+    syncLevelConfigForm();
+
     refreshSaveSlotList();
 }
 
@@ -449,7 +559,9 @@ function updatePropertiesPanel() {
     if (selectedEntity.w !== undefined) html += `<label>W: <input type="number" id="prop-w" value="${selectedEntity.w}" style="width:60px"></label> `;
     if (selectedEntity.h !== undefined) html += `<label>H: <input type="number" id="prop-h" value="${selectedEntity.h}" style="width:60px"></label><br>`;
     
-    if (selectedEntity.id !== undefined && selectedEntity.assetName !== 'player') html += `<label>ID: <input type="text" id="prop-id" value="${escapeAttr(selectedEntity.id)}" style="width:100%"></label><br>`;
+    if (selectedEntity.id !== undefined && selectedEntity.assetName !== 'player') {
+        html += `<label>ID: <input type="text" id="prop-id" value="${escapeAttr(selectedEntity.id)}" style="width:100%"></label><br>`;
+    }
 
     if (selectedEntity.linkedIds !== undefined) {
         const linked = new Set(selectedEntity.linkedIds || []);
@@ -474,14 +586,45 @@ function updatePropertiesPanel() {
         }
     }
 
-    if (selectedEntity.assetName === 'door') {
+    if (selectedEntity.assetName === 'door' || selectedEntity instanceof Door || selectedEntity instanceof AlarmDoor || selectedEntity instanceof TimerDoor) {
         const doorId = selectedEntity.id;
         const plates = (state.plates || []).filter(p => (p.linkedIds || []).includes(doorId));
         html += `<div style="margin-top:8px;">Plates linked to this door</div>`;
         if (!plates.length) html += `<div style="color:#7d8590; font-size:0.8rem;">None</div>`;
         else html += `<ul style="margin:4px 0 0 16px; padding:0;">${plates.map(p => `<li>${escapeAttr(p.id || '(unnamed)')}</li>`).join('')}</ul>`;
     }
-    
+
+    if (selectedEntity instanceof Package) {
+        const pt = selectedEntity.type || 'standard';
+        html += `<label>Package type: <select id="prop-pkg-type" style="width:100%; background:#000; color:var(--text-main); border:1px solid #444;">`;
+        for (const opt of ['standard','heavy','fragile','timed','decoy','contraband']) {
+            html += `<option value="${opt}" ${pt===opt?'selected':''}>${opt}</option>`;
+        }
+        html += `</select></label><br>`;
+    }
+    if (selectedEntity instanceof Door || selectedEntity instanceof AlarmDoor || selectedEntity instanceof TimerDoor) {
+        const dt = selectedEntity instanceof AlarmDoor ? 'alarm' : selectedEntity instanceof TimerDoor ? 'timer' : 'standard';
+        html += `<label>Door type: <select id="prop-door-type" style="width:100%; background:#000; color:var(--text-main); border:1px solid #444;">`;
+        for (const [v,lab] of [['standard','standard'],['alarm','alarm/flashing'],['timer','timer']]) {
+            html += `<option value="${v}" ${dt===v?'selected':''}>${lab}</option>`;
+        }
+        html += `</select></label><br>`;
+        if (selectedEntity instanceof TimerDoor) {
+            html += `<label>Open T: <input type="number" id="prop-openT" value="${selectedEntity.openT||60}" style="width:60px"></label> `;
+            html += `<label>Closed T: <input type="number" id="prop-closedT" value="${selectedEntity.closedT||60}" style="width:60px"></label><br>`;
+        }
+    }
+    if (selectedEntity instanceof PressurePlate) {
+        const pt = selectedEntity instanceof TemporalPlate ? 'temporal' : 'standard';
+        html += `<label>Plate type: <select id="prop-plate-type" style="width:100%; background:#000; color:var(--text-main); border:1px solid #444;">`;
+        html += `<option value="standard" ${pt==='standard'?'selected':''}>standard</option>`;
+        html += `<option value="temporal" ${pt==='temporal'?'selected':''}>temporal</option>`;
+        html += `</select></label><br>`;
+        if (selectedEntity instanceof TemporalPlate) {
+            html += `<label>Timeline: <input type="text" id="prop-timeline" value="${selectedEntity.requiredTimeline||'present'}" style="width:100%"></label><br>`;
+        }
+    }
+
     html += `<button id="prop-save" class="secondary-btn" style="width:100%; margin-top:10px; border-color:#0ff; color:#0ff;">Apply</button>`;
     panel.innerHTML = html;
     
@@ -500,6 +643,40 @@ function updatePropertiesPanel() {
         if (document.getElementById('prop-h')) selectedEntity.h = parseFloat(document.getElementById('prop-h').value);
         if (document.getElementById('prop-id')) selectedEntity.id = document.getElementById('prop-id').value;
         if (linkSelect) selectedEntity.linkedIds = readLinkedIdsFromSelect(linkSelect);
+        if (document.getElementById('prop-pkg-type')) selectedEntity.type = document.getElementById('prop-pkg-type').value;
+        if (document.getElementById('prop-openT')) selectedEntity.openT = parseInt(document.getElementById('prop-openT').value, 10) || 60;
+        if (document.getElementById('prop-closedT')) selectedEntity.closedT = parseInt(document.getElementById('prop-closedT').value, 10) || 60;
+        if (document.getElementById('prop-timeline')) selectedEntity.requiredTimeline = document.getElementById('prop-timeline').value || 'present';
+        if (document.getElementById('prop-door-type')) {
+            const want = document.getElementById('prop-door-type').value;
+            const cur = selectedEntity instanceof AlarmDoor ? 'alarm' : selectedEntity instanceof TimerDoor ? 'timer' : 'standard';
+            if (want !== cur) {
+                const idx = state.doors.indexOf(selectedEntity);
+                let replacement;
+                if (want === 'alarm') replacement = new AlarmDoor(selectedEntity.id, selectedEntity.x, selectedEntity.y, selectedEntity.w, selectedEntity.h);
+                else if (want === 'timer') replacement = new TimerDoor(selectedEntity.id, selectedEntity.x, selectedEntity.y, selectedEntity.w, selectedEntity.h, selectedEntity.openT || 60, selectedEntity.closedT || 60);
+                else replacement = new Door(selectedEntity.id, selectedEntity.x, selectedEntity.y, selectedEntity.w, selectedEntity.h);
+                if (idx >= 0) state.doors[idx] = replacement;
+                selectedEntity = replacement;
+            }
+        }
+        if (document.getElementById('prop-plate-type')) {
+            const want = document.getElementById('prop-plate-type').value;
+            const cur = selectedEntity instanceof TemporalPlate ? 'temporal' : 'standard';
+            if (want !== cur) {
+                const idx = state.plates.indexOf(selectedEntity);
+                let replacement;
+                if (want === 'temporal') replacement = new TemporalPlate(selectedEntity.id, selectedEntity.x, selectedEntity.y, selectedEntity.linkedIds, selectedEntity.requiredTimeline || 'present');
+                else replacement = new PressurePlate(selectedEntity.id, selectedEntity.x, selectedEntity.y, selectedEntity.linkedIds);
+                if (idx >= 0) state.plates[idx] = replacement;
+                selectedEntity = replacement;
+            }
+        }
+        if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
+        updatePropertiesPanel();
+    };
+}
+
         if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
         updatePropertiesPanel();
     };
