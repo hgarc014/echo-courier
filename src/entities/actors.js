@@ -1,6 +1,6 @@
 import { state, getPlayerRank } from '../core/state.js';
 import { Entity } from './base.js';
-import { AABB, getDashDestination, resolveDashFacing, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from '../core/physics.js';
+import { AABB, resolveDashFacing } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
 import { pickCourierFrame } from '../core/atlas.js';
 
@@ -95,10 +95,11 @@ export class Ghost extends Entity {
         const firstStep = runData?.[0] || {};
         super(firstStep.x ?? -100, firstStep.y ?? -100, 30, 30, 'player'); this.id=id; this.runData=runData; this.isActive=true;
         const initFacing = resolveDashFacing(firstStep.facingX, firstStep.facingY);
-        this.localTick=0; this.lastStateIndex=0; this.cloakTimer=0; this.facingX=initFacing.x; this.facingY=initFacing.y;
+        this.localTick=0; this.lastStateIndex=-1; this.cloakTimer=0; this.facingX=initFacing.x; this.facingY=initFacing.y;
         this.cloakActive = false;
         this.intendedDx = 0;
         this.intendedDy = 0;
+        this.moving = false;
         this.trail = [];
         this.spawnTtl = 24;
         this.dashCooldown = 0;
@@ -106,51 +107,34 @@ export class Ghost extends Entity {
     update(pkgs, staticZones, winds) {
         this.isActive = true;
         if (this.spawnTtl > 0) this.spawnTtl--;
-        this.localTick += 1;
-        
-        let stateIndex = Math.floor(this.localTick); let isPastEnd = false;
-        if (stateIndex >= this.runData.length) { stateIndex = this.runData.length - 1; isPastEnd = true; }
+        this.intendedDx = 0;
+        this.intendedDy = 0;
+
+        if (!this.runData || this.runData.length === 0) {
+            this.moving = false;
+            return;
+        }
+
+        let isPastEnd = this.localTick >= this.runData.length;
+        let stateIndex = Math.min(Math.floor(this.localTick), this.runData.length - 1);
         const step = this.runData[stateIndex];
         if (!step) {
-            if (this.dashCooldown > 0) this.dashCooldown--;
-            this.intendedDx = 0; this.intendedDy = 0; return;
+            this.moving = false;
+            return;
         }
-        
+
+        this.x = step.x;
+        this.y = step.y;
         this.cloakTimer = step.cloakTimer || 0;
         this.cloakActive = this.cloakTimer > 0;
         this.facingX = step.facingX ?? 0; this.facingY = step.facingY ?? 0;
-        
+        const prevStep = stateIndex > 0 ? this.runData[stateIndex - 1] : null;
+        this.moving = !isPastEnd && !!prevStep && (Math.abs(step.x - prevStep.x) + Math.abs(step.y - prevStep.y) > 0.2);
+
         let interactJustPressed = !isPastEnd && step.interact && this.lastStateIndex !== stateIndex;
         let tossJustPressed = !isPastEnd && step.toss && this.lastStateIndex !== stateIndex;
-        let dashJustPressed = !isPastEnd && step.dash && this.lastStateIndex !== stateIndex;
         this.lastStateIndex = stateIndex;
 
-        if (dashJustPressed && this.dashCooldown <= 0) {
-            const dir = resolveDashFacing(this.facingX, this.facingY);
-            let dest = getDashDestination(this.x, this.y, dir.x, dir.y, 120, this.w, this.h);
-            this.x = dest.x;
-            this.y = dest.y;
-            this.dashCooldown = 60;
-        }
-        if (this.dashCooldown > 0) this.dashCooldown--;
-
-        let envVx = 0, envVy = 0;
-        for (let w of winds) if (AABB(this.x, this.y, this.w, this.h, w.x, w.y, w.w, w.h)) { envVx += w.vx; envVy += w.vy; }
-
-        let inStatic = false;
-        for (let z of staticZones) if (AABB(this.x, this.y, this.w, this.h, z.x, z.y, z.w, z.h)) { inStatic = true; break; }
-
-        let carried = pkgs.find(p => p.carriedBy === 'ghost_' + this.id);
-        let currentSpeed = PLAYER_MOVE_SPEED;
-        if (carried && carried.type === 'heavy') currentSpeed *= HEAVY_SPEED_MULT;
-        if (inStatic) currentSpeed *= 0.5;
-        let inputX = isPastEnd ? 0 : (step.moveX || 0);
-        let inputY = isPastEnd ? 0 : (step.moveY || 0);
-        let moveMagnitude = Math.hypot(inputX, inputY);
-        if (moveMagnitude > 1) { inputX /= moveMagnitude; inputY /= moveMagnitude; }
-
-        this.intendedDx = envVx + inputX * currentSpeed;
-        this.intendedDy = envVy + inputY * currentSpeed;
         this.trail.push({ x: this.x, y: this.y });
         if (this.trail.length > 24) this.trail.shift();
 
@@ -166,10 +150,17 @@ export class Ghost extends Entity {
                 }
             }
         }
-        
+
         if (tossJustPressed) {
             let carrying = pkgs.find(p => p.carriedBy === 'ghost_'+this.id);
             if (carrying) { carrying.carriedBy = null; carrying.onToss(this.facingX || 0, this.facingY || 0); }
+        }
+
+        // Advance after snap so frame 0 is played; half-speed in static zones (README).
+        if (!isPastEnd) {
+            let inStatic = false;
+            for (let z of staticZones) if (AABB(this.x, this.y, this.w, this.h, z.x, z.y, z.w, z.h)) { inStatic = true; break; }
+            this.localTick += inStatic ? 0.5 : 1.0;
         }
     }
     render(ctx) {
@@ -188,7 +179,7 @@ export class Ghost extends Entity {
 
         const t = state.currentTick;
         const spawn = this.spawnTtl / 24;
-        const moving = Math.abs(this.intendedDx) + Math.abs(this.intendedDy) > 0.2;
+        const moving = !!this.moving;
         const carrying = !!(state.packages && state.packages.find(p => p.carriedBy === 'ghost_' + this.id));
         const stepIndex = Math.min(Math.floor(this.localTick), Math.max(0, this.runData.length - 1));
         const step = this.runData[stepIndex];
