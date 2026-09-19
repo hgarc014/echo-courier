@@ -427,6 +427,17 @@ export function initEditor(canvas, ctx) {
     refreshSaveSlotList();
 }
 
+function escapeAttr(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+}
+
+function readLinkedIdsFromSelect(select) {
+    return [...select.selectedOptions].map(opt => opt.value).filter(Boolean);
+}
+
 function updatePropertiesPanel() {
     let panel = document.getElementById('editor-properties');
     if (!panel) return;
@@ -438,12 +449,49 @@ function updatePropertiesPanel() {
     if (selectedEntity.w !== undefined) html += `<label>W: <input type="number" id="prop-w" value="${selectedEntity.w}" style="width:60px"></label> `;
     if (selectedEntity.h !== undefined) html += `<label>H: <input type="number" id="prop-h" value="${selectedEntity.h}" style="width:60px"></label><br>`;
     
-    if (selectedEntity.id !== undefined && selectedEntity.assetName !== 'player') html += `<label>ID: <input type="text" id="prop-id" value="${selectedEntity.id}" style="width:100%"></label><br>`;
-    if (selectedEntity.linkedIds !== undefined) html += `<label>Linked ID: <input type="text" id="prop-link" value="${selectedEntity.linkedIds[0] || ''}" style="width:100%"></label><br>`;
+    if (selectedEntity.id !== undefined && selectedEntity.assetName !== 'player') html += `<label>ID: <input type="text" id="prop-id" value="${escapeAttr(selectedEntity.id)}" style="width:100%"></label><br>`;
+
+    if (selectedEntity.linkedIds !== undefined) {
+        const linked = new Set(selectedEntity.linkedIds || []);
+        const doors = state.doors || [];
+        const lasers = state.lasers || [];
+        html += `<div style="margin-top:8px;">Linked doors</div>`;
+        if (!doors.length && !lasers.length) {
+            html += `<div style="color:#7d8590; font-size:0.8rem;">No doors in this level.</div>`;
+        } else {
+            const count = doors.length + lasers.length;
+            html += `<select id="prop-links" multiple size="${Math.min(6, Math.max(2, count))}" style="width:100%; background:#000; color:var(--text-main); border:1px solid #444;">`;
+            for (const door of doors) {
+                const id = door.id || '';
+                html += `<option value="${escapeAttr(id)}" ${linked.has(id) ? 'selected' : ''}>${escapeAttr(id)}</option>`;
+            }
+            for (const laser of lasers) {
+                const id = laser.id || '';
+                html += `<option value="${escapeAttr(id)}" ${linked.has(id) ? 'selected' : ''}>${escapeAttr(id)} (laser)</option>`;
+            }
+            html += `</select>`;
+            html += `<div style="color:#7d8590; font-size:0.75rem;">Ctrl/Cmd-click to link multiple.</div>`;
+        }
+    }
+
+    if (selectedEntity.assetName === 'door') {
+        const doorId = selectedEntity.id;
+        const plates = (state.plates || []).filter(p => (p.linkedIds || []).includes(doorId));
+        html += `<div style="margin-top:8px;">Plates linked to this door</div>`;
+        if (!plates.length) html += `<div style="color:#7d8590; font-size:0.8rem;">None</div>`;
+        else html += `<ul style="margin:4px 0 0 16px; padding:0;">${plates.map(p => `<li>${escapeAttr(p.id || '(unnamed)')}</li>`).join('')}</ul>`;
+    }
     
     html += `<button id="prop-save" class="secondary-btn" style="width:100%; margin-top:10px; border-color:#0ff; color:#0ff;">Apply</button>`;
     panel.innerHTML = html;
     
+    const linkSelect = document.getElementById('prop-links');
+    if (linkSelect) {
+        linkSelect.onchange = () => {
+            selectedEntity.linkedIds = readLinkedIdsFromSelect(linkSelect);
+        };
+    }
+
     document.getElementById('prop-save').onclick = () => {
         pushUndo();
         selectedEntity.x = parseFloat(document.getElementById('prop-x').value);
@@ -451,8 +499,9 @@ function updatePropertiesPanel() {
         if (document.getElementById('prop-w')) selectedEntity.w = parseFloat(document.getElementById('prop-w').value);
         if (document.getElementById('prop-h')) selectedEntity.h = parseFloat(document.getElementById('prop-h').value);
         if (document.getElementById('prop-id')) selectedEntity.id = document.getElementById('prop-id').value;
-        if (document.getElementById('prop-link')) selectedEntity.linkedIds = [document.getElementById('prop-link').value];
+        if (linkSelect) selectedEntity.linkedIds = readLinkedIdsFromSelect(linkSelect);
         if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
+        updatePropertiesPanel();
     };
 }
 
