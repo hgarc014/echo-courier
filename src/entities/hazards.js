@@ -29,6 +29,7 @@ export class Laser extends Entity {
 
 const CHASE_DRONE_LINGER = 75;
 const CHASE_DRONE_SPEED = 4.5;
+const CAMERA_TRACK_TURN = 0.08;
 const GUARD_LOST_SIGHT = 60;
 const GUARD_CHASE_SPEED = 2.6;
 const GUARD_CATCH_PAD = 4;
@@ -38,6 +39,7 @@ export class SweepCamera extends Entity {
         super(x, y, 30, 30, 'camera');
         this.baseAngle=startAngle; this.sweepRange=sweepRange; this.currentAngle=startAngle; this.sweepProgress=0; this.sweepDir=0.01;
         this.seesPlayer = false;
+        this.trackingPlayer = false;
         this.chaseDrone = null;
     }
     _inCone(tx, ty) {
@@ -47,6 +49,28 @@ export class SweepCamera extends Entity {
         while(diff>Math.PI) diff-=Math.PI*2; while(diff<-Math.PI) diff+=Math.PI*2;
         return Math.abs(diff)<0.35;
     }
+    _steerToward(tx, ty) {
+        const dx = (tx + 15) - (this.x + 15);
+        const dy = (ty + 15) - (this.y + 15);
+        let diff = Math.atan2(dy, dx) - this.currentAngle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        if (diff > CAMERA_TRACK_TURN) diff = CAMERA_TRACK_TURN;
+        else if (diff < -CAMERA_TRACK_TURN) diff = -CAMERA_TRACK_TURN;
+        this.currentAngle += diff;
+    }
+    _resumeSweepFromCurrent() {
+        if (!this.sweepRange) {
+            this.sweepProgress = 0;
+            this.baseAngle = this.currentAngle;
+            return;
+        }
+        let p = (this.currentAngle - this.baseAngle) / this.sweepRange;
+        if (p > 1) p = 1;
+        else if (p < -1) p = -1;
+        this.sweepProgress = p;
+        this.baseAngle = this.currentAngle - p * this.sweepRange;
+    }
     _ensureChaseDrone() {
         if (this.chaseDrone && this.chaseDrone.alive) return;
         this.chaseDrone = new Drone([{ x: this.x, y: this.y }], { role: 'chase', ownerCamera: this });
@@ -54,11 +78,19 @@ export class SweepCamera extends Entity {
         SFX.droneAlert();
     }
     update(player) {
-        this.sweepProgress+=this.sweepDir; if (this.sweepProgress>=1 || this.sweepProgress<=-1) this.sweepDir*=-1;
-        this.currentAngle = this.baseAngle + (this.sweepProgress * this.sweepRange);
-
         // Body + cloak only. Packages (including grounded contraband) do not trip the cone.
         this.seesPlayer = player.cloakTimer <= 0 && this._inCone(player.x, player.y);
+        if (this.seesPlayer) {
+            this._steerToward(player.x, player.y);
+            this.trackingPlayer = true;
+        } else {
+            if (this.trackingPlayer) {
+                this._resumeSweepFromCurrent();
+                this.trackingPlayer = false;
+            }
+            this.sweepProgress+=this.sweepDir; if (this.sweepProgress>=1 || this.sweepProgress<=-1) this.sweepDir*=-1;
+            this.currentAngle = this.baseAngle + (this.sweepProgress * this.sweepRange);
+        }
         let triggerAlarm = this.seesPlayer;
         for (let g of state.activeGhosts) {
             if (g.isActive && !g.cloakActive && this._inCone(g.x, g.y)) triggerAlarm = true;
@@ -111,7 +143,9 @@ const BOSS_PHASE_FLASH = 36;
 const BOSS_SPREAD = 0.4;
 const BOSS_SHOT_SPEED = 8;
 const BOSS_LANE_LEN = 320;
-const BOSS_COOLDOWN = { 3: 60, 2: 45, 1: 30 };
+const BOSS_RANGE = 400;
+const BOSS_LOCK_TICKS = 90;
+const BOSS_COOLDOWN = { 3: 96, 2: 48, 1: 36 };
 const BOSS_TELEGRAPH = { 3: 18, 2: 15, 1: 12 };
 
 function bossTelegraphTicks(hp) {
@@ -208,6 +242,42 @@ export class ShooterRobot extends Entity {
         this.telegraphArmed = false;
         this.phaseChangeTimer = 0;
         this.muzzleFlash = 0;
+        this.lockTarget = null;
+        this.lockTimer = 0;
+    }
+    _targetVisible(t) {
+        if (!t) return false;
+        const dist = Math.hypot(t.x - this.x, t.y - this.y);
+        if (dist >= BOSS_RANGE) return false;
+        return !lineOfSightBlocked(this.x + 17, this.y + 17, t.x + 15, t.y + 15);
+    }
+    _pickTarget(player, activeGhosts) {
+        const playerVisible = player.cloakTimer <= 0 && this._targetVisible(player);
+        const ghosts = activeGhosts.filter(g => g.isActive && !g.cloakActive && this._targetVisible(g));
+        if (this.lockTimer > 0) this.lockTimer--;
+
+        // Prefer the uncloaked player whenever they are in range with LOS.
+        if (playerVisible) {
+            this.lockTarget = player;
+            this.lockTimer = BOSS_LOCK_TICKS;
+            return player;
+        }
+
+        const stillLocked = this.lockTarget && this.lockTarget !== player
+            && this.lockTimer > 0 && ghosts.includes(this.lockTarget);
+        if (stillLocked) return this.lockTarget;
+
+        // Reacquire: do not stay glued to the previous nearest ghost.
+        const pool = ghosts.filter(g => g !== this.lockTarget);
+        const choices = pool.length ? pool : ghosts;
+        let best = null; let bestDist = Infinity;
+        for (let t of choices) {
+            const dist = Math.hypot(t.x - this.x, t.y - this.y);
+            if (dist < bestDist) { bestDist = dist; best = t; }
+        }
+        this.lockTarget = best;
+        this.lockTimer = best ? BOSS_LOCK_TICKS : 0;
+        return best;
     }
     takeHit() {
         if (this.hp <= 0) return;
@@ -262,16 +332,7 @@ export class ShooterRobot extends Entity {
             return;
         }
         
-        let targets = [];
-        if (player.cloakTimer <= 0) targets.push(player);
-        activeGhosts.filter(g=>g.isActive && !g.cloakActive).forEach(g=>targets.push(g));
-        let bestTarget = null; let bestDist = Infinity;
-        for (let t of targets) {
-            let dx = t.x - this.x; let dy = t.y - this.y; let dist = Math.hypot(dx, dy);
-            if (dist < 400 && !lineOfSightBlocked(this.x+17, this.y+17, t.x+15, t.y+15)) {
-                if (dist < bestDist) { bestDist = dist; bestTarget = t; }
-            }
-        }
+        let bestTarget = this._pickTarget(player, activeGhosts);
         
         if (this.hp === 1 && bestTarget) {
             // Unhinged Chase Mode
@@ -305,13 +366,6 @@ export class ShooterRobot extends Entity {
                 SFX.robotShoot();
                 this.muzzleFlash = 6;
                 state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a)*BOSS_SHOT_SPEED, Math.sin(a)*BOSS_SHOT_SPEED));
-                
-                // Phase 2 or Phase 3 Multishot
-                if (this.hp <= 2) {
-                    let spread = BOSS_SPREAD;
-                    state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a+spread)*BOSS_SHOT_SPEED, Math.sin(a+spread)*BOSS_SHOT_SPEED));
-                    state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a-spread)*BOSS_SHOT_SPEED, Math.sin(a-spread)*BOSS_SHOT_SPEED));
-                }
                 this.fireCooldown = bossFireCooldown(this.hp);
                 this.telegraphArmed = false;
                 this.windingUp = false;
@@ -354,7 +408,7 @@ export class ShooterRobot extends Entity {
         }
 
         if (this.windingUp) {
-            drawBossShotLanes(ctx, cx, cy, this.facingAngle, charge, this.hp <= 2);
+            drawBossShotLanes(ctx, cx, cy, this.facingAngle, charge, false);
         }
 
         if (stunned) {
