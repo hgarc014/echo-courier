@@ -677,11 +677,6 @@ function updatePropertiesPanel() {
     };
 }
 
-        if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
-        updatePropertiesPanel();
-    };
-}
-
 export function drawEditorOverlay(ctx) {
     if (!selectedEntity) return;
     ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
