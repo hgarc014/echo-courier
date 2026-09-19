@@ -197,13 +197,25 @@ export function initEditor(canvas, ctx) {
         updatePropertiesPanel();
     };
 
-    document.getElementById('editor-delete-btn').onclick = () => {
+    function deleteSelectedEntity() {
         if (!selectedEntity) return;
         ['walls','doors','plates','lasers','packages','guards','cameras','winds','statics','cracks','robots','drones'].forEach(list => {
             state[list] = state[list].filter(e => e !== selectedEntity);
         });
         selectedEntity = null; updatePropertiesPanel();
-    };
+    }
+
+    document.getElementById('editor-delete-btn').onclick = () => deleteSelectedEntity();
+
+    // Mac Delete key often emits Backspace; honor both when not typing in a field.
+    window.addEventListener('keydown', (e) => {
+        if (state.gameState !== 'EDITOR') return;
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+        e.preventDefault();
+        deleteSelectedEntity();
+    });
 
     document.getElementById('editor-export').onclick = () => {
         document.getElementById('editor-json').value = currentLayoutJson();
