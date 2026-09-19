@@ -1,6 +1,6 @@
 import { state, getPlayerRank } from '../core/state.js';
 import { Entity } from './base.js';
-import { AABB, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from '../core/physics.js';
+import { AABB, getDashDestination, resolveDashFacing, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
 import { pickCourierFrame } from '../core/atlas.js';
 
@@ -32,8 +32,9 @@ function drawCourier(ctx, entity, opts) {
     const applyTint = !(useAtlas && picked.kind === 'cloak');
 
     if (dashing && img) {
-        const dirX = entity.facingX || 1;
-        const dirY = entity.facingY || 0;
+        const dir = resolveDashFacing(entity.facingX, entity.facingY);
+        const dirX = dir.x;
+        const dirY = dir.y;
         for (let i = 2; i >= 1; i--) {
             drawSprite(ctx, img, entity.x - dirX * i * 8, entity.y - dirY * i * 8, entity.w, entity.h, {
                 tint: applyTint ? tint : null,
@@ -93,7 +94,8 @@ export class Ghost extends Entity {
     constructor(id, runData) {
         const firstStep = runData?.[0] || {};
         super(firstStep.x ?? -100, firstStep.y ?? -100, 30, 30, 'player'); this.id=id; this.runData=runData; this.isActive=true;
-        this.localTick=0; this.lastStateIndex=0; this.cloakTimer=0; this.facingX=firstStep.facingX || 1; this.facingY=firstStep.facingY || 0;
+        const initFacing = resolveDashFacing(firstStep.facingX, firstStep.facingY);
+        this.localTick=0; this.lastStateIndex=0; this.cloakTimer=0; this.facingX=initFacing.x; this.facingY=initFacing.y;
         this.cloakActive = false;
         this.intendedDx = 0;
         this.intendedDy = 0;
@@ -116,7 +118,7 @@ export class Ghost extends Entity {
         
         this.cloakTimer = step.cloakTimer || 0;
         this.cloakActive = this.cloakTimer > 0;
-        this.facingX = step.facingX || 0; this.facingY = step.facingY || 0;
+        this.facingX = step.facingX ?? 0; this.facingY = step.facingY ?? 0;
         
         let interactJustPressed = !isPastEnd && step.interact && this.lastStateIndex !== stateIndex;
         let tossJustPressed = !isPastEnd && step.toss && this.lastStateIndex !== stateIndex;
@@ -124,7 +126,8 @@ export class Ghost extends Entity {
         this.lastStateIndex = stateIndex;
 
         if (dashJustPressed && this.dashCooldown <= 0) {
-            let dest = getDashDestination(this.x, this.y, this.facingX || 1, this.facingY || 0, 120, this.w, this.h);
+            const dir = resolveDashFacing(this.facingX, this.facingY);
+            let dest = getDashDestination(this.x, this.y, dir.x, dir.y, 120, this.w, this.h);
             this.x = dest.x;
             this.y = dest.y;
             this.dashCooldown = 60;
