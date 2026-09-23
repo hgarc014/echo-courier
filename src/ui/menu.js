@@ -1,13 +1,13 @@
 import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities } from '../core/state.js';
-import { LEVELS, TUTORIAL_LEVEL_INDICES } from '../data/levels.js';
+import { LEVELS } from '../data/levels.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
 
 export function showSubMenu(menuId) {
-    document.getElementById('tutorial-prompt').classList.add('hidden');
+    document.getElementById('tutorial-prompt')?.classList.add('hidden');
     document.getElementById('main-menu-nav').classList.add('hidden');
     document.getElementById('sub-levels').classList.add('hidden');
-    document.getElementById('sub-tutorials').classList.add('hidden');
+    document.getElementById('sub-tutorials')?.classList.add('hidden');
     document.getElementById('sub-shop').classList.add('hidden');
     document.getElementById('sub-settings').classList.add('hidden');
     if (menuId === 'main') document.getElementById('main-menu-nav').classList.remove('hidden');
@@ -50,7 +50,7 @@ export function initMenu() {
     let uiLevelGrid = document.getElementById('level-select-grid');
     uiLevelGrid.innerHTML = '';
     let uiTutorialGrid = document.getElementById('tutorial-select-grid');
-    uiTutorialGrid.innerHTML = '';
+    if (uiTutorialGrid) uiTutorialGrid.innerHTML = '';
     
     let rankData = ["Junior Courier", "Route Courier", "Security Courier", "Temporal Courier", "Loopmaster"];
     let displayRank = rankData[getPlayerRank()] || "Senior Courier";
@@ -77,7 +77,7 @@ export function initMenu() {
     preloadDialogVoice().finally(() => refreshVoiceEngineStatus());
     
     LEVELS.forEach((lvl, idx) => {
-        if (lvl.isTutorial) return;
+        if (lvl.isTutorial || lvl.isSandbox) return;
         let isDev = document.getElementById('dev-mode-checkbox').checked;
         let unlocked = isDev || idx <= state.maxUnlockedLevel;
         let btn = document.createElement('button');
@@ -92,15 +92,6 @@ export function initMenu() {
         if (hasGold) btn.title = 'Gold star challenge complete';
         if (unlocked) btn.onclick = () => startGame(idx);
         uiLevelGrid.appendChild(btn);
-    });
-
-    TUTORIAL_LEVEL_INDICES.forEach((idx) => {
-        let lvl = LEVELS[idx];
-        let btn = document.createElement('button');
-        btn.className = 'level-btn unlocked';
-        btn.innerHTML = `Tutorial ${lvl.tutorialNumber}: ${lvl.name.replace(/^Tutorial \d+:\s*/, '')}`;
-        btn.onclick = () => startGame(idx);
-        uiTutorialGrid.appendChild(btn);
     });
     
     let shopDash = document.getElementById('shop-dash');
