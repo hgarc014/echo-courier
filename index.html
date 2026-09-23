@@ -141,6 +141,10 @@
         <div class="play-stage">
             <div class="game-area">
                 <canvas id="gameCanvas" width="800" height="600"></canvas>
+                <div id="demo-overlay" class="demo-overlay hidden">
+                    <button type="button" id="demo-skip-btn" class="demo-skip-btn">Skip Demo</button>
+                    <p id="demo-caption" class="demo-caption hidden"></p>
+                </div>
                 <div id="dialog-overlay" class="overlay dialog-overlay hidden">
                     <div class="dialog-panel">
                         <div class="dialog-chip">TRANSMISSION</div>
@@ -273,6 +277,13 @@
           <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-cloak"> cloak</label>
           <label><input type="checkbox" id="editor-meta-ghostShield"> ghostShield</label>
         </div>
+        <h4 style="margin: 12px 0 8px;">In-Game Demo</h4>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-autoplay" checked> Auto-play on first enter</label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-skippable" checked> Skippable</label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Demo steps (JSON array)
+          <textarea id="editor-meta-demo-steps" rows="8" placeholder='[{ "type": "caption", "text": "..." }]' style="width:100%; padding:6px; background:#000; color:var(--accent-safe); border:1px solid #444; font-family:monospace; font-size:0.75rem;"></textarea>
+        </label>
+        <p style="font-size:0.7rem; color:#7d8590; margin:0 0 8px;">Leave empty for no demo. Apply, then save/load and playtest round-trip the script.</p>
         <button class="secondary-btn" id="editor-meta-apply" style="width:100%; margin-top:0; border-color:#0ff; color:#0ff;">Apply Level Config</button>
         <hr style="border-color:#333; margin: 15px 0;">
         <h4 style="margin-bottom: 10px;">Properties Inspector</h4>

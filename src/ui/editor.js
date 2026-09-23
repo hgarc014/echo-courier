@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package } from '../entities/interactables.js';
@@ -44,7 +44,8 @@ const DEFAULT_EDITOR_META = () => ({
     story: { speaker: '', text: '' },
     obj: '',
     grants: [],
-    maxGhosts: 3
+    maxGhosts: 3,
+    demo: undefined
 });
 
 export function ensureEditorLevelMeta() {
@@ -65,7 +66,8 @@ export function setEditorLevelMetaFromLevel(level) {
         },
         obj: level.obj || '',
         grants: [...(level.grants || [])],
-        maxGhosts: level.maxGhosts ?? 3
+        maxGhosts: level.maxGhosts ?? 3,
+        demo: cloneDemo(level.demo)
     };
     return state.editorLevelMeta;
 }
@@ -85,12 +87,42 @@ function syncLevelConfigForm() {
         const el = document.getElementById('editor-meta-' + id);
         if (el) el.checked = grants.has(id);
     }
+    const demo = meta.demo;
+    const autoEl = document.getElementById('editor-meta-demo-autoplay');
+    const skipEl = document.getElementById('editor-meta-demo-skippable');
+    const stepsEl = document.getElementById('editor-meta-demo-steps');
+    if (autoEl) autoEl.checked = demo ? demo.autoPlayOnFirstEnter !== false : true;
+    if (skipEl) skipEl.checked = demo ? demo.skippable !== false : true;
+    if (stepsEl) {
+        stepsEl.value = demo?.steps?.length ? JSON.stringify(demo.steps, null, 2) : '';
+    }
+}
+
+function parseDemoFromForm() {
+    const raw = document.getElementById('editor-meta-demo-steps')?.value?.trim() || '';
+    const autoPlayOnFirstEnter = document.getElementById('editor-meta-demo-autoplay')?.checked !== false;
+    const skippable = document.getElementById('editor-meta-demo-skippable')?.checked !== false;
+    if (!raw) return undefined;
+    let steps;
+    try { steps = JSON.parse(raw); }
+    catch (err) {
+        throw new Error('Demo steps JSON is invalid');
+    }
+    if (!Array.isArray(steps)) throw new Error('Demo steps must be a JSON array');
+    return cloneDemo({ autoPlayOnFirstEnter, skippable, steps });
 }
 
 function applyLevelConfigForm() {
     const grants = [];
     for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
         if (document.getElementById('editor-meta-' + id)?.checked) grants.push(id);
+    }
+    let demo;
+    try {
+        demo = parseDemoFromForm();
+    } catch (err) {
+        setSaveStatus(err.message || 'Demo JSON invalid', false);
+        return;
     }
     state.editorLevelMeta = {
         name: ensureEditorLevelMeta().name || 'Editor Level',
@@ -100,7 +132,8 @@ function applyLevelConfigForm() {
         },
         obj: document.getElementById('editor-meta-obj')?.value || '',
         grants,
-        maxGhosts: parseInt(document.getElementById('editor-meta-maxghosts')?.value, 10) || 0
+        maxGhosts: parseInt(document.getElementById('editor-meta-maxghosts')?.value, 10) || 0,
+        demo
     };
     setSaveStatus('Level config applied');
 }
@@ -271,9 +304,8 @@ export function syncEditorUi() {
     const hEl = document.getElementById('editor-map-h');
     if (wEl) wEl.value = w;
     if (hEl) hEl.value = h;
-    document.getElementById('editor-meta-apply')?.addEventListener('click', () => {
-        applyLevelConfigForm();
-    });
+    const applyBtn = document.getElementById('editor-meta-apply');
+    if (applyBtn) applyBtn.onclick = () => applyLevelConfigForm();
     ensureEditorLevelMeta();
     syncLevelConfigForm();
     window.refreshEditorLevelConfigForm = syncLevelConfigForm;

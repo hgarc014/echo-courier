@@ -24,22 +24,37 @@ export const stick = { x: 0, y: 0, active: false };
 
 let touchUiLocked = false;
 let lastAdvanceAt = 0;
+let gameplayInputLocked = false;
 
-function pressKey(key) {
+export function setGameplayInputLocked(on) {
+    gameplayInputLocked = !!on;
+}
+
+export function isGameplayInputLocked() {
+    return gameplayInputLocked;
+}
+
+export function pressKey(key) {
     if (!Object.prototype.hasOwnProperty.call(keys, key)) return;
     if (!keys[key]) justPressed[key] = true;
     keys[key] = true;
     pendingRelease[key] = false;
 }
 
-function queueRelease(key) {
+export function queueRelease(key) {
     if (!Object.prototype.hasOwnProperty.call(keys, key)) return;
     pendingRelease[key] = true;
 }
 
-function tapKey(key) {
+export function tapKey(key) {
     pressKey(key);
     queueRelease(key);
+}
+
+export function clearStick() {
+    stick.active = false;
+    stick.x = 0;
+    stick.y = 0;
 }
 
 function shouldPreventDefault(e, key) {
@@ -52,6 +67,7 @@ window.addEventListener('keydown', e => {
     const key = CODE_TO_KEY[e.code];
     if (!key) return;
     if (shouldPreventDefault(e, key)) e.preventDefault();
+    if (gameplayInputLocked && key !== 'esc') return;
     if (e.repeat) {
         keys[key] = true;
         pendingRelease[key] = false;
@@ -131,6 +147,7 @@ function bindHoldButton(el) {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         const key = el.getAttribute('data-key');
         if (!key) return;
+        if (gameplayInputLocked && key !== 'esc') return;
         e.preventDefault();
         e.stopPropagation();
         try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
@@ -223,6 +240,7 @@ function bindStick(zone) {
 
     zone.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (gameplayInputLocked) return;
         e.preventDefault();
         activeId = e.pointerId;
         try { zone.setPointerCapture?.(e.pointerId); } catch (_) {}
@@ -233,6 +251,7 @@ function bindStick(zone) {
 
     zone.addEventListener('pointermove', (e) => {
         if (e.pointerId !== activeId) return;
+        if (gameplayInputLocked) return;
         e.preventDefault();
         applyPointer(e.clientX, e.clientY);
     });
