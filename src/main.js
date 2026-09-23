@@ -3,7 +3,7 @@ import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, sy
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START, cloneDemo } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
@@ -230,10 +230,6 @@ function getNextLevelIndex(levelIndex) {
     const level = LEVELS[levelIndex];
     if (!level) return null;
     if (level.isSandbox || level.isPlaytest) return null;
-    if (level.isTutorial) {
-        const tutorialPos = TUTORIAL_LEVEL_INDICES.indexOf(levelIndex);
-        return tutorialPos >= 0 && tutorialPos < TUTORIAL_LEVEL_INDICES.length - 1 ? TUTORIAL_LEVEL_INDICES[tutorialPos + 1] : null;
-    }
     return levelIndex < CAMPAIGN_LEVEL_COUNT - 1 ? levelIndex + 1 : null;
 }
 
@@ -258,7 +254,7 @@ function buildProjectedEchoPath(runData) {
 }
 
 function hasCompletedTutorialTrack() {
-    return TUTORIAL_LEVEL_INDICES.length > 0 && TUTORIAL_LEVEL_INDICES.every(index => state.tutorialProgress[index]);
+    return true;
 }
 
 function getRequiredPackages() {
@@ -286,14 +282,14 @@ function updateDeliveryProgressUI() {
 function showTutorialPrompt() {
     document.getElementById('main-menu-nav').classList.add('hidden');
     document.getElementById('sub-levels').classList.add('hidden');
-    document.getElementById('sub-tutorials').classList.add('hidden');
+    document.getElementById('sub-tutorials')?.classList.add('hidden');
     document.getElementById('sub-shop').classList.add('hidden');
     document.getElementById('sub-settings').classList.add('hidden');
-    document.getElementById('tutorial-prompt').classList.remove('hidden');
+    document.getElementById('tutorial-prompt')?.classList.remove('hidden');
 }
 
 function hideTutorialPrompt() {
-    document.getElementById('tutorial-prompt').classList.add('hidden');
+    document.getElementById('tutorial-prompt')?.classList.add('hidden');
 }
 
 function localizeControlHints(text) {
@@ -1084,7 +1080,7 @@ function update() {
             saveState();
             if (chalMsg) { chalMsg.innerHTML = "Tutorial complete. You can replay this module any time from TRAINING."; chalMsg.style.color = '#00f3ff'; }
             let nextIndex = getNextLevelIndex(state.currentLevelIndex);
-            nextBtn.innerText = nextIndex !== null ? "NEXT TUTORIAL" : "RETURN TO MENU";
+            nextBtn.innerText = nextIndex !== null ? "NEXT LEVEL" : "RETURN TO MENU";
             if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         } else {
             let isFirstTimeLevel = (state.currentLevelIndex == parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'));
@@ -1326,23 +1322,20 @@ window.onload = () => {
     document.body.addEventListener('keydown', () => { unlockAudio(); });
     window.startNextAvailableLevel = () => {
         let devModeCheckbox = document.getElementById('dev-mode-checkbox');
-        if (!devModeCheckbox.checked && !hasCompletedTutorialTrack()) {
-            showTutorialPrompt();
-            return;
-        }
         let lvl = devModeCheckbox.checked ? 0 : Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
         startGame(lvl);
     };
-    window.startTutorialTrack = () => startGame(TUTORIAL_LEVEL_START);
+    window.startTutorialTrack = () => startGame(0);
     window.startTutorialTrackFromPrompt = () => {
         hideTutorialPrompt();
-        startGame(TUTORIAL_LEVEL_START);
+        startGame(0);
     };
     window.skipTutorialPrompt = () => {
         hideTutorialPrompt();
         let lvl = Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
         startGame(lvl);
     };
+    window.SANDBOX_LEVEL_INDEX = SANDBOX_LEVEL_INDEX;
     
     window.startEditorMode = (jsonString, levelIndex = null) => {
         state.gameState = 'EDITOR';
