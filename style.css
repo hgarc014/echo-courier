@@ -1028,13 +1028,37 @@ body.touch-ui .demo-skip-btn {
 
 
 
-/* Hint demo popup card */
+/* Hint demo: small top chrome over the live canvas, caption at the bottom. */
 .demo-overlay.demo-overlay-popup {
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
-    padding: 24px;
-    background: rgba(5, 7, 10, 0.55);
+    padding: 12px 14px 22px;
+    background: rgba(5, 7, 10, 0.35);
     pointer-events: auto;
+}
+.demo-overlay.demo-overlay-popup .demo-popup-panel {
+    width: 100%;
+    max-width: 100%;
+    flex: 0 0 auto;
+    gap: 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    /* Translucent top bar. Stay position:static so the caption's
+       absolute box is the overlay, not this panel. */
+    position: static;
+    background: rgba(8, 12, 18, 0.62);
+    border-color: rgba(0, 243, 255, 0.45);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+.demo-overlay.demo-overlay-popup .demo-caption {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    width: fit-content;
+    max-width: 92%;
+    margin: 0;
+    pointer-events: none;
 }
 .demo-overlay.demo-overlay-full {
     justify-content: flex-end;

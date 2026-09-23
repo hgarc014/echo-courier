@@ -884,9 +884,14 @@ function update() {
     let unlocked = getUnlockedAbilities();
     let hasDash = unlocked.includes('dash'); let hasToss = unlocked.includes('toss'); let hasCloak = unlocked.includes('cloak');
 
+    const demoWasActive = isDemoActive();
     let interactJustPressed = isKeyJustPressed('space');
     updateHintPlates(interactJustPressed);
-    if (isDemoActive()) { updatePrevKeys(); return; }
+    // Only abort the rest of THIS frame if we just opened a hint demo
+    // (avoid treating the same Space as package pickup). While a demo is
+    // already active, keep running player/ghost/plate updates so demoPlayback
+    // injects actually animate Approach B on the main canvas.
+    if (!demoWasActive && isDemoActive()) { updatePrevKeys(); return; }
     let tossJustPressed = hasToss && isKeyJustPressed('f');
     let dashJustPressed = hasDash && isKeyJustPressed('shift');
     let cloakJustPressed = hasCloak && isKeyJustPressed('c');
