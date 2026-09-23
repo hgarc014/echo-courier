@@ -285,6 +285,162 @@ const LEVEL5_DEMO = {
     ]
 };
 
+const LEVEL6_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 50, y: 300 },
+    deliveryZone: { x: 50, y: 240, w: 100, h: 100 },
+    walls: [
+        { x: 0, y: 170, w: 800, h: 20 },
+        { x: 0, y: 360, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        { x: 250, y: 170, w: 40, h: 80 },
+        { x: 250, y: 330, w: 40, h: 50 },
+        { x: 550, y: 170, w: 40, h: 80 },
+        { x: 550, y: 330, w: 40, h: 50 }
+    ],
+    doors: [
+        { x: 250, y: 250, w: 40, h: 80, id: "d1", type: "standard" },
+        { x: 550, y: 250, w: 40, h: 80, id: "d2", type: "standard" }
+    ],
+    plates: [
+        { x: 190, y: 200, linkedIds: ["d1"], id: "p1", type: "standard" },
+        { x: 500, y: 200, linkedIds: ["d2"], id: "p2", type: "standard" }
+    ],
+    packages: [{ x: 650, y: 300, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
+    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
+    hints: [{ id: "hint_intro", x: 70, y: 280, demoId: "intro", autoOpen: false, title: "Second Echo" }]
+};
+
+const LEVEL7_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 80, y: 300 },
+    deliveryZone: { x: 640, y: 250, w: 100, h: 100 },
+    walls: [
+        { x: 0, y: 0, w: 800, h: 20 },
+        { x: 0, y: 580, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        { x: 380, y: 20, w: 40, h: 200 },
+        { x: 380, y: 380, w: 40, h: 200 }
+    ],
+    doors: [{ x: 380, y: 220, w: 40, h: 160, id: "d1", type: "standard" }],
+    plates: [{ x: 140, y: 280, linkedIds: ["d1"], id: "p1", type: "standard" }],
+    packages: [{ x: 200, y: 300, id: "pkg1", packageType: "heavy", requiredForDelivery: true }],
+    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
+    hints: [{ id: "hint_intro", x: 80, y: 420, demoId: "intro", autoOpen: false, title: "Heavy Cargo" }]
+};
+
+const LEVEL8_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 70, y: 280 },
+    deliveryZone: { x: 640, y: 250, w: 100, h: 100 },
+    walls: [
+        { x: 0, y: 0, w: 800, h: 20 },
+        { x: 0, y: 580, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        { x: 380, y: 20, w: 40, h: 180 },
+        { x: 380, y: 400, w: 40, h: 180 }
+    ],
+    doors: [{ x: 380, y: 200, w: 40, h: 200, id: "td1", type: "timer", openT: 90, closedT: 90 }],
+    plates: [],
+    packages: [{ x: 120, y: 300, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
+    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
+    hints: [{ id: "hint_intro", x: 70, y: 420, demoId: "intro", autoOpen: false, title: "Timer Door" }]
+};
+
+const LEVEL9_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 50, y: 300 },
+    deliveryZone: { x: 50, y: 50, w: 100, h: 100 },
+    walls: [
+        { x: 0, y: 0, w: 800, h: 20 },
+        { x: 0, y: 580, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 }
+    ],
+    doors: [],
+    plates: [
+        { x: 150, y: 300, linkedIds: ["ls1"], id: "p1", type: "standard" },
+        { x: 400, y: 300, linkedIds: ["ls2"], id: "p2", type: "standard" }
+    ],
+    packages: [{ x: 700, y: 300, id: "pkg1", packageType: "fragile", requiredForDelivery: true }],
+    lasers: [
+        { x: 300, y: 20, w: 20, h: 560, id: "ls1" },
+        { x: 550, y: 20, w: 20, h: 560, id: "ls2" }
+    ],
+    guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
+    hints: [{ id: "hint_intro", x: 50, y: 420, demoId: "intro", autoOpen: false, title: "Fragile Cargo" }]
+};
+
+const LEVEL6_DEMO = {
+    autoPlayOnFirstEnter: false,
+    skippable: true,
+    steps: [
+        { type: 'caption', text: 'Two doors. One echo cannot hold both' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'Stand on the first plate' },
+        { type: 'move-to', x: 195, y: 205, tolerance: 14 },
+        { type: 'wait', ticks: 30 },
+        { type: 'caption', text: 'Loop, then park a second echo on the far plate' },
+        { type: 'wait', ticks: 55 },
+        { type: 'caption', text: 'Both doors stay open. Walk the package back' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 40 },
+        { type: 'end' }
+    ]
+};
+
+const LEVEL7_DEMO = {
+    autoPlayOnFirstEnter: false,
+    skippable: true,
+    steps: [
+        { type: 'caption', text: 'Heavy cargo slows you down' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'Loop an echo onto the plate before you drag' },
+        { type: 'wait', ticks: 55 },
+        { type: 'caption', text: 'The echo holds the door. You haul the package through' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 40 },
+        { type: 'end' }
+    ]
+};
+
+const LEVEL8_DEMO = {
+    autoPlayOnFirstEnter: false,
+    skippable: true,
+    steps: [
+        { type: 'caption', text: 'This door cycles on a timer' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'No plate. Cross while it is open' },
+        { type: 'wait', ticks: 55 },
+        { type: 'caption', text: 'Grab the package and time your crossing' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 40 },
+        { type: 'end' }
+    ]
+};
+
+const LEVEL9_DEMO = {
+    autoPlayOnFirstEnter: false,
+    skippable: true,
+    steps: [
+        { type: 'caption', text: 'Lasers vaporize fragile cargo' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'Echo-hold both plates to clear the beams' },
+        { type: 'wait', ticks: 55 },
+        { type: 'caption', text: 'Then walk the package back to the zone' },
+        { type: 'wait', ticks: 50 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 40 },
+        { type: 'end' }
+    ]
+};
+
 export function cloneDemo(demo) {
     if (!demo || typeof demo !== 'object') return undefined;
     let steps = [];
@@ -305,12 +461,11 @@ export const LEVELS = [
     { name: "Level 3: Sweep Coverage", story: { speaker: "Sector Surveillance", text: "Camera grid online in Transit Spur C. Cloak is still locked behind procurement. Time the cone, use cover, and remember: discarded timelines trip the same sensors you do." }, obj: "One camera. Cross on the gap in the sweep. Echoes trigger cameras too.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL3_LAYOUT, demos: { intro: LEVEL3_DEMO } },
     { name: "Level 4: Overlapping Watch", story: { speaker: "Local Hub Manager", text: "They stacked a patrol and a camera on the same corridor. Budget says that is your problem. Coordinate echoes and keep the parcel moving." }, obj: "Guard and camera together. Hold the door, avoid both sensors, deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT, demos: { intro: LEVEL4_DEMO } },
     { name: "Level 5: Unstable Deck", story: { speaker: "ChronoHaul Dispatch", text: "Maintenance skipped the subfloor again. Cracked plating collapses under courier mass. Dash implants are paywalled. Take the long walk and keep your echoes off the pit." }, obj: "Cracked floors collapse. No dash — path around and deliver with an echo on the door.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL5_LAYOUT, demos: { intro: LEVEL5_DEMO } },
-{ name: "Level 6: The Toss", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Delivery zone inaccessible by foot. Arm upgrade required. The Toss Protocol allows package projection across chasms. Again, if you're broke, try sprinting the collapsing walkway." }, obj: "Throw packages over the massive gap with Toss.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,250,100,200); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(550,20,40,230), new Wall(550,350,40,230)]; doors=[new Door('d1',550,250,40,100)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,120,40)); plates=[new PressurePlate('p1',150,150,'d1')]; packages=[new Package('pkg1',100,300,'standard')]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; } },
-    { name: "Level 7: Wind Tunnel", grants: ['dash'], story: { speaker: "Sector Surveillance", text: "Warning: Cross-ventilation active. Updrafts and downdrafts exceed 80 mph. Stepping into the air-stream will sweep you directly into the disposal lasers. Use your Dash module to bypass the streams entirely." }, obj: "Cross-winds sweep you away! Dash strictly over the air currents.", challenge: { desc: "Finish in 1 loop (No Ghosts)", check: () => state.pastRuns.length === 0 }, maxGhosts: 1, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,250,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; winds=[new WindTunnel(200,20,80,560,0,8), new WindTunnel(450,20,80,560,0,-8)]; lasers=[new Laser('ls1',200,540,80,40), new Laser('ls2',450,20,80,40)]; plates=[]; packages=[new Package('pkg1',100,300,'standard')]; doors=[]; guards=[]; cameras=[]; drones=[]; statics=[]; cracks=[]; robots=[]; projectiles=[]; } },
-    
-    { name: "Level 8: The Panopticon", grants: ['cloak'], story: { speaker: "Unknown Hacker [Encrypted]", text: "Hey. You're moving Contraband now. ChronoHaul is using you to traffic illegal temporal drives. The cameras here will trigger alarms even if you use a Cloak. Be careful." }, obj: "Use Cloak carefully. Contraband triggers alarms if seen!", unlocks: ['cloak'], challenge: { desc: "Do NOT use Cloak", check: () => state.runStats.cloaks === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,500,30,30,'player'); deliveryZone=new DeliveryZone(650,50,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(400,0,40,250),new Wall(400,330,40,270)]; doors=[new AlarmDoor('d1',400,250,40,80)]; cameras=[new SweepCamera(150,20,Math.PI/2,Math.PI/4)]; packages=[new Package('pkg1',100,100,'contraband')]; lasers=[]; guards=[]; drones=[]; plates=[]; winds=[]; statics=[]; cracks=[]; robots=[]; projectiles=[]; } },
-    { name: "Level 9: Noise Complaint", grants: ['toss'], story: { speaker: "Local Hub Manager", text: "We've got security drones patrolling the Anomaly sector. They investigate loud noises. Use Decoy boxes to ping their audio sensors. Keep the real cargo hidden." }, obj: "Drones investigate drops. Toss Decoys (blue) to lure them.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; drones=[new Drone([{x:400,y:100},{x:400,y:500}])]; packages=[new Package('pkg1',200,100,'decoy'),new Package('pkg2',50,500,'standard')]; doors=[]; plates=[]; lasers=[]; guards=[]; cameras=[]; winds=[]; statics=[]; cracks=[]; robots=[]; projectiles=[]; } },
-    
+    { name: "Level 6: Dual Airlock", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, double-echo clearance is live on this airlock. Two doors, two timelines. One logistics artifact cannot hold both gates. Park an echo on each plate and walk the parcel back." }, obj: "Two doors. Park an echo on each plate, then bring the package back.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL6_LAYOUT, demos: { intro: LEVEL6_DEMO } },
+    { name: "Level 7: Heavy Lifting", story: { speaker: "Local Hub Manager", text: "High-density cargo on your lane. Pick it up and your pace is cut in half. Loop an echo onto the plate before you start dragging, then haul the parcel through the door." }, obj: "Heavy package slows you. Echo holds the door; you drag the cargo through.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL7_LAYOUT, demos: { intro: LEVEL7_DEMO } },
+    { name: "Level 8: Timed Gate", story: { speaker: "Sector Surveillance", text: "Gate TD-1 is locked to a maintenance cycle. Plates are offline in this spur. The door opens and shuts on its own clock. Cross with the parcel while the gate is open." }, obj: "Timer door cycles open and shut. Carry the package through while it is open.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL8_LAYOUT, demos: { intro: LEVEL8_DEMO } },
+    { name: "Level 9: Fragile Grid", story: { speaker: "Local Hub Manager", text: "Class-4 fragile tech on this manifest. The laser grid vaporizes it on contact, and a live beam will burn you too. Hold both plates with echoes, then walk the cargo to the zone." }, obj: "Lasers vaporize fragile cargo. Echo-hold both plates, then deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 3, mapWidth: 800, mapHeight: 600, layout: LEVEL9_LAYOUT, demos: { intro: LEVEL9_DEMO } },
+
     { name: "Level 10: Fast Shipping", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Critical: Package is highly unstable. Detonation sequence activates upon handling. The company expects immediate delivery. Do not fail." }, obj: "Timed packages explode! Toss them over the gap instantly.", challenge: { desc: "Do NOT use Dash", check: () => state.runStats.dashes === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,40,40)); packages=[new Package('pkg1',100,300,'timed')]; doors=[]; plates=[]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; } },
     { name: "Level 11: Time Dilation", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; } },
     { name: "Level 12: Echo Crunch", story: { speaker: "Local Hub Manager", text: "Temporal budget exhausted. You are restricted to ONE echo. Corporate says zero margin for error. Get it done or your contract is terminated." }, obj: "Maximum 1 Echo Limit. Present Timeline must hold the gate.", challenge: { desc: "No Dash and No Cloak", check: () => state.runStats.dashes === 0 && state.runStats.cloaks === 0 }, maxGhosts: 1, setup: () => { player=new PlayerEntity(100,450,30,30,'player'); deliveryZone=new DeliveryZone(50,450,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(380,0,40,250),new Wall(380,330,40,270)]; doors=[new Door('d1',380,250,40,80)]; plates=[new TemporalPlate('p1',150,150,'d1', 'present')]; statics=[new StaticZone(100, 100, 100, 100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; packages=[new Package('pkg1',650,200,'fragile')]; robots=[]; projectiles=[]; } },
