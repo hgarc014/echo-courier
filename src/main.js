@@ -7,7 +7,7 @@ import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWal
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
-import { isDemoActive, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback } from './systems/demoPlayback.js';
+import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -358,6 +358,7 @@ function loadCurrentEntities() {
 function applyLoadedLevel(setupData) {
     if (!setupData) return;
     Object.assign(state, setupData);
+    if (!Array.isArray(state.hints)) state.hints = [];
     setMapSize(setupData.mapWidth || DEFAULT_MAP_WIDTH, setupData.mapHeight || DEFAULT_MAP_HEIGHT);
     resetPlayerLoopState();
     if (state.gameState !== 'EDITOR' && state.player) {
@@ -435,6 +436,167 @@ function maybeStartDemo(opts = {}) {
     startDemo(demo, { persistKey });
 }
 
+
+let hintDemoSnapshot = null;
+let hintReopenGateUntil = 0;
+let hintAutoOpened = new Set();
+let activeHintId = null;
+let hintDemoJustClosed = false;
+
+function resolveHintDemo(hint) {
+    if (!hint) return null;
+    if (hint.demo?.steps?.length) return cloneDemo(hint.demo);
+    const demoId = hint.demoId;
+    if (demoId && state.levelDemos?.[demoId]?.steps?.length) return cloneDemo(state.levelDemos[demoId]);
+    const lv = state.currentLevelMeta || LEVELS[state.currentLevelIndex];
+    if (demoId && lv?.demos?.[demoId]?.steps?.length) return cloneDemo(lv.demos[demoId]);
+    if (lv?.demo?.steps?.length) return cloneDemo(lv.demo);
+    if (state.currentLevelMeta?.demo?.steps?.length) return cloneDemo(state.currentLevelMeta.demo);
+    return null;
+}
+
+function captureHintDemoSnapshot() {
+    const layout = serializeLevel(state);
+    // Preserve live package/player positions in the layout snapshot
+    if (state.player) layout.player = { x: state.player.x, y: state.player.y };
+    if (Array.isArray(state.packages)) {
+        layout.packages = state.packages.map(p => ({
+            x: p.x, y: p.y, id: p.id,
+            packageType: p.type,
+            requiredForDelivery: p.requiredForDelivery !== false
+        }));
+    }
+    return {
+        layout,
+        pastRuns: JSON.parse(JSON.stringify(state.pastRuns || [])),
+        currentRun: JSON.parse(JSON.stringify(state.currentRun || [])),
+        currentTick: state.currentTick || 0,
+        alarmState: !!state.alarmState,
+        runStats: { ...(state.runStats || {}) },
+        camX: state.camX, camY: state.camY,
+        playerExtras: state.player ? {
+            x: state.player.x, y: state.player.y,
+            facingX: state.player.facingX, facingY: state.player.facingY,
+            dashCooldown: state.player.dashCooldown || 0,
+            cloakTimer: state.player.cloakTimer || 0,
+            tossCooldown: state.player.tossCooldown || 0
+        } : null,
+        packageExtras: (state.packages || []).map(p => ({
+            id: p.id, x: p.x, y: p.y, carriedBy: p.carriedBy, isDestroyed: !!p.isDestroyed,
+            wasPickedUp: !!p.wasPickedUp, countdown: p.countdown, tossTicks: p.tossTicks,
+            tossMax: p.tossMax, vx: p.vx, vy: p.vy
+        })),
+        doorStates: (state.doors || []).map(d => ({ id: d.id, isOpen: !!d.isOpen })),
+        hints: (state.hints || []).map(h => ({ id: h.id, x: h.x, y: h.y }))
+    };
+}
+
+function restoreHintDemoSnapshot(snap) {
+    if (!snap) return;
+    applyLoadedLevel(deserializeLevel(snap.layout));
+    state.pastRuns = snap.pastRuns || [];
+    state.currentRun = snap.currentRun || [];
+    state.currentTick = snap.currentTick || 0;
+    state.alarmState = !!snap.alarmState;
+    state.runStats = { ...(snap.runStats || {}) };
+    state.camX = snap.camX || 0;
+    state.camY = snap.camY || 0;
+    state.activeGhosts = (state.pastRuns || []).map((run, i) => new Ghost(i, run));
+    if (snap.playerExtras && state.player) {
+        Object.assign(state.player, snap.playerExtras);
+    }
+    if (Array.isArray(snap.packageExtras)) {
+        for (const pe of snap.packageExtras) {
+            const pkg = (state.packages || []).find(p => p.id === pe.id);
+            if (!pkg) continue;
+            Object.assign(pkg, pe);
+        }
+    }
+    if (Array.isArray(snap.doorStates)) {
+        for (const ds of snap.doorStates) {
+            const door = (state.doors || []).find(d => d.id === ds.id);
+            if (door) door.isOpen = ds.isOpen;
+        }
+    }
+    // Keep hint positions stable
+    if (Array.isArray(snap.hints) && Array.isArray(state.hints)) {
+        for (const hs of snap.hints) {
+            const hint = state.hints.find(h => h.id === hs.id);
+            if (hint) { hint.x = hs.x; hint.y = hs.y; }
+        }
+    }
+    document.getElementById('loop-count').innerText = state.pastRuns.length;
+    updateDeliveryProgressUI();
+    if (state.player) followWorldPoint(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+}
+
+function dismissHintDemo() {
+    const snap = hintDemoSnapshot;
+    hintDemoSnapshot = null;
+    activeHintId = null;
+    hintReopenGateUntil = (state.currentTick || 0) + 45;
+    hintDemoJustClosed = true;
+    if (snap) restoreHintDemoSnapshot(snap);
+    state.gameState = 'PLAYING';
+}
+
+function openHintDemo(hint) {
+    if (!hint || isDemoActive()) return false;
+    const demo = resolveHintDemo(hint);
+    if (!demo?.steps?.length) return false;
+    hintDemoSnapshot = captureHintDemoSnapshot();
+    activeHintId = hint.id;
+    // Freeze player progress visually by restarting entities for a clean demo stage
+    applyLoadedLevel(loadCurrentEntities());
+    state.pastRuns = [];
+    state.currentRun = [];
+    state.currentTick = 0;
+    state.activeGhosts = [];
+    state.alarmState = false;
+    state.failTimer = 0;
+    clearLoopFx?.();
+    const title = hint.title || 'Hint Demo';
+    const ok = startDemo(demo, {
+        mode: 'popup',
+        title,
+        persistKey: null,
+        onDismiss: () => dismissHintDemo()
+    });
+    if (!ok) {
+        restoreHintDemoSnapshot(hintDemoSnapshot);
+        hintDemoSnapshot = null;
+        activeHintId = null;
+        return false;
+    }
+    return true;
+}
+
+function playerOverlapsHint(hint) {
+    if (!state.player || !hint) return false;
+    return AABB(state.player.x, state.player.y, state.player.w, state.player.h, hint.x, hint.y, hint.w, hint.h);
+}
+
+function updateHintPlates(interactPressed) {
+    if (state.gameState !== 'PLAYING' || isDemoActive()) return;
+    const tick = state.currentTick || 0;
+    if (tick < hintReopenGateUntil) return;
+    const hints = state.hints || [];
+    let standing = null;
+    for (const hint of hints) {
+        if (playerOverlapsHint(hint)) { standing = hint; break; }
+    }
+    if (!standing) return;
+    if (standing.autoOpen && !hintAutoOpened.has(standing.id)) {
+        hintAutoOpened.add(standing.id);
+        openHintDemo(standing);
+        return;
+    }
+    if (interactPressed) {
+        openHintDemo(standing);
+    }
+}
+
+
 export function startGame(levelIndex) {
     unlockAudio();
     preloadDialogVoice().catch(() => {});
@@ -442,7 +604,12 @@ export function startGame(levelIndex) {
         showGameComplete();
         return; 
     }
-    if (isDemoActive()) stopDemo({ markSeen: false });
+    if (isDemoActive()) stopDemo({ markSeen: false, invokeDismiss: false });
+    hintDemoSnapshot = null;
+    activeHintId = null;
+    hintAutoOpened.clear();
+    hintReopenGateUntil = 0;
+    hintDemoJustClosed = false;
     state.currentLevelIndex = levelIndex;
     state.currentLevelMeta = LEVELS[levelIndex];
     state.pendingBossIntro = state.currentLevelMeta?.bossIntro || null;
@@ -496,7 +663,11 @@ export function resetRun() {
 }
 
 export function restartLevel() {
-    if (isDemoActive()) stopDemo({ markSeen: false });
+    if (isDemoActive()) stopDemo({ markSeen: false, invokeDismiss: false });
+    hintDemoSnapshot = null;
+    activeHintId = null;
+    hintAutoOpened.clear();
+    hintReopenGateUntil = 0;
     let lv = state.playtesting ? state.currentLevelMeta : LEVELS[state.currentLevelIndex];
     if (!lv) return;
     state.currentLevelMeta = lv;
@@ -664,15 +835,25 @@ function update() {
 
     if (isDemoActive()) {
         if (isKeyJustPressed('esc')) {
-            if (canSkipDemo()) skipDemo();
-            else {
+            // Popup: Esc closes + restores. Full overlay: Esc skips if allowed.
+            if (isPopupDemo()) {
+                skipDemo() || stopDemo({ markSeen: false, skipped: true });
+            } else if (canSkipDemo()) {
+                skipDemo();
+            } else {
                 updatePrevKeys();
                 return;
             }
         }
         const demoResult = tickDemo();
         if (demoResult?.done || !isDemoActive()) {
-            restartLevel();
+            if (hintDemoSnapshot) {
+                dismissHintDemo();
+            } else if (hintDemoJustClosed) {
+                hintDemoJustClosed = false;
+            } else {
+                restartLevel();
+            }
             updatePrevKeys();
             return;
         }
@@ -708,6 +889,8 @@ function update() {
     let hasDash = unlocked.includes('dash'); let hasToss = unlocked.includes('toss'); let hasCloak = unlocked.includes('cloak');
 
     let interactJustPressed = isKeyJustPressed('space');
+    updateHintPlates(interactJustPressed);
+    if (isDemoActive()) { updatePrevKeys(); return; }
     let tossJustPressed = hasToss && isKeyJustPressed('f');
     let dashJustPressed = hasDash && isKeyJustPressed('shift');
     let cloakJustPressed = hasCloak && isKeyJustPressed('c');
@@ -1010,7 +1193,7 @@ function draw() {
     }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
-    state.deliveryZone.render(ctx); state.plates.forEach(p => p.render(ctx)); state.walls.forEach(w => w.render(ctx));
+    state.deliveryZone.render(ctx); state.plates.forEach(p => p.render(ctx)); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
     state.lasers.forEach(l => l.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
 

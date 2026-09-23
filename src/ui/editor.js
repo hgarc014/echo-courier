@@ -2,7 +2,7 @@ import { state } from '../core/state.js';
 import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
-import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package } from '../entities/interactables.js';
+import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
@@ -28,6 +28,7 @@ const ENTITY_LISTS = [
     ['walls', 'wall'],
     ['doors', 'door'],
     ['plates', 'plate'],
+    ['hints', 'hint'],
     ['packages', 'package'],
     ['lasers', 'laser'],
     ['guards', 'guard'],
@@ -414,6 +415,7 @@ export function initEditor(canvas, ctx) {
         else if (type === 'door_alarm') { spawned = new AlarmDoor('d_'+id, cx, cy, 40, 80); state.doors.push(spawned); }
         else if (type === 'door_timer') { spawned = new TimerDoor('d_'+id, cx, cy, 40, 80, 60, 60); state.doors.push(spawned); }
         else if (type === 'plate') { spawned = new PressurePlate('p_'+id, cx, cy, 'd_0'); state.plates.push(spawned); }
+        else if (type === 'hint') { spawned = new HintPlate('hint_'+id, cx, cy, { demoId: 'intro', title: 'Hint Demo', autoOpen: false }); if (!state.hints) state.hints=[]; state.hints.push(spawned); }
         else if (type === 'plate_temporal') { spawned = new TemporalPlate('p_'+id, cx, cy, 'd_0', 'present'); state.plates.push(spawned); }
         else if (type === 'package') { spawned = new Package('pkg_'+id, cx, cy, 'standard'); state.packages.push(spawned); }
         else if (type === 'package_heavy') { spawned = new Package('pkg_'+id, cx, cy, 'heavy'); state.packages.push(spawned); }
@@ -447,7 +449,7 @@ export function initEditor(canvas, ctx) {
     function deleteSelectedEntity() {
         if (!selectedEntity) return;
         pushUndo();
-        ['walls','doors','plates','lasers','packages','guards','cameras','winds','statics','cracks','robots','drones'].forEach(list => {
+        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','drones'].forEach(list => {
             state[list] = state[list].filter(e => e !== selectedEntity);
         });
         selectedEntity = null; updatePropertiesPanel();
@@ -511,7 +513,7 @@ export function initEditor(canvas, ctx) {
         const world = screenToWorld(sx, sy);
         selectedEntity = null;
         
-        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...state.drones];
+        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...state.drones];
         
         for (let i = allEntities.length - 1; i >= 0; i--) {
             let ent = allEntities[i];
@@ -646,6 +648,14 @@ function updatePropertiesPanel() {
             html += `<label>Closed T: <input type="number" id="prop-closedT" value="${selectedEntity.closedT||60}" style="width:60px"></label><br>`;
         }
     }
+    
+    if (selectedEntity instanceof HintPlate) {
+        html += `<label>Title: <input type="text" id="prop-hint-title" value="${escapeAttr(selectedEntity.title||'')}" style="width:100%"></label><br>`;
+        html += `<label>Demo ID: <input type="text" id="prop-hint-demoId" value="${escapeAttr(selectedEntity.demoId||'')}" style="width:100%"></label><br>`;
+        html += `<label><input type="checkbox" id="prop-hint-autoOpen" ${selectedEntity.autoOpen?'checked':''}> Auto-open on step</label><br>`;
+        html += `<label>Inline demo JSON<textarea id="prop-hint-demo" rows="6" style="width:100%; font-family:monospace; font-size:0.75rem;">${escapeAttr(selectedEntity.demo?.steps ? JSON.stringify(selectedEntity.demo, null, 2) : '')}</textarea></label><br>`;
+    }
+
     if (selectedEntity instanceof PressurePlate) {
         const pt = selectedEntity instanceof TemporalPlate ? 'temporal' : 'standard';
         html += `<label>Plate type: <select id="prop-plate-type" style="width:100%; background:#000; color:var(--text-main); border:1px solid #444;">`;
@@ -679,6 +689,24 @@ function updatePropertiesPanel() {
         if (document.getElementById('prop-openT')) selectedEntity.openT = parseInt(document.getElementById('prop-openT').value, 10) || 60;
         if (document.getElementById('prop-closedT')) selectedEntity.closedT = parseInt(document.getElementById('prop-closedT').value, 10) || 60;
         if (document.getElementById('prop-timeline')) selectedEntity.requiredTimeline = document.getElementById('prop-timeline').value || 'present';
+
+        if (document.getElementById('prop-hint-title')) selectedEntity.title = document.getElementById('prop-hint-title').value || 'Hint Demo';
+        if (document.getElementById('prop-hint-demoId')) selectedEntity.demoId = document.getElementById('prop-hint-demoId').value || null;
+        if (document.getElementById('prop-hint-autoOpen')) selectedEntity.autoOpen = document.getElementById('prop-hint-autoOpen').checked;
+        if (document.getElementById('prop-hint-demo')) {
+            const raw = document.getElementById('prop-hint-demo').value.trim();
+            if (!raw) selectedEntity.demo = null;
+            else {
+                try {
+                    const parsed = JSON.parse(raw);
+                    selectedEntity.demo = parsed.steps ? cloneDemo(parsed) : cloneDemo({ skippable: true, steps: parsed });
+                } catch (err) {
+                    setSaveStatus('Hint demo JSON invalid', false);
+                    return;
+                }
+            }
+        }
+
         if (document.getElementById('prop-door-type')) {
             const want = document.getElementById('prop-door-type').value;
             const cur = selectedEntity instanceof AlarmDoor ? 'alarm' : selectedEntity instanceof TimerDoor ? 'timer' : 'standard';

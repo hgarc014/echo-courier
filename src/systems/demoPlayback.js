@@ -14,9 +14,16 @@ let persistKey = null;
 let pendingSkip = false;
 let uiBound = false;
 let captionText = '';
+let presentationMode = 'overlay'; // 'overlay' | 'popup'
+let demoTitle = '';
+let onPopupDismiss = null;
 
 export function isDemoActive() {
     return active;
+}
+
+export function isPopupDemo() {
+    return active && presentationMode === 'popup';
 }
 
 export function canSkipDemo() {
@@ -44,14 +51,36 @@ export function markDemoSeen(key) {
 export function initDemoPlayback() {
     if (uiBound) return;
     uiBound = true;
-    const btn = document.getElementById('demo-skip-btn');
-    if (!btn) return;
-    btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+    const bind = (id, handler) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handler();
+        });
+    };
+    bind('demo-skip-btn', () => {
         if (!active || !skippable) return;
         pendingSkip = true;
     });
+    bind('demo-close-btn', () => {
+        if (!active) return;
+        // Close always dismisses popup demos even when not skippable
+        if (presentationMode === 'popup') {
+            stopDemo({ markSeen: false, skipped: true });
+            return;
+        }
+        pendingSkip = true;
+    });
+    const backdrop = document.getElementById('demo-overlay');
+    if (backdrop) {
+        backdrop.addEventListener('click', (e) => {
+            if (e.target !== backdrop) return;
+            if (!active || presentationMode !== 'popup') return;
+            stopDemo({ markSeen: false, skipped: true });
+        });
+    }
 }
 
 export function startDemo(demo, opts = {}) {
@@ -71,6 +100,9 @@ export function startDemo(demo, opts = {}) {
     persistKey = opts.persistKey || null;
     pendingSkip = false;
     captionText = '';
+    presentationMode = opts.mode === 'popup' ? 'popup' : 'overlay';
+    demoTitle = opts.title || cfg.title || (presentationMode === 'popup' ? 'Hint Demo' : '');
+    onPopupDismiss = typeof opts.onDismiss === 'function' ? opts.onDismiss : null;
     setGameplayInputLocked(true);
     consumeGameplayKeys();
     holdStick(0, 0);
@@ -85,6 +117,8 @@ export function startDemo(demo, opts = {}) {
 export function stopDemo(opts = {}) {
     const mark = opts.markSeen !== false;
     if (mark) markDemoSeen(persistKey);
+    const dismiss = onPopupDismiss;
+    const wasPopup = presentationMode === 'popup';
     active = false;
     steps = [];
     stepIndex = 0;
@@ -93,6 +127,9 @@ export function stopDemo(opts = {}) {
     pendingSkip = false;
     persistKey = null;
     captionText = '';
+    presentationMode = 'overlay';
+    demoTitle = '';
+    onPopupDismiss = null;
     setGameplayInputLocked(false);
     consumeGameplayKeys();
     clearStick();
@@ -100,6 +137,10 @@ export function stopDemo(opts = {}) {
     setCaption('');
     showOverlay(false);
     document.body.classList.remove('demo-playing');
+    document.body.classList.remove('demo-popup');
+    if (wasPopup && dismiss && opts.invokeDismiss !== false) {
+        try { dismiss({ skipped: !!opts.skipped, marked: mark }); } catch (err) { console.warn(err); }
+    }
 }
 
 export function skipDemo() {
@@ -119,7 +160,7 @@ export function tickDemo() {
     if (pendingSkip) {
         pendingSkip = false;
         if (skippable) {
-            stopDemo({ markSeen: true });
+            stopDemo({ markSeen: true, skipped: true });
             return { done: true, skipped: true };
         }
     }
@@ -262,11 +303,28 @@ function holdStick(x, y) {
 
 function showOverlay(on) {
     const overlay = document.getElementById('demo-overlay');
-    if (overlay) overlay.classList.toggle('hidden', !on);
+    if (overlay) {
+        overlay.classList.toggle('hidden', !on);
+        overlay.classList.toggle('demo-overlay-popup', on && presentationMode === 'popup');
+        overlay.classList.toggle('demo-overlay-full', on && presentationMode !== 'popup');
+    }
+    document.body.classList.toggle('demo-popup', on && presentationMode === 'popup');
+    document.body.classList.toggle('demo-playing', on);
+    const panel = document.getElementById('demo-popup-panel');
+    if (panel) panel.classList.toggle('hidden', !on);
+    const titleEl = document.getElementById('demo-title');
+    if (titleEl) {
+        titleEl.textContent = demoTitle || 'Demo';
+        titleEl.classList.toggle('hidden', !on || !demoTitle);
+    }
     const btn = document.getElementById('demo-skip-btn');
     if (btn) {
         btn.classList.toggle('hidden', !on || !skippable);
         btn.disabled = !on || !skippable;
+    }
+    const closeBtn = document.getElementById('demo-close-btn');
+    if (closeBtn) {
+        closeBtn.classList.toggle('hidden', !on || presentationMode !== 'popup');
     }
 }
 

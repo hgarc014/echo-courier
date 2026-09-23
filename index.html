@@ -142,8 +142,16 @@
             <div class="game-area">
                 <canvas id="gameCanvas" width="800" height="600"></canvas>
                 <div id="demo-overlay" class="demo-overlay hidden">
-                    <button type="button" id="demo-skip-btn" class="demo-skip-btn">Skip Demo</button>
-                    <p id="demo-caption" class="demo-caption hidden"></p>
+                    <div id="demo-popup-panel" class="demo-popup-panel">
+                        <div class="demo-popup-header">
+                            <h3 id="demo-title" class="demo-title">Demo</h3>
+                            <div class="demo-popup-actions">
+                                <button type="button" id="demo-skip-btn" class="demo-skip-btn">Skip</button>
+                                <button type="button" id="demo-close-btn" class="demo-close-btn hidden">Close</button>
+                            </div>
+                        </div>
+                        <p id="demo-caption" class="demo-caption hidden"></p>
+                    </div>
                 </div>
                 <div id="dialog-overlay" class="overlay dialog-overlay hidden">
                     <div class="dialog-panel">
@@ -244,6 +252,7 @@
             <option value="door_alarm">Door (alarm/flashing)</option>
             <option value="door_timer">Door (timer)</option>
             <option value="plate">Pressure Plate</option>
+            <option value="hint">Hint ?</option>
             <option value="plate_temporal">Temporal Plate</option>
             <option value="package">Package (standard)</option>
             <option value="package_heavy">Package (heavy)</option>
