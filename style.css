@@ -1026,3 +1026,98 @@ body.touch-ui .demo-skip-btn {
     font-size: 0.8rem;
 }
 
+
+
+/* Hint demo popup card */
+.demo-overlay.demo-overlay-popup {
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    background: rgba(5, 7, 10, 0.55);
+    pointer-events: auto;
+}
+.demo-overlay.demo-overlay-full {
+    justify-content: flex-end;
+    align-items: center;
+    background: transparent;
+    pointer-events: none;
+}
+.demo-popup-panel {
+    width: min(520px, 92%);
+    max-width: 520px;
+    background: rgba(8, 12, 18, 0.94);
+    border: 1px solid rgba(0, 243, 255, 0.55);
+    border-radius: 14px;
+    box-shadow: 0 0 28px rgba(0, 243, 255, 0.22), 0 12px 40px rgba(0,0,0,0.55);
+    padding: 14px 16px 16px;
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.demo-overlay-full .demo-popup-panel {
+    width: min(640px, 94%);
+    background: rgba(5, 7, 10, 0.72);
+    border-color: rgba(0, 243, 255, 0.35);
+    box-shadow: 0 0 18px rgba(0, 243, 255, 0.15);
+}
+.demo-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.demo-title {
+    margin: 0;
+    color: #ffdd00;
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.demo-popup-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.demo-popup-actions .demo-skip-btn,
+.demo-popup-actions .demo-close-btn,
+.demo-skip-btn,
+.demo-close-btn {
+    position: static;
+    pointer-events: auto;
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #ffdd00;
+    background: rgba(5, 7, 10, 0.82);
+    color: #ffdd00;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 0 12px rgba(255, 221, 0, 0.25);
+}
+.demo-close-btn {
+    border-color: #00f3ff;
+    color: #00f3ff;
+    box-shadow: 0 0 12px rgba(0, 243, 255, 0.25);
+}
+.demo-skip-btn:hover,
+.demo-skip-btn:focus,
+.demo-close-btn:hover,
+.demo-close-btn:focus {
+    background: rgba(255, 221, 0, 0.16);
+}
+.demo-close-btn:hover,
+.demo-close-btn:focus {
+    background: rgba(0, 243, 255, 0.16);
+}
+.demo-overlay .demo-caption {
+    max-width: 100%;
+    margin: 0;
+}
+body.touch-ui .demo-popup-panel {
+    width: min(560px, 96%);
+}

@@ -391,3 +391,34 @@ export class TimerDoor extends Entity {
         else { ctx.fillStyle='rgba(255,100,0,0.1)'; ctx.fillRect(this.x,this.y,this.w,this.h); }
     }
 }
+
+export class HintPlate extends Entity {
+    constructor(id, x, y, opts = {}) {
+        super(x, y, 40, 40, 'hint');
+        this.id = id;
+        this.demoId = opts.demoId || null;
+        this.demo = opts.demo || null;
+        this.autoOpen = !!opts.autoOpen;
+        this.title = opts.title || 'Demo Hint';
+        this.label = opts.label || '?';
+    }
+    render(ctx) {
+        const t = state.currentTick || 0;
+        const pulse = 0.55 + 0.45 * Math.abs(Math.sin(t * 0.12));
+        ctx.save();
+        ctx.fillStyle = `rgba(0, 243, 255, ${0.18 + 0.12 * pulse})`;
+        ctx.strokeStyle = `rgba(255, 221, 0, ${0.65 + 0.35 * pulse})`;
+        ctx.lineWidth = 2;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        ctx.strokeRect(this.x, this.y, this.w, this.h);
+        ctx.fillStyle = '#ffdd00';
+        ctx.font = 'bold 26px Space Grotesk, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,243,255,0.8)';
+        ctx.shadowBlur = 8;
+        ctx.fillText(this.label || '?', this.x + this.w / 2, this.y + this.h / 2 + 1);
+        ctx.restore();
+    }
+}
+
