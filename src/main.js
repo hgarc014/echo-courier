@@ -3,10 +3,11 @@ import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, sy
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, TUTORIAL_LEVEL_INDICES, TUTORIAL_LEVEL_START, cloneDemo } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
-import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi } from './ui/editor.js';
+import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
+import { isDemoActive, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -412,6 +413,28 @@ function ghostShieldBlocks(defenderGhost, actorBox) {
     return dot > 0;
 }
 
+function getActiveDemoConfig() {
+    const meta = state.currentLevelMeta;
+    if (meta?.demo?.steps?.length) return meta.demo;
+    if (state.playtesting && state.editorLevelMeta?.demo?.steps?.length) return state.editorLevelMeta.demo;
+    const lv = LEVELS[state.currentLevelIndex];
+    if (lv?.demo?.steps?.length) return lv.demo;
+    return null;
+}
+
+function maybeStartDemo(opts = {}) {
+    const demo = getActiveDemoConfig();
+    if (!demo?.steps?.length) return;
+    const playtest = !!(state.playtesting || state.currentLevelMeta?.isPlaytest);
+    const persistKey = playtest ? null : demoStorageKey(state.currentLevelIndex, state.currentLevelMeta?.name);
+    const force = !!opts.force;
+    if (!force) {
+        if (demo.autoPlayOnFirstEnter === false) return;
+        if (!playtest && hasSeenDemo(persistKey)) return;
+    }
+    startDemo(demo, { persistKey });
+}
+
 export function startGame(levelIndex) {
     unlockAudio();
     preloadDialogVoice().catch(() => {});
@@ -419,6 +442,7 @@ export function startGame(levelIndex) {
         showGameComplete();
         return; 
     }
+    if (isDemoActive()) stopDemo({ markSeen: false });
     state.currentLevelIndex = levelIndex;
     state.currentLevelMeta = LEVELS[levelIndex];
     state.pendingBossIntro = state.currentLevelMeta?.bossIntro || null;
@@ -452,6 +476,7 @@ export function startGame(levelIndex) {
         state.gameState = 'PLAYING';
         hideLevelDialog();
         if (state.pendingBossIntro) startBossIntro(lv);
+        else maybeStartDemo();
     }
 }
 
@@ -471,6 +496,7 @@ export function resetRun() {
 }
 
 export function restartLevel() {
+    if (isDemoActive()) stopDemo({ markSeen: false });
     let lv = state.playtesting ? state.currentLevelMeta : LEVELS[state.currentLevelIndex];
     if (!lv) return;
     state.currentLevelMeta = lv;
@@ -501,6 +527,7 @@ export function levelFailed(reason) {
     startShake(32, 10);
 }
 export function returnToMenu() {
+    if (isDemoActive()) stopDemo({ markSeen: false });
     stopDialogSpeech();
     state.playtesting = false;
     state.customLayout = null;
@@ -540,7 +567,8 @@ export function startPlaytestFromEditor() {
         challenge: { desc: 'Playtest', check: () => false },
         maxGhosts: em.maxGhosts ?? 3,
         grants: Array.isArray(em.grants) && em.grants.length ? [...em.grants] : ['dash', 'toss', 'cloak', 'ghostShield'],
-        isPlaytest: true
+        isPlaytest: true,
+        demo: cloneDemo(em.demo)
     };
     state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
     state.pendingBossIntro = null;
@@ -566,12 +594,14 @@ export function startPlaytestFromEditor() {
         hideLevelDialog();
         state.gameState = 'PLAYING';
         startMusic();
+        maybeStartDemo();
     }
     Object.assign(prevKeys, keys);
     syncTouchUi();
 }
 
 export function returnToEditor() {
+    if (isDemoActive()) stopDemo({ markSeen: false });
     const snapshot = state.editorReturnLayout;
     state.playtesting = false;
     state.customLayout = null;
@@ -593,7 +623,10 @@ function update() {
             startMusic();
             hideLevelDialog();
             if (state.pendingBossIntro) startBossIntro(state.currentLevelMeta);
-            else state.gameState = 'PLAYING';
+            else {
+                state.gameState = 'PLAYING';
+                maybeStartDemo();
+            }
             updatePrevKeys();
             consumeDialogConfirmKeys();
             return;
@@ -628,8 +661,28 @@ function update() {
         updatePrevKeys();
         return;
     }
-    if (isKeyJustPressed('esc')) { handleEscape(); updatePrevKeys(); return; }
-    if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
+
+    if (isDemoActive()) {
+        if (isKeyJustPressed('esc')) {
+            if (canSkipDemo()) skipDemo();
+            else {
+                updatePrevKeys();
+                return;
+            }
+        }
+        const demoResult = tickDemo();
+        if (demoResult?.done || !isDemoActive()) {
+            restartLevel();
+            updatePrevKeys();
+            return;
+        }
+    } else if (isKeyJustPressed('esc')) {
+        handleEscape();
+        updatePrevKeys();
+        return;
+    }
+
+    if (!isDemoActive() && isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
     if (isKeyJustPressed('r')) { resetRun(); updatePrevKeys(); return; }
     if (state.rewindFreeze > 0) {
         state.rewindFreeze--;
@@ -830,7 +883,7 @@ function update() {
     const requiredPackages = getRequiredPackages();
     let allDelivered = requiredPackages.length > 0 && requiredPackages.every(isPackageDelivered);
     
-    if (allDelivered && state.gameState === 'PLAYING') { 
+    if (allDelivered && state.gameState === 'PLAYING' && !isDemoActive()) { 
         SFX.win(); state.gameState = 'LEVEL_COMPLETE'; uiLevelComplete.classList.remove('hidden'); 
         let chalMsg = document.getElementById('challenge-result');
         let nextBtn = document.getElementById('next-level-btn');
@@ -1083,6 +1136,7 @@ function loop(timestamp) {
 
 window.onload = () => {
     initTouchControls();
+    initDemoPlayback();
     syncTouchUi();
     preloadDialogVoice().catch(() => {});
     document.body.addEventListener('pointerdown', () => { unlockAudio(); }, { passive: true });
@@ -1126,16 +1180,7 @@ window.onload = () => {
             setupData = deserializeLevel(parsed);
         } else if (levelIndex !== null) {
             setupData = getLevelSetup(levelIndex);
-            const lv = LEVELS[levelIndex];
-            if (lv) {
-                state.editorLevelMeta = {
-                    name: lv.name || 'Editor Level',
-                    story: { speaker: lv.story?.speaker || '', text: lv.story?.text || '' },
-                    obj: lv.obj || '',
-                    grants: [...(lv.grants || [])],
-                    maxGhosts: lv.maxGhosts ?? 3
-                };
-            }
+            setEditorLevelMetaFromLevel(LEVELS[levelIndex]);
         } else {
             setupData = deserializeLevel({});
             if (!state.editorLevelMeta) {

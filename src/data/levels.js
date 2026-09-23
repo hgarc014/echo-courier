@@ -159,8 +159,51 @@ const LEVEL4_LAYOUT = {
     robots: []
 };
 
+const LEVEL1_DEMO = {
+    autoPlayOnFirstEnter: true,
+    skippable: true,
+    steps: [
+        { type: 'caption', text: 'Stand on the pressure plate' },
+        { type: 'move-to', x: 305, y: 255, tolerance: 10 },
+        { type: 'wait', ticks: 20 },
+        { type: 'caption', text: 'Press LOOP to rewind — your echo will hold the plate' },
+        { type: 'highlight-ui', target: 'r' },
+        { type: 'wait', ticks: 40 },
+        { type: 'press-key', key: 'r' },
+        { type: 'highlight-ui', target: null },
+        { type: 'wait-until', condition: 'door-open', doorId: 'd1', timeout: 240 },
+        { type: 'caption', text: 'Walk through while your echo holds the door' },
+        { type: 'move-to', x: 520, y: 250, tolerance: 16 },
+        { type: 'caption', text: 'Pick up the package' },
+        { type: 'highlight-ui', target: 'space' },
+        { type: 'move-to', x: 585, y: 265, tolerance: 14 },
+        { type: 'press-key', key: 'space' },
+        { type: 'wait-until', condition: 'carrying', timeout: 90 },
+        { type: 'highlight-ui', target: null },
+        { type: 'caption', text: 'Deliver to the green zone' },
+        { type: 'move-to', x: 200, y: 240, tolerance: 20 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 50 },
+        { type: 'end' }
+    ]
+};
+
+export function cloneDemo(demo) {
+    if (!demo || typeof demo !== 'object') return undefined;
+    let steps = [];
+    if (Array.isArray(demo.steps)) {
+        try { steps = JSON.parse(JSON.stringify(demo.steps)); }
+        catch { steps = []; }
+    }
+    return {
+        autoPlayOnFirstEnter: demo.autoPlayOnFirstEnter !== false,
+        skippable: demo.skippable !== false,
+        steps
+    };
+}
+
 export const LEVELS = [
-    { name: "Level 1: The Basics", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, welcome to your shift. Route efficiency is down 4%. Deploy your Temporal Payload to generate a logistics artifact (Echo). Echoes are non-sentient and property of ChronoHaul." }, obj: "Deliver the package using an echo to hold the door.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 1, mapWidth: 800, mapHeight: 600, layout: LEVEL1_LAYOUT },
+    { name: "Level 1: The Basics", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, welcome to your shift. Route efficiency is down 4%. Deploy your Temporal Payload to generate a logistics artifact (Echo). Echoes are non-sentient and property of ChronoHaul." }, obj: "Deliver the package using an echo to hold the door.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 1, mapWidth: 800, mapHeight: 600, layout: LEVEL1_LAYOUT, demo: LEVEL1_DEMO },
     { name: "Level 2: The Airlock", story: { speaker: "Local Hub Manager", text: "We’ve authorized a double-echo payload for this route. Remember, overlapping timelines are unstable. Don't think about it too much, just deliver the box." }, obj: "Two ghosts unlocked! Coordinate them to hold both doors.", challenge: { desc: "Finish in 3 loops or fewer", check: () => state.pastRuns.length <= 2 }, maxGhosts: 2, layout: LEVEL2_LAYOUT },
     { name: "Level 3: Heavy Lifting", story: { speaker: "Local Hub Manager", text: "High-density cargo pending. It will severely slow your physical traversal. Build an echo timeline to handle the door systems so you can focus entirely on dragging the payload." }, obj: "Heavy packages cut your speed in half. Plan accordingly.", challenge: { desc: "Finish final loop in under 600 ticks", check: () => state.currentTick < 600 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(100,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(380,0,40,200),new Wall(380,400,40,200)]; doors=[new TimerDoor('td1',380,200,40,200,60,60)]; plates=[]; packages=[new Package('pkg1',200,300,'heavy')]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; robots=[]; projectiles=[]; } },
     { name: "Level 4: Gap Bypass", grants: ['dash'], story: { speaker: "Local Hub Manager", text: "We received funding for a cybernetic implant. The Dash Module. Teleports you seamlessly. But it's locked behind a paywall. You might have to sprint across this collapsing foundation if you can't afford it." }, obj: "Dash across the collapsing gap to reach the plate and the delivery zone.", challenge: { desc: "Finish in 2 loops or fewer", check: () => state.pastRuns.length <= 1 }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT },
@@ -198,7 +241,9 @@ function withMapSize(entities, size) {
 
 export function serializeLevel(src = state) {
     const size = layoutMapSize(src, src);
-    return {
+    const m = src.meta || src.editorLevelMeta || (typeof state !== 'undefined' ? state.editorLevelMeta : null);
+    const demo = cloneDemo(src.demo || m?.demo);
+    const payload = {
         width: size.mapWidth,
         height: size.mapHeight,
         mapWidth: size.mapWidth,
@@ -229,19 +274,20 @@ export function serializeLevel(src = state) {
         winds: (src.winds || []).map(w => ({ x: w.x, y: w.y, w: w.w, h: w.h, vx: w.vx, vy: w.vy })),
         statics: (src.statics || []).map(s => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
         cracks: (src.cracks || []).map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
-        robots: (src.robots || []).map(r => ({ path: r.path || [{ x: r.x, y: r.y }] })),
-        meta: (() => {
-            const m = src.meta || src.editorLevelMeta || (typeof state !== 'undefined' ? state.editorLevelMeta : null);
-            if (!m) return undefined;
-            return {
-                name: m.name || 'Editor Level',
-                story: { speaker: m.story?.speaker || '', text: m.story?.text || '' },
-                obj: m.obj || '',
-                grants: [...(m.grants || [])],
-                maxGhosts: m.maxGhosts ?? 3
-            };
-        })()
+        robots: (src.robots || []).map(r => ({ path: r.path || [{ x: r.x, y: r.y }] }))
     };
+    if (demo) payload.demo = demo;
+    if (m) {
+        payload.meta = {
+            name: m.name || 'Editor Level',
+            story: { speaker: m.story?.speaker || '', text: m.story?.text || '' },
+            obj: m.obj || '',
+            grants: [...(m.grants || [])],
+            maxGhosts: m.maxGhosts ?? 3
+        };
+        if (demo) payload.meta.demo = demo;
+    }
+    return payload;
 }
 
 export function deserializeLevel(data) {
@@ -280,14 +326,27 @@ export function deserializeLevel(data) {
     });
     projectiles = [];
 
+    const demo = cloneDemo(data.demo || data.meta?.demo);
     if (data.meta && typeof state !== 'undefined') {
         state.editorLevelMeta = {
             name: data.meta.name || 'Editor Level',
             story: { speaker: data.meta.story?.speaker || '', text: data.meta.story?.text || '' },
             obj: data.meta.obj || '',
             grants: [...(data.meta.grants || [])],
-            maxGhosts: data.meta.maxGhosts ?? 3
+            maxGhosts: data.meta.maxGhosts ?? 3,
+            demo
         };
+    } else if (demo && typeof state !== 'undefined') {
+        if (!state.editorLevelMeta) {
+            state.editorLevelMeta = {
+                name: 'Editor Level',
+                story: { speaker: '', text: '' },
+                obj: '',
+                grants: [],
+                maxGhosts: 3
+            };
+        }
+        state.editorLevelMeta.demo = demo;
     }
     
     return withMapSize({ player, deliveryZone, walls, doors, plates, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, projectiles }, size);
