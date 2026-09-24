@@ -236,11 +236,21 @@ const LEVEL2_DEMO = {
     skippable: true,
     steps: [
         { type: 'caption', text: 'Guards spot anything in their vision cone' },
-        { type: 'wait', ticks: 55 },
+        { type: 'wait', ticks: 36 },
+        { type: 'move-to', x: 125, y: 265, tolerance: 8 },
+        { type: 'wait', ticks: 28 },
         { type: 'caption', text: 'Wait for a gap — or send an echo to distract them' },
-        { type: 'wait', ticks: 60 },
+        { type: 'highlight-ui', target: 'r' },
+        { type: 'wait', ticks: 70 },
+        { type: 'press-key', key: 'r' },
+        { type: 'highlight-ui', target: null },
+        { type: 'wait-until', condition: 'door-open', doorId: 'd1', timeout: 240 },
         { type: 'caption', text: 'Echo holds the door while you slip past' },
-        { type: 'wait', ticks: 50 },
+        { type: 'move-to', x: 290, y: 278, tolerance: 8 },
+        { type: 'wait', ticks: 58 },
+        { type: 'move-to', x: 424, y: 278, tolerance: 10 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 28 },
         { type: 'end' }
     ]
 };
@@ -250,11 +260,23 @@ const LEVEL3_DEMO = {
     skippable: true,
     steps: [
         { type: 'caption', text: 'Cameras sweep a detection cone' },
-        { type: 'wait', ticks: 50 },
+        { type: 'wait', ticks: 30 },
+        { type: 'move-to', x: 125, y: 265, tolerance: 8 },
+        { type: 'wait', ticks: 20 },
         { type: 'caption', text: 'Time your crossing. Cover blocks the cone' },
-        { type: 'wait', ticks: 55 },
+        { type: 'highlight-ui', target: 'r' },
+        { type: 'wait', ticks: 36 },
+        { type: 'press-key', key: 'r' },
+        { type: 'highlight-ui', target: null },
+        { type: 'wait-until', condition: 'door-open', doorId: 'd1', timeout: 240 },
+        { type: 'move-to', x: 240, y: 280, tolerance: 8 },
+        { type: 'wait', ticks: 42 },
+        { type: 'move-to', x: 400, y: 280, tolerance: 10 },
+        { type: 'wait', ticks: 48 },
         { type: 'caption', text: 'Echoes trip cameras too — park them out of sight' },
-        { type: 'wait', ticks: 55 },
+        { type: 'move-to', x: 400, y: 450, tolerance: 10 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 36 },
         { type: 'end' }
     ]
 };
@@ -264,9 +286,21 @@ const LEVEL4_DEMO = {
     skippable: true,
     steps: [
         { type: 'caption', text: 'Guard and camera share this yard' },
-        { type: 'wait', ticks: 50 },
+        { type: 'move-to', x: 130, y: 448, tolerance: 10 },
+        { type: 'move-to', x: 105, y: 265, tolerance: 8 },
+        { type: 'wait', ticks: 20 },
         { type: 'caption', text: 'Stack echoes: hold the door, then distract or wait' },
-        { type: 'wait', ticks: 55 },
+        { type: 'highlight-ui', target: 'r' },
+        { type: 'wait', ticks: 36 },
+        { type: 'press-key', key: 'r' },
+        { type: 'highlight-ui', target: null },
+        { type: 'wait-until', condition: 'door-open', doorId: 'd1', timeout: 300 },
+        { type: 'move-to', x: 186, y: 280, tolerance: 8 },
+        { type: 'wait', ticks: 158 },
+        { type: 'move-to', x: 330, y: 280, tolerance: 8 },
+        { type: 'move-to', x: 330, y: 480, tolerance: 10 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 28 },
         { type: 'end' }
     ]
 };
@@ -276,11 +310,21 @@ const LEVEL5_DEMO = {
     skippable: true,
     steps: [
         { type: 'caption', text: 'Cracked floors collapse under weight' },
-        { type: 'wait', ticks: 50 },
+        { type: 'wait', ticks: 24 },
+        { type: 'move-to', x: 80, y: 420, tolerance: 10 },
         { type: 'caption', text: 'No dash on this route — path around the pit' },
-        { type: 'wait', ticks: 55 },
+        { type: 'move-to', x: 250, y: 450, tolerance: 10 },
+        { type: 'move-to', x: 90, y: 450, tolerance: 10 },
         { type: 'caption', text: 'Echoes fall too. Plan the long walk' },
-        { type: 'wait', ticks: 50 },
+        { type: 'move-to', x: 125, y: 205, tolerance: 8 },
+        { type: 'wait', ticks: 20 },
+        { type: 'highlight-ui', target: 'r' },
+        { type: 'wait', ticks: 28 },
+        { type: 'press-key', key: 'r' },
+        { type: 'highlight-ui', target: null },
+        { type: 'wait', ticks: 150 },
+        { type: 'caption', text: 'Your turn' },
+        { type: 'wait', ticks: 30 },
         { type: 'end' }
     ]
 };
