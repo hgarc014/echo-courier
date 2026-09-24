@@ -40,6 +40,29 @@ export function updateHUD() {
     hud.innerHTML = html;
 }
 
+export function refreshLevelSelectGrid() {
+    const uiLevelGrid = document.getElementById('level-select-grid');
+    if (!uiLevelGrid) return;
+    uiLevelGrid.innerHTML = '';
+    LEVELS.forEach((lvl, idx) => {
+        if (lvl.isTutorial || lvl.isSandbox) return;
+        let isDev = document.getElementById('dev-mode-checkbox').checked;
+        let unlocked = isDev || idx <= state.maxUnlockedLevel;
+        let btn = document.createElement('button');
+        btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
+
+        let hasGold = state.challengesCompleted[idx] === true;
+        if (hasGold) btn.classList.add('gold-star');
+        btn.innerHTML = `${levelSelectIconHtml(unlocked, hasGold)}<span class="level-num">Level ${idx + 1}</span>`;
+        btn.setAttribute('aria-label', hasGold
+            ? `Level ${idx + 1}, gold star challenge complete`
+            : unlocked ? `Level ${idx + 1}` : `Level ${idx + 1}, locked`);
+        if (hasGold) btn.title = 'Gold star challenge complete';
+        if (unlocked) btn.onclick = () => startGame(idx);
+        uiLevelGrid.appendChild(btn);
+    });
+}
+
 export function initMenu() {
     document.getElementById('title-screen').classList.remove('hidden');
     document.getElementById('app-layout').classList.add('hidden');
@@ -47,8 +70,6 @@ export function initMenu() {
     document.getElementById('game-over').classList.add('hidden');
     showSubMenu('main');
     
-    let uiLevelGrid = document.getElementById('level-select-grid');
-    uiLevelGrid.innerHTML = '';
     let uiTutorialGrid = document.getElementById('tutorial-select-grid');
     if (uiTutorialGrid) uiTutorialGrid.innerHTML = '';
     
@@ -76,23 +97,7 @@ export function initMenu() {
     refreshVoiceEngineStatus();
     preloadDialogVoice().finally(() => refreshVoiceEngineStatus());
     
-    LEVELS.forEach((lvl, idx) => {
-        if (lvl.isTutorial || lvl.isSandbox) return;
-        let isDev = document.getElementById('dev-mode-checkbox').checked;
-        let unlocked = isDev || idx <= state.maxUnlockedLevel;
-        let btn = document.createElement('button');
-        btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
-        
-        let hasGold = state.challengesCompleted[idx] === true;
-        if (hasGold) btn.classList.add('gold-star');
-        btn.innerHTML = `${levelSelectIconHtml(unlocked, hasGold)}<span class="level-num">Level ${idx + 1}</span>`;
-        btn.setAttribute('aria-label', hasGold
-            ? `Level ${idx + 1}, gold star challenge complete`
-            : unlocked ? `Level ${idx + 1}` : `Level ${idx + 1}, locked`);
-        if (hasGold) btn.title = 'Gold star challenge complete';
-        if (unlocked) btn.onclick = () => startGame(idx);
-        uiLevelGrid.appendChild(btn);
-    });
+    refreshLevelSelectGrid();
     
     let shopDash = document.getElementById('shop-dash');
     if (state.abilitiesPurchased['dash']) { shopDash.innerText = 'DASH (OWNED)'; shopDash.style.opacity = '0.5'; shopDash.disabled = true; }

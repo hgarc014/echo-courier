@@ -2,12 +2,12 @@ import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/st
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
-import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from './core/camera.js';
+import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
-import { initMenu, showSubMenu, updateHUD } from './ui/menu.js';
+import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
-import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback } from './systems/demoPlayback.js';
+import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -434,6 +434,10 @@ function maybeStartDemo(opts = {}) {
 
 
 let hintDemoSnapshot = null;
+let hintFrozenCanvas = null;
+let hintAnchor = null;
+let miniCanvas = null;
+let miniCtx = null;
 let hintReopenGateUntil = 0;
 let hintAutoOpened = new Set();
 let activeHintId = null;
@@ -526,14 +530,115 @@ function restoreHintDemoSnapshot(snap) {
     if (state.player) followWorldPoint(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
 }
 
+function clearHintPopupChrome() {
+    hintFrozenCanvas = null;
+    hintAnchor = null;
+    const panel = document.getElementById('demo-popup-panel');
+    if (panel) {
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.classList.remove('tail-above', 'tail-below');
+    }
+}
+
 function dismissHintDemo() {
     const snap = hintDemoSnapshot;
     hintDemoSnapshot = null;
+    clearHintPopupChrome();
     activeHintId = null;
     hintReopenGateUntil = (state.currentTick || 0) + 45;
     hintDemoJustClosed = true;
     if (snap) restoreHintDemoSnapshot(snap);
     state.gameState = 'PLAYING';
+}
+
+function computeDemoBBox(demo, hint) {
+    const pts = [];
+    const steps = demo?.steps || [];
+    for (const step of steps) {
+        if (step && step.type === 'move-to' && Number.isFinite(step.x) && Number.isFinite(step.y)) {
+            pts.push(step.x, step.y);
+        }
+    }
+    if (hint) pts.push(hint.x + (hint.w || 0) / 2, hint.y + (hint.h || 0) / 2);
+    if (state.player) pts.push(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+    if (pts.length < 2) return { x: 0, y: 0, w: 480, h: 320 };
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < pts.length; i += 2) {
+        minX = Math.min(minX, pts[i]);
+        maxX = Math.max(maxX, pts[i]);
+        minY = Math.min(minY, pts[i + 1]);
+        maxY = Math.max(maxY, pts[i + 1]);
+    }
+    const pad = 70;
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+    return { x: minX, y: minY, w: Math.max(160, maxX - minX), h: Math.max(120, maxY - minY) };
+}
+
+function ensureMiniCanvas() {
+    if (!miniCanvas) miniCanvas = document.getElementById('demo-mini-canvas');
+    if (miniCanvas && !miniCtx) miniCtx = miniCanvas.getContext('2d');
+    return miniCtx;
+}
+
+function drawMiniDemo() {
+    const mctx = ensureMiniCanvas();
+    if (!mctx || !miniCanvas) return;
+    const box = computeDemoBBox({ steps: getActiveDemoSteps() }, hintAnchor);
+    const mw = miniCanvas.width;
+    const mh = miniCanvas.height;
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.clearRect(0, 0, mw, mh);
+    mctx.fillStyle = '#10151c';
+    mctx.fillRect(0, 0, mw, mh);
+    const scale = Math.min(mw / box.w, mh / box.h);
+    const ox = (mw - box.w * scale) / 2 - box.x * scale;
+    const oy = (mh - box.h * scale) / 2 - box.y * scale;
+    mctx.setTransform(scale, 0, 0, scale, ox, oy);
+    const paint = (ent) => { if (ent && typeof ent.render === 'function') ent.render(mctx); };
+    (state.statics || []).forEach(paint);
+    (state.winds || []).forEach(paint);
+    (state.cracks || []).forEach(paint);
+    paint(state.deliveryZone);
+    (state.plates || []).forEach(paint);
+    (state.hints || []).forEach(paint);
+    (state.walls || []).forEach(paint);
+    (state.lasers || []).forEach(paint);
+    (state.doors || []).forEach(paint);
+    (state.packages || []).forEach(paint);
+    (state.activeGhosts || []).forEach(paint);
+    paint(state.player);
+    (state.guards || []).forEach(paint);
+    (state.robots || []).forEach(paint);
+    (state.cameras || []).forEach(paint);
+    (state.drones || []).forEach(d => { if (d && d.alive !== false) paint(d); });
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+function positionHintPopup() {
+    const panel = document.getElementById('demo-popup-panel');
+    const area = document.querySelector('.game-area');
+    if (!panel || !area || !hintAnchor) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const areaRect = area.getBoundingClientRect();
+    const worldCx = hintAnchor.x + hintAnchor.w / 2;
+    const worldCy = hintAnchor.y + hintAnchor.h / 2;
+    const sx = ((worldCx - (hintAnchor.camX || 0)) / VIEW_WIDTH) * canvasRect.width + (canvasRect.left - areaRect.left);
+    const sy = ((worldCy - (hintAnchor.camY || 0)) / VIEW_HEIGHT) * canvasRect.height + (canvasRect.top - areaRect.top);
+    const pw = panel.offsetWidth || 300;
+    const ph = panel.offsetHeight || 240;
+    let left = sx - pw / 2;
+    let top = sy - ph - 16;
+    let placeAbove = top >= 8;
+    if (!placeAbove) top = sy + (hintAnchor.h || 36) * (canvasRect.height / VIEW_HEIGHT) + 12;
+    const maxLeft = Math.max(4, area.clientWidth - pw - 4);
+    const maxTop = Math.max(4, area.clientHeight - ph - 4);
+    left = Math.max(4, Math.min(left, maxLeft));
+    top = Math.max(4, Math.min(top, maxTop));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.classList.toggle('tail-below', placeAbove);
+    panel.classList.toggle('tail-above', !placeAbove);
 }
 
 function openHintDemo(hint) {
@@ -542,7 +647,17 @@ function openHintDemo(hint) {
     if (!demo?.steps?.length) return false;
     hintDemoSnapshot = captureHintDemoSnapshot();
     activeHintId = hint.id;
-    // Freeze player progress visually by restarting entities for a clean demo stage
+    draw();
+    hintFrozenCanvas = document.createElement('canvas');
+    hintFrozenCanvas.width = canvas.width;
+    hintFrozenCanvas.height = canvas.height;
+    hintFrozenCanvas.getContext('2d').drawImage(canvas, 0, 0);
+    hintAnchor = {
+        x: hint.x, y: hint.y, w: hint.w || 40, h: hint.h || 40,
+        camX: hintDemoSnapshot.camX || 0,
+        camY: hintDemoSnapshot.camY || 0
+    };
+    // Restart entities for a clean demo stage. The main canvas stays on the frozen frame.
     applyLoadedLevel(loadCurrentEntities());
     state.pastRuns = [];
     state.currentRun = [];
@@ -561,9 +676,14 @@ function openHintDemo(hint) {
     if (!ok) {
         restoreHintDemoSnapshot(hintDemoSnapshot);
         hintDemoSnapshot = null;
+        clearHintPopupChrome();
         activeHintId = null;
         return false;
     }
+    const mini = document.getElementById('demo-mini-canvas');
+    if (mini) mini.classList.remove('hidden');
+    positionHintPopup();
+    drawMiniDemo();
     return true;
 }
 
@@ -1162,6 +1282,14 @@ function drawAbilityCooldowns(target) {
 }
 
 function draw() {
+    if (isPopupDemo() && hintFrozenCanvas) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(hintFrozenCanvas, 0, 0);
+        drawMiniDemo();
+        positionHintPopup();
+        return;
+    }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (state.gameState !== 'PLAYING' && state.gameState !== 'LEVEL_COMPLETE' && state.gameState !== 'EDITOR' && state.gameState !== 'BOSS_INTRO' && state.gameState !== 'DIALOG') return;
     if (state.assetsLoaded < state.assetNames.length) { ctx.fillStyle = '#fff'; ctx.fillText("Loading Assets...", 400, 300); return; }
@@ -1406,7 +1534,7 @@ window.onload = () => {
         startGame(typeof SANDBOX_LEVEL_INDEX === 'number' ? SANDBOX_LEVEL_INDEX : LEVELS.findIndex(l => l.isSandbox));
     });
     document.getElementById('playtest-return-btn')?.addEventListener('click', () => returnToEditor());
-    document.getElementById('dev-mode-checkbox').onchange = () => initMenu();
+    document.getElementById('dev-mode-checkbox').onchange = () => { refreshLevelSelectGrid(); };
     
     document.getElementById('next-level-btn').onclick = () => window.nextLevel();
     document.getElementById('menu-btn')?.addEventListener('click', (e) => {
