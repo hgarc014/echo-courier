@@ -77,7 +77,15 @@ export function initDemoPlayback() {
         }
         pendingSkip = true;
     });
-    // Popup overlay is pointer-events: none. Do not dismiss from a backdrop click.
+    const overlay = document.getElementById('demo-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', (e) => {
+            if (!active || presentationMode !== 'popup' || e.target !== overlay) return;
+            e.preventDefault();
+            e.stopPropagation();
+            stopDemo({ markSeen: false, skipped: true });
+        });
+    }
 }
 
 export function startDemo(demo, opts = {}) {
