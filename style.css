@@ -1031,7 +1031,7 @@ body.touch-ui .demo-skip-btn {
 /* Hint demo: small bubble anchored to the ? plate. No full-screen dim. */
 .demo-overlay.demo-overlay-popup {
     background: transparent;
-    pointer-events: none;
+    pointer-events: auto;
     justify-content: flex-start;
     align-items: stretch;
     padding: 0;
