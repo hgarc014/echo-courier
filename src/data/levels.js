@@ -113,8 +113,7 @@ const LEVEL2_LAYOUT = {
     packages: [{ x: 200, y: 360, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
     lasers: [],
     guards: [{ path: [{ x: 520, y: 120 }, { x: 520, y: 420 }] }],
-    cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 70, y: 360, demoId: "intro", autoOpen: false, title: "Security Guard" }]
+    cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
 const LEVEL3_LAYOUT = {
@@ -136,8 +135,7 @@ const LEVEL3_LAYOUT = {
     packages: [{ x: 160, y: 400, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
     lasers: [], guards: [],
     cameras: [{ x: 520, y: 40, baseAngle: Math.PI / 2, sweepRange: Math.PI / 3 }],
-    drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 70, y: 360, demoId: "intro", autoOpen: false, title: "Sweep Camera" }]
+    drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
 const LEVEL4_LAYOUT = {
@@ -160,8 +158,7 @@ const LEVEL4_LAYOUT = {
     lasers: [],
     guards: [{ path: [{ x: 380, y: 140 }, { x: 380, y: 420 }] }],
     cameras: [{ x: 620, y: 40, baseAngle: Math.PI / 2, sweepRange: Math.PI / 4 }],
-    drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 60, y: 360, demoId: "intro", autoOpen: false, title: "Combined Security" }]
+    drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
 const LEVEL5_LAYOUT = {
@@ -198,8 +195,7 @@ const LEVEL5_LAYOUT = {
         { x: 460, y: 300, w: 40, h: 40 },
         { x: 460, y: 340, w: 40, h: 40 }
     ],
-    robots: [],
-    hints: [{ id: "hint_intro", x: 60, y: 360, demoId: "intro", autoOpen: false, title: "Unstable Floor" }]
+    robots: []
 };
 
 const LEVEL1_DEMO = {
@@ -352,8 +348,7 @@ const LEVEL6_LAYOUT = {
         { x: 500, y: 200, linkedIds: ["d2"], id: "p2", type: "standard" }
     ],
     packages: [{ x: 650, y: 300, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
-    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 70, y: 280, demoId: "intro", autoOpen: false, title: "Second Echo" }]
+    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
 const LEVEL7_LAYOUT = {
@@ -371,8 +366,7 @@ const LEVEL7_LAYOUT = {
     doors: [{ x: 380, y: 220, w: 40, h: 160, id: "d1", type: "standard" }],
     plates: [{ x: 140, y: 280, linkedIds: ["d1"], id: "p1", type: "standard" }],
     packages: [{ x: 200, y: 300, id: "pkg1", packageType: "heavy", requiredForDelivery: true }],
-    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 80, y: 420, demoId: "intro", autoOpen: false, title: "Heavy Cargo" }]
+    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
 const LEVEL8_LAYOUT = {
@@ -390,8 +384,7 @@ const LEVEL8_LAYOUT = {
     doors: [{ x: 380, y: 200, w: 40, h: 200, id: "td1", type: "timer", openT: 90, closedT: 90 }],
     plates: [],
     packages: [{ x: 120, y: 300, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
-    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 70, y: 420, demoId: "intro", autoOpen: false, title: "Timer Door" }]
+    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
 const LEVEL9_LAYOUT = {
@@ -414,8 +407,7 @@ const LEVEL9_LAYOUT = {
         { x: 300, y: 20, w: 20, h: 560, id: "ls1" },
         { x: 550, y: 20, w: 20, h: 560, id: "ls2" }
     ],
-    guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 50, y: 420, demoId: "intro", autoOpen: false, title: "Fragile Cargo" }]
+    guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: []
 };
 
 const LEVEL6_DEMO = {
@@ -542,8 +534,8 @@ export const LEVELS = [
 
     { name: "Level 10: Fast Shipping", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Critical: Package is highly unstable. Detonation sequence activates upon handling. The company expects immediate delivery. Do not fail." }, obj: "Timed packages explode! Toss them over the gap instantly.", challenge: { desc: "Do NOT use Dash", check: () => state.runStats.dashes === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,40,40)); packages=[new Package('pkg1',100,300,'timed')]; doors=[]; plates=[]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; } },
     { name: "Level 11: Time Dilation", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; } },
-    { name: "Level 12: Echo Crunch", story: { speaker: "Local Hub Manager", text: "Temporal budget exhausted. You are restricted to ONE echo. Corporate says zero margin for error. Get it done or your contract is terminated." }, obj: "Maximum 1 Echo Limit. Present Timeline must hold the gate.", challenge: { desc: "No Dash and No Cloak", check: () => state.runStats.dashes === 0 && state.runStats.cloaks === 0 }, maxGhosts: 1, setup: () => { player=new PlayerEntity(100,450,30,30,'player'); deliveryZone=new DeliveryZone(50,450,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(380,0,40,250),new Wall(380,330,40,270)]; doors=[new Door('d1',380,250,40,80)]; plates=[new TemporalPlate('p1',150,150,'d1', 'present')]; statics=[new StaticZone(100, 100, 100, 100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; packages=[new Package('pkg1',650,200,'fragile')]; robots=[]; projectiles=[]; } },
-    { name: "Level 13: Danger Courier", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => state.pastRuns.length === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; } },
+
+    { name: "Level 12: Danger Courier", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => state.pastRuns.length === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; } },
     { name: "Dev Sandbox", isSandbox: true, mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, setup: setupDevSandbox }
 ];
 

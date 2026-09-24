@@ -17,6 +17,8 @@ let captionText = '';
 let presentationMode = 'overlay'; // 'overlay' | 'popup'
 let demoTitle = '';
 let onPopupDismiss = null;
+let popupWorld = null;
+let stopping = false;
 
 export function isDemoActive() {
     return active;
@@ -28,6 +30,18 @@ export function isPopupDemo() {
 
 export function getActiveDemoSteps() {
     return active ? steps : [];
+}
+
+export function setPopupDemoWorld(world) {
+    popupWorld = world || null;
+}
+
+export function clearPopupDemoWorld() {
+    popupWorld = null;
+}
+
+export function getPopupDemoWorld() {
+    return popupWorld;
 }
 
 export function canSkipDemo() {
@@ -108,9 +122,12 @@ export function startDemo(demo, opts = {}) {
     presentationMode = opts.mode === 'popup' ? 'popup' : 'overlay';
     demoTitle = opts.title || cfg.title || (presentationMode === 'popup' ? 'Hint Demo' : '');
     onPopupDismiss = typeof opts.onDismiss === 'function' ? opts.onDismiss : null;
-    setGameplayInputLocked(true);
-    consumeGameplayKeys();
-    holdStick(0, 0);
+    if (presentationMode !== 'popup') {
+        clearPopupDemoWorld();
+        setGameplayInputLocked(true);
+        consumeGameplayKeys();
+        holdStick(0, 0);
+    }
     setHighlight(null);
     setCaption('');
     showOverlay(true);
@@ -120,31 +137,44 @@ export function startDemo(demo, opts = {}) {
 }
 
 export function stopDemo(opts = {}) {
-    const mark = opts.markSeen !== false;
-    if (mark) markDemoSeen(persistKey);
-    const dismiss = onPopupDismiss;
-    const wasPopup = presentationMode === 'popup';
-    active = false;
-    steps = [];
-    stepIndex = 0;
-    waitLeft = 0;
-    untilLeft = 0;
-    pendingSkip = false;
-    persistKey = null;
-    captionText = '';
-    presentationMode = 'overlay';
-    demoTitle = '';
-    onPopupDismiss = null;
-    setGameplayInputLocked(false);
-    consumeGameplayKeys();
-    clearStick();
-    setHighlight(null);
-    setCaption('');
-    showOverlay(false);
-    document.body.classList.remove('demo-playing');
-    document.body.classList.remove('demo-popup');
-    if (wasPopup && dismiss && opts.invokeDismiss !== false) {
-        try { dismiss({ skipped: !!opts.skipped, marked: mark }); } catch (err) { console.warn(err); }
+    if (stopping) return;
+    if (!active) {
+        clearPopupDemoWorld();
+        return;
+    }
+    stopping = true;
+    try {
+        const mark = opts.markSeen !== false;
+        if (mark) markDemoSeen(persistKey);
+        const dismiss = onPopupDismiss;
+        const wasPopup = presentationMode === 'popup';
+        active = false;
+        steps = [];
+        stepIndex = 0;
+        waitLeft = 0;
+        untilLeft = 0;
+        pendingSkip = false;
+        persistKey = null;
+        captionText = '';
+        presentationMode = 'overlay';
+        demoTitle = '';
+        onPopupDismiss = null;
+        clearPopupDemoWorld();
+        setGameplayInputLocked(false);
+        if (!wasPopup) {
+            consumeGameplayKeys();
+            clearStick();
+        }
+        setHighlight(null);
+        setCaption('');
+        showOverlay(false);
+        document.body.classList.remove('demo-playing');
+        document.body.classList.remove('demo-popup');
+        if (wasPopup && dismiss && opts.invokeDismiss !== false) {
+            try { dismiss({ skipped: !!opts.skipped, marked: mark }); } catch (err) { console.warn(err); }
+        }
+    } finally {
+        stopping = false;
     }
 }
 
@@ -164,11 +194,13 @@ export function tickDemo() {
     if (!active) return null;
     if (pendingSkip) {
         pendingSkip = false;
-        if (skippable) {
-            stopDemo({ markSeen: true, skipped: true });
+        if (skippable || presentationMode === 'popup') {
+            stopDemo({ markSeen: skippable, skipped: true });
             return { done: true, skipped: true };
         }
     }
+
+    if (presentationMode === 'popup') return tickPopupDemo();
 
     consumeGameplayKeys();
     holdStick(0, 0);
@@ -191,6 +223,33 @@ export function tickDemo() {
         beginStep(steps[stepIndex]);
     }
     return null;
+}
+
+function tickPopupDemo() {
+    if (popupWorld) popupWorld.currentTick = (popupWorld.currentTick || 0) + 1;
+    let guard = 0;
+    let finished = null;
+    while (active && guard++ < 32) {
+        const step = steps[stepIndex];
+        if (!step) {
+            stopDemo({ markSeen: true });
+            finished = { done: true, skipped: false };
+            break;
+        }
+        if (!runStep(step)) break;
+        stepIndex++;
+        if (stepIndex >= steps.length) {
+            stopDemo({ markSeen: true });
+            finished = { done: true, skipped: false };
+            break;
+        }
+        beginStep(steps[stepIndex]);
+    }
+    if (popupWorld) {
+        syncPopupCarry(popupWorld);
+        syncPopupPlates(popupWorld);
+    }
+    return finished;
 }
 
 function beginStep(step) {
@@ -223,7 +282,11 @@ function runStep(step) {
         case 'press-key':
         case 'press-ability': {
             const key = normalizeKey(step.key || step.ability);
-            if (key) tapKey(key);
+            if (presentationMode === 'popup') {
+                applyPopupPress(key);
+            } else if (key) {
+                tapKey(key);
+            }
             return true;
         }
         case 'wait':
@@ -247,6 +310,7 @@ function runStep(step) {
 }
 
 function seekTo(step) {
+    if (presentationMode === 'popup') return seekPopupTo(step);
     const player = state.player;
     if (!player) return true;
     const tx = Number(step.x);
@@ -265,10 +329,111 @@ function seekTo(step) {
     return false;
 }
 
+function seekPopupTo(step) {
+    const world = popupWorld;
+    const player = world?.player;
+    if (!player) return true;
+    const tx = Number(step.x);
+    const ty = Number(step.y);
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) return true;
+    const dx = tx - player.x;
+    const dy = ty - player.y;
+    const dist = Math.hypot(dx, dy);
+    const tolerance = step.tolerance == null ? 12 : Number(step.tolerance);
+    if (dist <= Math.max(0, tolerance)) {
+        player.moving = false;
+        return true;
+    }
+    const speed = 4; // PLAYER_MOVE_SPEED
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const stepDist = Math.min(speed, dist);
+    player.x += nx * stepDist;
+    player.y += ny * stepDist;
+    player.facingX = Math.abs(nx) >= Math.abs(ny) ? (nx > 0 ? 1 : -1) : 0;
+    player.facingY = Math.abs(ny) > Math.abs(nx) ? (ny > 0 ? 1 : -1) : 0;
+    if (player.facingX === 0 && player.facingY === 0) player.facingX = 1;
+    player.moving = true;
+    return false;
+}
+
+function applyPopupPress(key) {
+    const world = popupWorld;
+    if (!world || !key) return;
+    if (key === 'r') {
+        // Spawn a stationary ghost holding the plate under the demo player; open linked doors.
+        const p = world.player;
+        if (!p) return;
+        const ghost = {
+            x: p.x, y: p.y, w: p.w || 30, h: p.h || 30,
+            isActive: true,
+            facingX: p.facingX || 1,
+            facingY: p.facingY || 0,
+            render(ctx) {
+                ctx.save();
+                ctx.globalAlpha = 0.55;
+                ctx.fillStyle = '#7df9ff';
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+                ctx.restore();
+            }
+        };
+        if (!Array.isArray(world.activeGhosts)) world.activeGhosts = [];
+        world.activeGhosts.push(ghost);
+        syncPopupPlates(world);
+        return;
+    }
+    if (key === 'space') {
+        const p = world.player;
+        if (!p) return;
+        for (const pkg of world.packages || []) {
+            if (pkg.isDestroyed) continue;
+            if (pkg.carriedBy && pkg.carriedBy !== 'player') continue;
+            if (!AABB(p.x, p.y, p.w, p.h, pkg.x, pkg.y, pkg.w, pkg.h)) continue;
+            pkg.carriedBy = 'player';
+            p.carrying = true;
+            if (typeof pkg.onPickup === 'function') pkg.onPickup();
+            break;
+        }
+    }
+}
+
+function syncPopupCarry(world) {
+    if (!world?.player) return;
+    const carried = (world.packages || []).find(p => p.carriedBy === 'player');
+    world.player.carrying = !!carried;
+    if (carried) {
+        carried.x = world.player.x + (world.player.w - carried.w) / 2;
+        carried.y = world.player.y + (world.player.h - carried.h) / 2;
+    }
+}
+
+function syncPopupPlates(world) {
+    if (!world) return;
+    const actors = [];
+    if (world.player) actors.push(world.player);
+    for (const g of world.activeGhosts || []) if (g && g.isActive !== false) actors.push(g);
+    for (const plate of world.plates || []) {
+        let pressed = false;
+        for (const a of actors) {
+            if (AABB(plate.x, plate.y, plate.w, plate.h, a.x, a.y, a.w, a.h)) { pressed = true; break; }
+        }
+        plate.isPressed = pressed;
+        const ids = plate.linkedIds || (plate.linkedId ? [plate.linkedId] : []);
+        for (const id of ids) {
+            for (const d of world.doors || []) if (d.id === id) d.isOpen = pressed;
+            for (const l of world.lasers || []) if (l.id === id) l.isOpen = pressed;
+        }
+    }
+}
+
 function conditionMet(step) {
+    const popup = presentationMode === 'popup';
+    const doors = popup ? (popupWorld?.doors || []) : (state.doors || []);
+    const plates = popup ? (popupWorld?.plates || []) : (state.plates || []);
+    const ghosts = popup ? (popupWorld?.activeGhosts || []) : (state.activeGhosts || []);
+    const packages = popup ? (popupWorld?.packages || []) : (state.packages || []);
     const condition = step.condition;
     if (condition === 'door-open') {
-        const doors = state.doors || [];
         if (step.doorId) {
             const door = doors.find(d => d.id === step.doorId);
             return !!(door && door.isOpen);
@@ -276,14 +441,14 @@ function conditionMet(step) {
         return doors.some(d => d.isOpen);
     }
     if (condition === 'ghost-on-plate') {
-        const plate = (state.plates || []).find(p => !step.plateId || p.id === step.plateId) || (state.plates || [])[0];
+        const plate = plates.find(p => !step.plateId || p.id === step.plateId) || plates[0];
         if (!plate) return false;
-        return (state.activeGhosts || []).some(g =>
+        return ghosts.some(g =>
             g.isActive && AABB(plate.x, plate.y, plate.w, plate.h, g.x, g.y, g.w, g.h)
         );
     }
     if (condition === 'carrying') {
-        return (state.packages || []).some(p => p.carriedBy === 'player');
+        return packages.some(p => p.carriedBy === 'player');
     }
     return true;
 }

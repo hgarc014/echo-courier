@@ -26,7 +26,7 @@ Earning more levels increases your Corporate Rank (from Junior Courier up to Loo
 
 ---
 
-## 🏢 Campaign Log: The 13 Routes
+## 🏢 Campaign Log: The 12 Routes
 
 ### **Tutorial Sector: ChronoHaul Infrastructure**
 1. **Level 1: The Basics**
@@ -68,10 +68,7 @@ Earning more levels increases your Corporate Rank (from Junior Courier up to Loo
 11. **Level 11: Time Dilation**
     - **Story:** The Hacker reveals ChronoHaul is trapping your discarded timelines in Static purple fields to harvest your temporal energy.
     - **Mechanic:** Static Zones cut Ghost playback speed exactly in half, instantly de-syncing your meticulously planned loops.
-12. **Level 12: Echo Crunch**
-    - **Story:** Temporal budget dry. One echo maximum. Zero margin for error. 
-    - **Mechanic:** The ultimate physics exam.
-13. **Level 13: Danger Courier (Boss Fight)**
+12. **Level 12: Danger Courier (Boss Fight)**
     - **Story:** The Hacker warns that ChronoHaul has deployed an Exterminator Robot to silence you.
     - **Mechanic:** A 3-Phase combat sequence. You must dodge lasers, lure the robot, and Toss heavy packages directly into its chassis to crack its armor and unlock the final escape bulkhead.
 

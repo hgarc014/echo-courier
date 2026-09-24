@@ -7,7 +7,7 @@ import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWal
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
-import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps } from './systems/demoPlayback.js';
+import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -433,8 +433,9 @@ function maybeStartDemo(opts = {}) {
 }
 
 
-let hintDemoSnapshot = null;
-let hintFrozenCanvas = null;
+
+let hintDemoSnapshot = null; // unused for popup isolation (kept null)
+let hintFrozenCanvas = null; // unused — live canvas stays live
 let hintAnchor = null;
 let miniCanvas = null;
 let miniCtx = null;
@@ -443,6 +444,7 @@ let hintWasStanding = new Set();
 let hintPinnedScreen = null;
 let activeHintId = null;
 let hintDemoJustClosed = false;
+let hintDismissing = false;
 
 function resolveHintDemo(hint) {
     if (!hint) return null;
@@ -456,79 +458,12 @@ function resolveHintDemo(hint) {
     return null;
 }
 
-function captureHintDemoSnapshot() {
-    const layout = serializeLevel(state);
-    // Preserve live package/player positions in the layout snapshot
-    if (state.player) layout.player = { x: state.player.x, y: state.player.y };
-    if (Array.isArray(state.packages)) {
-        layout.packages = state.packages.map(p => ({
-            x: p.x, y: p.y, id: p.id,
-            packageType: p.type,
-            requiredForDelivery: p.requiredForDelivery !== false
-        }));
+function standingHintIds() {
+    const ids = new Set();
+    for (const hint of state.hints || []) {
+        if (playerOverlapsHint(hint)) ids.add(hint.id);
     }
-    return {
-        layout,
-        pastRuns: JSON.parse(JSON.stringify(state.pastRuns || [])),
-        currentRun: JSON.parse(JSON.stringify(state.currentRun || [])),
-        currentTick: state.currentTick || 0,
-        alarmState: !!state.alarmState,
-        runStats: { ...(state.runStats || {}) },
-        camX: state.camX, camY: state.camY,
-        playerExtras: state.player ? {
-            x: state.player.x, y: state.player.y,
-            facingX: state.player.facingX, facingY: state.player.facingY,
-            dashCooldown: state.player.dashCooldown || 0,
-            cloakTimer: state.player.cloakTimer || 0,
-            tossCooldown: state.player.tossCooldown || 0
-        } : null,
-        packageExtras: (state.packages || []).map(p => ({
-            id: p.id, x: p.x, y: p.y, carriedBy: p.carriedBy, isDestroyed: !!p.isDestroyed,
-            wasPickedUp: !!p.wasPickedUp, countdown: p.countdown, tossTicks: p.tossTicks,
-            tossMax: p.tossMax, vx: p.vx, vy: p.vy
-        })),
-        doorStates: (state.doors || []).map(d => ({ id: d.id, isOpen: !!d.isOpen })),
-        hints: (state.hints || []).map(h => ({ id: h.id, x: h.x, y: h.y }))
-    };
-}
-
-function restoreHintDemoSnapshot(snap) {
-    if (!snap) return;
-    applyLoadedLevel(deserializeLevel(snap.layout));
-    state.pastRuns = snap.pastRuns || [];
-    state.currentRun = snap.currentRun || [];
-    state.currentTick = snap.currentTick || 0;
-    state.alarmState = !!snap.alarmState;
-    state.runStats = { ...(snap.runStats || {}) };
-    state.camX = snap.camX || 0;
-    state.camY = snap.camY || 0;
-    state.activeGhosts = (state.pastRuns || []).map((run, i) => new Ghost(i, run));
-    if (snap.playerExtras && state.player) {
-        Object.assign(state.player, snap.playerExtras);
-    }
-    if (Array.isArray(snap.packageExtras)) {
-        for (const pe of snap.packageExtras) {
-            const pkg = (state.packages || []).find(p => p.id === pe.id);
-            if (!pkg) continue;
-            Object.assign(pkg, pe);
-        }
-    }
-    if (Array.isArray(snap.doorStates)) {
-        for (const ds of snap.doorStates) {
-            const door = (state.doors || []).find(d => d.id === ds.id);
-            if (door) door.isOpen = ds.isOpen;
-        }
-    }
-    // Keep hint positions stable
-    if (Array.isArray(snap.hints) && Array.isArray(state.hints)) {
-        for (const hs of snap.hints) {
-            const hint = state.hints.find(h => h.id === hs.id);
-            if (hint) { hint.x = hs.x; hint.y = hs.y; }
-        }
-    }
-    document.getElementById('loop-count').innerText = state.pastRuns.length;
-    updateDeliveryProgressUI();
-    if (state.player) followWorldPoint(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+    return ids;
 }
 
 function clearHintPopupChrome() {
@@ -541,17 +476,59 @@ function clearHintPopupChrome() {
         panel.style.top = '';
         panel.classList.remove('tail-above', 'tail-below');
     }
+    const mini = document.getElementById('demo-mini-canvas');
+    if (mini) mini.classList.add('hidden');
 }
 
 function dismissHintDemo() {
-    const snap = hintDemoSnapshot;
-    hintDemoSnapshot = null;
-    clearHintPopupChrome();
-    activeHintId = null;
-    hintReopenGateUntil = (state.currentTick || 0) + 45;
-    hintDemoJustClosed = true;
-    if (snap) restoreHintDemoSnapshot(snap);
-    state.gameState = 'PLAYING';
+    if (hintDismissing) return;
+    hintDismissing = true;
+    try {
+        if (isDemoActive()) stopDemo({ markSeen: false, skipped: true, invokeDismiss: false });
+        clearPopupDemoWorld();
+        clearHintPopupChrome();
+        activeHintId = null;
+        hintDemoSnapshot = null;
+        hintReopenGateUntil = (state.currentTick || 0) + 45;
+        hintDemoJustClosed = true;
+        hintWasStanding = standingHintIds();
+        // Live world was never mutated for popup demos — nothing to restore.
+        if (state.gameState !== 'PLAYING' && state.gameState !== 'LEVEL_COMPLETE' && state.gameState !== 'EDITOR' && state.gameState !== 'BOSS_INTRO' && state.gameState !== 'DIALOG') {
+            /* leave other states alone */
+        }
+    } finally {
+        hintDismissing = false;
+    }
+}
+
+function buildPopupDemoWorld() {
+    let bag = null;
+    if (state.playtesting && state.customLayout) {
+        bag = deserializeLevel({ ...state.customLayout });
+    } else {
+        bag = loadCurrentEntities();
+    }
+    if (!bag?.player) return null;
+    return {
+        player: bag.player,
+        doors: bag.doors || [],
+        plates: bag.plates || [],
+        packages: bag.packages || [],
+        activeGhosts: [],
+        walls: bag.walls || [],
+        deliveryZone: bag.deliveryZone || null,
+        hints: bag.hints || [],
+        statics: bag.statics || [],
+        winds: bag.winds || [],
+        cracks: bag.cracks || [],
+        guards: bag.guards || [],
+        cameras: bag.cameras || [],
+        drones: bag.drones || [],
+        robots: bag.robots || [],
+        lasers: bag.lasers || [],
+        projectiles: [],
+        currentTick: 0
+    };
 }
 
 function computeDemoBBox(demo, hint) {
@@ -563,7 +540,8 @@ function computeDemoBBox(demo, hint) {
         }
     }
     if (hint) pts.push(hint.x + (hint.w || 0) / 2, hint.y + (hint.h || 0) / 2);
-    if (state.player) pts.push(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+    const demoPlayer = getPopupDemoWorld()?.player;
+    if (pts.length < 2 && demoPlayer) pts.push(demoPlayer.x + demoPlayer.w / 2, demoPlayer.y + demoPlayer.h / 2);
     if (pts.length < 2) return { x: 0, y: 0, w: 480, h: 320 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (let i = 0; i < pts.length; i += 2) {
@@ -584,8 +562,9 @@ function ensureMiniCanvas() {
 }
 
 function drawMiniDemo() {
+    const world = getPopupDemoWorld();
     const mctx = ensureMiniCanvas();
-    if (!mctx || !miniCanvas) return;
+    if (!mctx || !miniCanvas || !world) return;
     const box = computeDemoBBox({ steps: getActiveDemoSteps() }, hintAnchor);
     const mw = miniCanvas.width;
     const mh = miniCanvas.height;
@@ -598,22 +577,26 @@ function drawMiniDemo() {
     const oy = (mh - box.h * scale) / 2 - box.y * scale;
     mctx.setTransform(scale, 0, 0, scale, ox, oy);
     const paint = (ent) => { if (ent && typeof ent.render === 'function') ent.render(mctx); };
-    (state.statics || []).forEach(paint);
-    (state.winds || []).forEach(paint);
-    (state.cracks || []).forEach(paint);
-    paint(state.deliveryZone);
-    (state.plates || []).forEach(paint);
-    (state.hints || []).forEach(paint);
-    (state.walls || []).forEach(paint);
-    (state.lasers || []).forEach(paint);
-    (state.doors || []).forEach(paint);
-    (state.packages || []).forEach(paint);
-    (state.activeGhosts || []).forEach(paint);
-    paint(state.player);
-    (state.guards || []).forEach(paint);
-    (state.robots || []).forEach(paint);
-    (state.cameras || []).forEach(paint);
-    (state.drones || []).forEach(d => { if (d && d.alive !== false) paint(d); });
+    const tick = world.currentTick || 0;
+    (world.statics || []).forEach(paint);
+    (world.winds || []).forEach(paint);
+    (world.cracks || []).forEach(paint);
+    paint(world.deliveryZone);
+    (world.plates || []).forEach(paint);
+    (world.hints || []).forEach(paint);
+    (world.walls || []).forEach(paint);
+    (world.lasers || []).forEach(paint);
+    (world.doors || []).forEach(d => {
+        if (d && typeof d.render === 'function' && d.render.length > 1) d.render(mctx, tick);
+        else paint(d);
+    });
+    (world.packages || []).forEach(paint);
+    (world.activeGhosts || []).forEach(paint);
+    paint(world.player);
+    (world.guards || []).forEach(paint);
+    (world.robots || []).forEach(paint);
+    (world.cameras || []).forEach(paint);
+    (world.drones || []).forEach(d => { if (d && d.alive !== false) paint(d); });
     mctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
@@ -659,27 +642,17 @@ function openHintDemo(hint) {
     if (!hint || isDemoActive()) return false;
     const demo = resolveHintDemo(hint);
     if (!demo?.steps?.length) return false;
-    hintDemoSnapshot = captureHintDemoSnapshot();
+    const world = buildPopupDemoWorld();
+    if (!world) return false;
     activeHintId = hint.id;
-    draw();
-    hintFrozenCanvas = document.createElement('canvas');
-    hintFrozenCanvas.width = canvas.width;
-    hintFrozenCanvas.height = canvas.height;
-    hintFrozenCanvas.getContext('2d').drawImage(canvas, 0, 0);
+    hintDemoSnapshot = null; // no live-state snapshot/restore for popup
+    hintFrozenCanvas = null;
     hintAnchor = {
         x: hint.x, y: hint.y, w: hint.w || 40, h: hint.h || 40,
-        camX: hintDemoSnapshot.camX || 0,
-        camY: hintDemoSnapshot.camY || 0
+        camX: state.camX || 0,
+        camY: state.camY || 0
     };
-    // Restart entities for a clean demo stage. The main canvas stays on the frozen frame.
-    applyLoadedLevel(loadCurrentEntities());
-    state.pastRuns = [];
-    state.currentRun = [];
-    state.currentTick = 0;
-    state.activeGhosts = [];
-    state.alarmState = false;
-    state.failTimer = 0;
-    clearLoopFx?.();
+    setPopupDemoWorld(world);
     const title = hint.title || 'Hint Demo';
     const ok = startDemo(demo, {
         mode: 'popup',
@@ -688,8 +661,7 @@ function openHintDemo(hint) {
         onDismiss: () => dismissHintDemo()
     });
     if (!ok) {
-        restoreHintDemoSnapshot(hintDemoSnapshot);
-        hintDemoSnapshot = null;
+        clearPopupDemoWorld();
         clearHintPopupChrome();
         activeHintId = null;
         return false;
@@ -707,19 +679,34 @@ function playerOverlapsHint(hint) {
 }
 
 function updateHintPlates(interactPressed) {
-    if (state.gameState !== 'PLAYING' || isDemoActive()) return;
-    const tick = state.currentTick || 0;
-    const gated = tick < hintReopenGateUntil;
+    if (state.gameState !== 'PLAYING') return;
     const hints = state.hints || [];
     const nowStanding = new Set();
     let firstStanding = null;
+    let activeHint = null;
     for (const hint of hints) {
         if (!playerOverlapsHint(hint)) continue;
         nowStanding.add(hint.id);
         if (!firstStanding) firstStanding = hint;
+        if (hint.id === activeHintId) activeHint = hint;
     }
-    // Keep overlap current during the post-dismiss gate so expiry while still
-    // on the plate is not a fresh enter.
+
+    // Leave-plate dismiss while popup is open (player keeps full live control).
+    if (isPopupDemo() && activeHintId) {
+        if (!nowStanding.has(activeHintId)) {
+            dismissHintDemo();
+        } else {
+            applyHintPinnedScreen();
+        }
+        hintWasStanding = nowStanding;
+        return;
+    }
+
+    // Overlay demos still block hint opens.
+    if (isDemoActive()) return;
+
+    const tick = state.currentTick || 0;
+    const gated = tick < hintReopenGateUntil;
     if (gated) {
         hintWasStanding = nowStanding;
         return;
@@ -975,7 +962,7 @@ function update() {
 
     if (isDemoActive()) {
         if (isKeyJustPressed('esc')) {
-            // Popup: Esc closes + restores. Full overlay: Esc skips if allowed.
+            // Popup: Esc dismisses without touching live state. Overlay: skip if allowed.
             if (isPopupDemo()) {
                 skipDemo() || stopDemo({ markSeen: false, skipped: true });
             } else if (canSkipDemo()) {
@@ -986,16 +973,22 @@ function update() {
             }
         }
         const demoResult = tickDemo();
-        if (demoResult?.done || !isDemoActive()) {
-            if (hintDemoSnapshot) {
+        if (isPopupDemo()) {
+            // Popup: isolated mini-demo only — keep running live gameplay below.
+            if (demoResult?.done) {
                 dismissHintDemo();
-            } else if (hintDemoJustClosed) {
+            }
+            // fall through to live player update
+        } else if (demoResult?.done || !isDemoActive()) {
+            if (hintDemoJustClosed) {
                 hintDemoJustClosed = false;
             } else {
                 restartLevel();
             }
             updatePrevKeys();
             return;
+        } else {
+            // Overlay demo still hijacks live input via stick inject; continue into movement.
         }
     } else if (isKeyJustPressed('esc')) {
         handleEscape();
@@ -1029,13 +1022,15 @@ function update() {
     let hasDash = unlocked.includes('dash'); let hasToss = unlocked.includes('toss'); let hasCloak = unlocked.includes('cloak');
 
     const demoWasActive = isDemoActive();
+    const popupWasActive = isPopupDemo();
     let interactJustPressed = isKeyJustPressed('space');
     updateHintPlates(interactJustPressed);
-    // Only abort the rest of THIS frame if we just opened a hint demo
-    // (avoid treating the same Space as package pickup). While a demo is
-    // already active, keep running player/ghost/plate updates so demoPlayback
-    // injects actually animate Approach B on the main canvas.
-    if (!demoWasActive && isDemoActive()) { updatePrevKeys(); return; }
+    // Opening a popup must not steal the frame's live movement — only suppress
+    // treating the same Space as package pickup. Overlay demos still abort.
+    if (!demoWasActive && isDemoActive() && !isPopupDemo()) { updatePrevKeys(); return; }
+    if (!popupWasActive && isPopupDemo()) {
+        interactJustPressed = false;
+    }
     let tossJustPressed = hasToss && isKeyJustPressed('f');
     let dashJustPressed = hasDash && isKeyJustPressed('shift');
     let cloakJustPressed = hasCloak && isKeyJustPressed('c');
@@ -1306,13 +1301,7 @@ function drawAbilityCooldowns(target) {
 }
 
 function draw() {
-    if (isPopupDemo() && hintFrozenCanvas) {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(hintFrozenCanvas, 0, 0);
-        drawMiniDemo();
-        return;
-    }
+    // Popup demos no longer freeze the main canvas — live world always draws.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (state.gameState !== 'PLAYING' && state.gameState !== 'LEVEL_COMPLETE' && state.gameState !== 'EDITOR' && state.gameState !== 'BOSS_INTRO' && state.gameState !== 'DIALOG') return;
     if (state.assetsLoaded < state.assetNames.length) { ctx.fillStyle = '#fff'; ctx.fillText("Loading Assets...", 400, 300); return; }
@@ -1443,6 +1432,11 @@ function draw() {
             ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
             ctx.textAlign = 'left';
         }
+    }
+
+    if (isPopupDemo()) {
+        drawMiniDemo();
+        applyHintPinnedScreen();
     }
 }
 

@@ -24,7 +24,7 @@ This document describes the current implemented game structure in the repo as of
 
 ## Progression and Meta Systems
 
-- Campaign: 13 main levels
+- Campaign: 12 main levels
 - Training: 5 standalone tutorial levels
 - Developer mode: unlocks all campaign levels and all abilities
 - Credits are earned from first-time level clears and challenge clears
@@ -187,14 +187,7 @@ For each level:
    - Echo expectation: required
    - Max ghosts: 3
 
-12. Level 12: Echo Crunch
-   - Objective: solve the route with a single echo and a `present` timeline gate.
-   - Main mechanics: one-echo limit, temporal plate keyed to current player, static zone.
-   - Expected abilities: none
-   - Echo expectation: required, strict
-   - Max ghosts: 1
-
-13. Level 13: Danger Courier
+12. Level 12: Danger Courier
    - Objective: damage the boss with heavy crates, then deliver the final fragile artifact.
    - Main mechanics: boss intro dialog, emerging robot, shooter boss, optional ammo crates, boss door unlock on defeat.
    - Expected abilities: `toss` strongly expected
@@ -270,4 +263,4 @@ Implemented and visible in the current codebase:
 
 - Campaign levels that are designed around a shop tool now grant that tool for the level, matching training. Shop purchases still persist across levels.
 - Training levels are the clearest place to see the intended mechanics in isolation.
-- If the project goal is “every campaign level should be beatable with only abilities the player definitely has by that point,” Level 4, Level 6, Level 7, Level 8, Level 9, Level 10, and Level 13 are the most important levels to audit.
+- If the project goal is “every campaign level should be beatable with only abilities the player definitely has by that point,” Level 4, Level 6, Level 7, Level 8, Level 9, Level 10, and Level 12 are the most important levels to audit.
