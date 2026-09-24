@@ -295,7 +295,7 @@ kbd {
     padding: 8px 12px;
     box-sizing: border-box;
 }
-.hidden { display: none !important; opacity: 0; }
+.hidden { display: none !important; opacity: 0; pointer-events: none; }
 
 @keyframes blink {
     0%, 100% { opacity: 1; }
@@ -1036,6 +1036,7 @@ body.touch-ui .demo-skip-btn {
     background: rgba(5, 7, 10, 0.35);
     pointer-events: auto;
 }
+.demo-overlay.hidden { pointer-events: none !important; }
 .demo-overlay.demo-overlay-popup .demo-popup-panel {
     width: 100%;
     max-width: 100%;
