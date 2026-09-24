@@ -1028,36 +1028,69 @@ body.touch-ui .demo-skip-btn {
 
 
 
-/* Hint demo: small top chrome over the live canvas, caption at the bottom. */
+/* Hint demo: small bubble anchored to the ? plate. No full-screen dim. */
 .demo-overlay.demo-overlay-popup {
+    background: transparent;
+    pointer-events: none;
     justify-content: flex-start;
-    align-items: center;
-    padding: 12px 14px 22px;
-    background: rgba(5, 7, 10, 0.35);
-    pointer-events: auto;
+    align-items: stretch;
+    padding: 0;
 }
 .demo-overlay.hidden { pointer-events: none !important; }
-.demo-overlay.demo-overlay-popup .demo-popup-panel {
-    width: 100%;
-    max-width: 100%;
-    flex: 0 0 auto;
-    gap: 0;
-    padding: 8px 12px;
-    border-radius: 10px;
-    /* Translucent top bar. Stay position:static so the caption's
-       absolute box is the overlay, not this panel. */
-    position: static;
-    background: rgba(8, 12, 18, 0.62);
-    border-color: rgba(0, 243, 255, 0.45);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+.demo-overlay.demo-overlay-popup #demo-popup-panel {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 300px;
+    min-width: 280px;
+    max-width: 320px;
+    z-index: 60;
+    pointer-events: auto;
+    gap: 8px;
+    padding: 10px 12px 14px;
+    background: rgba(8, 12, 18, 0.96);
+    border-color: rgba(0, 243, 255, 0.55);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), 0 0 18px rgba(0, 243, 255, 0.18);
 }
-.demo-overlay.demo-overlay-popup .demo-caption {
+.demo-mini-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    background: #10151c;
+    border: 1px solid rgba(0, 243, 255, 0.25);
+}
+.demo-popup-tail {
     position: absolute;
     left: 50%;
-    bottom: 18px;
+    bottom: -10px;
     transform: translateX(-50%);
-    width: fit-content;
-    max-width: 92%;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid rgba(8, 12, 18, 0.96);
+    pointer-events: none;
+}
+.demo-popup-panel.tail-below .demo-popup-tail {
+    top: auto;
+    bottom: -10px;
+    border-bottom: none;
+    border-top: 10px solid rgba(8, 12, 18, 0.96);
+}
+.demo-popup-panel.tail-above .demo-popup-tail {
+    bottom: auto;
+    top: -10px;
+    border-top: none;
+    border-bottom: 10px solid rgba(8, 12, 18, 0.96);
+}
+.demo-overlay.demo-overlay-popup .demo-caption {
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: auto;
+    max-width: 100%;
     margin: 0;
     pointer-events: none;
 }

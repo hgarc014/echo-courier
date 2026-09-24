@@ -26,6 +26,10 @@ export function isPopupDemo() {
     return active && presentationMode === 'popup';
 }
 
+export function getActiveDemoSteps() {
+    return active ? steps : [];
+}
+
 export function canSkipDemo() {
     return active && skippable;
 }
@@ -73,14 +77,7 @@ export function initDemoPlayback() {
         }
         pendingSkip = true;
     });
-    const backdrop = document.getElementById('demo-overlay');
-    if (backdrop) {
-        backdrop.addEventListener('click', (e) => {
-            if (e.target !== backdrop) return;
-            if (!active || presentationMode !== 'popup') return;
-            stopDemo({ markSeen: false, skipped: true });
-        });
-    }
+    // Popup overlay is pointer-events: none. Do not dismiss from a backdrop click.
 }
 
 export function startDemo(demo, opts = {}) {
