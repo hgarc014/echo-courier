@@ -33,8 +33,34 @@ const CAMERA_TRACK_TURN = 0.08;
 const GUARD_LOST_SIGHT = 60;
 const GUARD_CHASE_SPEED = 2.6;
 const GUARD_CATCH_PAD = 4;
-const GUARD_VISION_RANGE = 220; // was 150 — longer detection
-const GUARD_VISION_HALF_W = 45; // total width 90 vs old body-width 30 — wider FOV
+const GUARD_VISION_RANGE = 220;
+const GUARD_VISION_FOV = 90; // degrees, full wedge
+const GUARD_TURN_TICKS = 18; // ~0.3s at 60tps
+
+function angleDiff(a, b) {
+    let d = a - b;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d <= -Math.PI) d += Math.PI * 2;
+    return d;
+}
+
+function getVisionCone(guard) {
+    return {
+        cx: guard.x + guard.w / 2,
+        cy: guard.y + guard.h / 2,
+        angle: guard.facingAngle,
+        halfAngle: (GUARD_VISION_FOV * Math.PI / 180) / 2,
+        range: GUARD_VISION_RANGE,
+    };
+}
+
+function pointInVisionCone(cone, tx, ty, tw, th) {
+    const px = tx + tw / 2, py = ty + th / 2;
+    const dx = px - cone.cx, dy = py - cone.cy;
+    if (Math.hypot(dx, dy) > cone.range) return false;
+    const ang = Math.atan2(dy, dx);
+    return Math.abs(angleDiff(ang, cone.angle)) <= cone.halfAngle;
+}
 
 export class SweepCamera extends Entity {
     constructor(x, y, startAngle, sweepRange) {
@@ -609,42 +635,54 @@ export class Drone extends Entity {
 export class Guard extends Entity {
     constructor(points) {
         super(points[0].x, points[0].y, 30, 30, 'guard');
-        this.points=points; this.targetIndex=1; this.speed=1.5; this.state='patrol'; this.facingX=0; this.facingY=1; this.startX=this.x; this.startY=this.y;
+        this.points=points; this.targetIndex=1; this.speed=1.5; this.state='patrol'; this.startX=this.x; this.startY=this.y;
         this.lostSightTimer=0; this.lastSeenX=this.x; this.lastSeenY=this.y; this.chaseSpeed=GUARD_CHASE_SPEED;
+        this._resetFacing();
     }
-    reset() { this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.facingX=0; this.facingY=1; this.lostSightTimer=0; }
-    _visionRect() {
-        const range = GUARD_VISION_RANGE;
-        const halfW = GUARD_VISION_HALF_W;
-        const cx = this.x + this.w / 2;
-        const cy = this.y + this.h / 2;
-        let vx = this.x, vy = this.y, vw = this.w, vh = this.h;
-        if (this.facingX === 1) {
-            vx = this.x + this.w; vw = range;
-            vy = cy - halfW; vh = halfW * 2;
-        } else if (this.facingX === -1) {
-            vx = this.x - range; vw = range;
-            vy = cy - halfW; vh = halfW * 2;
-        } else if (this.facingY === 1) {
-            vy = this.y + this.h; vh = range;
-            vx = cx - halfW; vw = halfW * 2;
-        } else if (this.facingY === -1) {
-            vy = this.y - range; vh = range;
-            vx = cx - halfW; vw = halfW * 2;
-        }
-        return { vx, vy, vw, vh };
+    _resetFacing() {
+        this.facingX = 0;
+        this.facingY = 1;
+        this.facingAngle = Math.PI / 2;
+        this.targetAngle = Math.PI / 2;
+        this.turnStartAngle = Math.PI / 2;
+        this.turnTicksLeft = 0;
+    }
+    reset() {
+        this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.lostSightTimer=0;
+        this._resetFacing();
+    }
+    _setFacing(fx, fy) {
+        if (this.facingX === fx && this.facingY === fy) return;
+        this.facingX = fx;
+        this.facingY = fy;
+        this.targetAngle = Math.atan2(fy, fx);
+        this.turnStartAngle = this.facingAngle;
+        this.turnTicksLeft = GUARD_TURN_TICKS;
     }
     _faceToward(tx, ty) {
-        if (Math.abs(tx-this.x)>Math.abs(ty-this.y)){this.facingX=tx>this.x?1:-1;this.facingY=0;}
-        else {this.facingY=ty>this.y?1:-1;this.facingX=0;}
+        if (Math.abs(tx-this.x)>Math.abs(ty-this.y)) this._setFacing(tx>this.x?1:-1, 0);
+        else this._setFacing(0, ty>this.y?1:-1);
+    }
+    _advanceTurn() {
+        if (this.turnTicksLeft <= 0) {
+            this.facingAngle = this.targetAngle;
+            return;
+        }
+        this.turnTicksLeft--;
+        const t = 1 - this.turnTicksLeft / GUARD_TURN_TICKS;
+        this.facingAngle = this.turnStartAngle + angleDiff(this.targetAngle, this.turnStartAngle) * t;
+        if (this.turnTicksLeft <= 0) this.facingAngle = this.targetAngle;
     }
     update(player, ghosts) {
-        let vis = this._visionRect();
+        // Interpolate facing before vision so this frame's cone matches render().
+        // _faceToward / _setFacing only queue the next turn.
+        this._advanceTurn();
+        const cone = getVisionCone(this);
 
         // Echoes still swing the guard's facing, which can pull vision off the player.
         for (let g of ghosts) {
             if (!g.isActive) continue;
-            if (AABB(vis.vx, vis.vy, vis.vw, vis.vh, g.x, g.y, g.w, g.h)) {
+            if (pointInVisionCone(cone, g.x, g.y, g.w, g.h)) {
                 this.state='distracted';
                 this.lostSightTimer=0;
                 this._faceToward(g.x, g.y);
@@ -652,8 +690,7 @@ export class Guard extends Entity {
             }
         }
 
-        vis = this._visionRect();
-        const playerInVision = player.cloakTimer <= 0 && AABB(vis.vx, vis.vy, vis.vw, vis.vh, player.x, player.y, player.w, player.h);
+        const playerInVision = player.cloakTimer <= 0 && pointInVisionCone(cone, player.x, player.y, player.w, player.h);
         if (playerInVision) {
             this.state = 'chase';
             this.lostSightTimer = GUARD_LOST_SIGHT;
@@ -683,8 +720,11 @@ export class Guard extends Entity {
         if (this.state==='patrol') {
             let target=this.points[this.targetIndex]; let dx=target.x-this.x, dy=target.y-this.y; let dist=Math.hypot(dx,dy);
             if (dist<this.speed) { this.x=target.x; this.y=target.y; this.targetIndex=(this.targetIndex+1)%this.points.length; }
-            else { this.x+=(dx/dist)*this.speed; this.y+=(dy/dist)*this.speed;
-                   if (Math.abs(dx)>Math.abs(dy)){this.facingX=dx>0?1:-1;this.facingY=0;}else{this.facingY=dy>0?1:-1;this.facingX=0;} }
+            else {
+                this.x+=(dx/dist)*this.speed; this.y+=(dy/dist)*this.speed;
+                if (Math.abs(dx)>Math.abs(dy)) this._setFacing(dx>0?1:-1, 0);
+                else this._setFacing(0, dy>0?1:-1);
+            }
         }
         return null;
     }
@@ -695,17 +735,21 @@ export class Guard extends Entity {
         const img = resolveSprite(state, 'guard');
         if (img) {
             drawSprite(ctx, img, this.x, this.y, this.w, this.h, {
-                flipX: this.facingX < 0,
+                flipX: Math.cos(this.facingAngle) < 0,
                 bob: moving ? Math.abs(walk) * 2.2 : Math.sin(t * 0.12) * 0.6,
                 scaleY: moving ? 1 + walk * 0.05 : 1,
                 valign: 'bottom'
             });
         } else super.render(ctx);
-        const vis = this._visionRect();
+        const cone = getVisionCone(this);
         if (this.state === 'chase') ctx.fillStyle = 'rgba(255,40,40,0.34)';
         else if (this.state === 'distracted') ctx.fillStyle = 'rgba(255,255,0,0.14)';
         else ctx.fillStyle = 'rgba(255,0,0,0.06)';
-        ctx.fillRect(vis.vx, vis.vy, vis.vw, vis.vh);
+        ctx.beginPath();
+        ctx.moveTo(cone.cx, cone.cy);
+        ctx.arc(cone.cx, cone.cy, cone.range, cone.angle - cone.halfAngle, cone.angle + cone.halfAngle);
+        ctx.closePath();
+        ctx.fill();
     }
 }
 
