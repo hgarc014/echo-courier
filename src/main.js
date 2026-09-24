@@ -439,7 +439,8 @@ let hintAnchor = null;
 let miniCanvas = null;
 let miniCtx = null;
 let hintReopenGateUntil = 0;
-let hintAutoOpened = new Set();
+let hintWasStanding = new Set();
+let hintPinnedScreen = null;
 let activeHintId = null;
 let hintDemoJustClosed = false;
 
@@ -533,6 +534,7 @@ function restoreHintDemoSnapshot(snap) {
 function clearHintPopupChrome() {
     hintFrozenCanvas = null;
     hintAnchor = null;
+    hintPinnedScreen = null;
     const panel = document.getElementById('demo-popup-panel');
     if (panel) {
         panel.style.left = '';
@@ -615,6 +617,15 @@ function drawMiniDemo() {
     mctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
+function applyHintPinnedScreen(panel) {
+    panel = panel || document.getElementById('demo-popup-panel');
+    if (!panel || !hintPinnedScreen) return;
+    panel.style.left = `${hintPinnedScreen.left}px`;
+    panel.style.top = `${hintPinnedScreen.top}px`;
+    panel.classList.toggle('tail-below', !!hintPinnedScreen.placeAbove);
+    panel.classList.toggle('tail-above', !hintPinnedScreen.placeAbove);
+}
+
 function positionHintPopup() {
     const panel = document.getElementById('demo-popup-panel');
     const area = document.querySelector('.game-area');
@@ -635,11 +646,14 @@ function positionHintPopup() {
     const maxTop = Math.max(4, area.clientHeight - ph - 4);
     left = Math.max(4, Math.min(left, maxLeft));
     top = Math.max(4, Math.min(top, maxTop));
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
-    panel.classList.toggle('tail-below', placeAbove);
-    panel.classList.toggle('tail-above', !placeAbove);
+    hintPinnedScreen = { left, top, placeAbove };
+    applyHintPinnedScreen(panel);
 }
+
+window.addEventListener('resize', () => {
+    if (!hintAnchor || !isPopupDemo()) return;
+    positionHintPopup();
+});
 
 function openHintDemo(hint) {
     if (!hint || isDemoActive()) return false;
@@ -695,21 +709,31 @@ function playerOverlapsHint(hint) {
 function updateHintPlates(interactPressed) {
     if (state.gameState !== 'PLAYING' || isDemoActive()) return;
     const tick = state.currentTick || 0;
-    if (tick < hintReopenGateUntil) return;
+    const gated = tick < hintReopenGateUntil;
     const hints = state.hints || [];
-    let standing = null;
+    const nowStanding = new Set();
+    let firstStanding = null;
     for (const hint of hints) {
-        if (playerOverlapsHint(hint)) { standing = hint; break; }
+        if (!playerOverlapsHint(hint)) continue;
+        nowStanding.add(hint.id);
+        if (!firstStanding) firstStanding = hint;
     }
-    if (!standing) return;
-    if (standing.autoOpen && !hintAutoOpened.has(standing.id)) {
-        hintAutoOpened.add(standing.id);
-        openHintDemo(standing);
+    // Keep overlap current during the post-dismiss gate so expiry while still
+    // on the plate is not a fresh enter.
+    if (gated) {
+        hintWasStanding = nowStanding;
         return;
     }
-    if (interactPressed) {
-        openHintDemo(standing);
+    let toOpen = null;
+    for (const hint of hints) {
+        if (nowStanding.has(hint.id) && !hintWasStanding.has(hint.id)) {
+            toOpen = hint;
+            break;
+        }
     }
+    if (!toOpen && interactPressed && firstStanding) toOpen = firstStanding;
+    hintWasStanding = nowStanding;
+    if (toOpen) openHintDemo(toOpen);
 }
 
 
@@ -723,7 +747,7 @@ export function startGame(levelIndex) {
     if (isDemoActive()) stopDemo({ markSeen: false, invokeDismiss: false });
     hintDemoSnapshot = null;
     activeHintId = null;
-    hintAutoOpened.clear();
+    hintWasStanding.clear();
     hintReopenGateUntil = 0;
     hintDemoJustClosed = false;
     state.currentLevelIndex = levelIndex;
@@ -782,7 +806,7 @@ export function restartLevel() {
     if (isDemoActive()) stopDemo({ markSeen: false, invokeDismiss: false });
     hintDemoSnapshot = null;
     activeHintId = null;
-    hintAutoOpened.clear();
+    hintWasStanding.clear();
     hintReopenGateUntil = 0;
     let lv = state.playtesting ? state.currentLevelMeta : LEVELS[state.currentLevelIndex];
     if (!lv) return;
@@ -1287,7 +1311,6 @@ function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(hintFrozenCanvas, 0, 0);
         drawMiniDemo();
-        positionHintPopup();
         return;
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
