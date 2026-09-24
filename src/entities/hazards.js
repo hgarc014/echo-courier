@@ -175,13 +175,15 @@ const BOSS_RANGE = 400;
 const BOSS_LOCK_TICKS = 90;
 const BOSS_COOLDOWN = { 3: 96, 2: 48, 1: 36 };
 const BOSS_TELEGRAPH = { 3: 18, 2: 15, 1: 12 };
+const BOSS_TEMPO = 0.75;
 
 function bossTelegraphTicks(hp) {
     return BOSS_TELEGRAPH[hp] || BOSS_TELEGRAPH[3];
 }
 
 function bossFireCooldown(hp) {
-    return BOSS_COOLDOWN[hp] || BOSS_COOLDOWN[3];
+    const base = BOSS_COOLDOWN[hp] || BOSS_COOLDOWN[3];
+    return Math.round(base / BOSS_TEMPO);
 }
 
 function bossPhaseStyle(hp) {
@@ -260,7 +262,7 @@ function drawBossShotLanes(ctx, cx, cy, angle, charge, multi) {
 export class ShooterRobot extends Entity {
     constructor(path) {
         super(path[0].x, path[0].y, 35, 35, 'robot');
-        this.path = path; this.pathIndex = 0; this.speed = 1.5;
+        this.path = path; this.pathIndex = 0; this.speed = 1.5 * BOSS_TEMPO;
         this.fireCooldown = 0; this.facingAngle = 0;
         this.hp = 3; this.hitFlicker = 0;
         this.engaged = true;
@@ -334,7 +336,7 @@ export class ShooterRobot extends Entity {
 
         const moveAlongPath = () => {
             if (this.path.length <= 1) return;
-            let curSpeed = this.hp === 2 ? 3.0 : 2.0;
+            let curSpeed = (this.hp === 2 ? 3.0 : 2.0) * BOSS_TEMPO;
             let target = this.path[this.pathIndex];
             let dx = target.x - this.x;
             let dy = target.y - this.y;
@@ -355,7 +357,7 @@ export class ShooterRobot extends Entity {
             if (this.pathIndex >= this.emergeUntilPathIndex) {
                 this.isEmerging = false;
                 this.engaged = true;
-                this.fireCooldown = Math.max(this.fireCooldown, 45);
+                this.fireCooldown = Math.max(this.fireCooldown, Math.round(45 / BOSS_TEMPO));
             }
             return;
         }
@@ -365,7 +367,7 @@ export class ShooterRobot extends Entity {
         if (this.hp === 1 && bestTarget) {
             // Unhinged Chase Mode
             let dx = bestTarget.x - this.x; let dy = bestTarget.y - this.y; let dist = Math.hypot(dx, dy);
-            if (dist > 50) { this.x += (dx/dist)*2.0; this.y += (dy/dist)*2.0; }
+            if (dist > 50) { this.x += (dx/dist)*(2.0 * BOSS_TEMPO); this.y += (dy/dist)*(2.0 * BOSS_TEMPO); }
             this.facingAngle = Math.atan2(dy, dx);
         } else if (this.path.length > 1) {
             // Speed up slightly in Phase 2
