@@ -1014,7 +1014,7 @@ body.touch-ui #sub-tutorials > .secondary-btn {
     animation: demo-highlight-pulse 0.9s ease-in-out infinite;
     z-index: 6;
 }
-body.touch-ui .game-area:has(#demo-overlay:not(.hidden)) {
+body.touch-ui .game-area:has(#demo-overlay.demo-overlay-full:not(.hidden)) {
     z-index: 6;
 }
 body.touch-ui .demo-caption {
@@ -1031,7 +1031,7 @@ body.touch-ui .demo-skip-btn {
 /* Hint demo: small bubble anchored to the ? plate. No full-screen dim. */
 .demo-overlay.demo-overlay-popup {
     background: transparent;
-    pointer-events: auto;
+    pointer-events: none;
     justify-content: flex-start;
     align-items: stretch;
     padding: 0;
