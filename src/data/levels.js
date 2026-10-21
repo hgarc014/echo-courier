@@ -179,71 +179,63 @@ const W1_L2_LAYOUT = {
     ...emptyActors()
 };
 
-// Corridor: plate P, then a long walk to plate-door D1, then TimerDoor T (open 2s / shut 3s).
+// Corridor. Plate holds d1. Timer T's first opening (openT) shuts before a courier
+// can reach it; the parcel pocket adds a detour so the second window is the one that lines up.
 const W1_L3_LAYOUT = {
     width: 800, height: 600, mapWidth: 800, mapHeight: 600,
     player: { x: 40, y: 280 },
-    deliveryZone: { x: 690, y: 245, w: 80, h: 130 },
+    deliveryZone: { x: 720, y: 250, w: 50, h: 100 },
     walls: [
         { x: 0, y: 0, w: 800, h: 20 },
         { x: 0, y: 580, w: 800, h: 20 },
         { x: 0, y: 0, w: 20, h: 600 },
         { x: 780, y: 0, w: 20, h: 600 },
-        { x: 20, y: 210, w: 760, h: 20 },
-        { x: 20, y: 400, w: 760, h: 20 }
+        { x: 20, y: 220, w: 760, h: 20 },
+        // Pocket gap x=110..210.
+        { x: 20, y: 400, w: 90, h: 20 },
+        { x: 210, y: 400, w: 570, h: 20 },
+        { x: 110, y: 420, w: 20, h: 160 },
+        { x: 210, y: 420, w: 20, h: 160 }
     ],
     doors: [
-        { x: 500, y: 230, w: 20, h: 170, id: 'd1', type: 'standard' },
-        { x: 640, y: 230, w: 20, h: 170, id: 't', type: 'timer', openT: 120, closedT: 180 }
+        { x: 430, y: 240, w: 20, h: 160, id: 'd1', type: 'standard' },
+        { x: 660, y: 240, w: 20, h: 160, id: 't', type: 'timer', openT: 50, closedT: 260 }
     ],
-    plates: [{ x: 200, y: 280, linkedIds: ['d1'], id: 'p', type: 'standard' }],
-    packages: [{ x: 110, y: 285, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    plates: [{ x: 250, y: 290, linkedIds: ['d1'], id: 'p', type: 'standard' }],
+    packages: [{ x: 145, y: 500, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
     hints: [],
     ...emptyActors()
 };
 
-// Plate A sits in chamber 1, far from door A. The door shuts the tick the plate is empty, so the tape that reaches plate B is a second loop.
-function w1L4Walls() {
-    const walls = [
+// Three door columns on one corridor. Plate B is below the lane, not a serpentine.
+// Door A still closes the tick its plate is empty, so the tape that reaches B is a second loop.
+const W1_L4_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 40, y: 170 },
+    deliveryZone: { x: 700, y: 155, w: 60, h: 90 },
+    walls: [
         { x: 0, y: 0, w: 800, h: 20 },
         { x: 0, y: 580, w: 800, h: 20 },
         { x: 0, y: 0, w: 20, h: 600 },
-        { x: 780, y: 0, w: 20, h: 600 }
-    ];
-    const left = 20;
-    const right = 470;
-    const openW = 90;
-    const pitch = 90;
-    const clear = 70;
-    for (let i = 0; i < 4; i++) {
-        const y = 20 + i * pitch + clear;
-        const span = right - left - openW;
-        if (i % 2 === 0) walls.push({ x: left, y, w: span, h: 20 });
-        else walls.push({ x: left + openW, y, w: span, h: 20 });
-    }
-    walls.push({ x: left, y: 450, w: right - left, h: 130 });
-    walls.push({ x: right, y: 20, w: 20, h: 360 });
-    walls.push({ x: right, y: 450, w: 20, h: 130 });
-    walls.push({ x: 490, y: 20, w: 290, h: 360 });
-    walls.push({ x: 490, y: 450, w: 290, h: 130 });
-    return walls;
-}
-
-const W1_L4_LAYOUT = {
-    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
-    player: { x: 40, y: 40 },
-    deliveryZone: { x: 715, y: 385, w: 60, h: 60 },
-    walls: w1L4Walls(),
+        { x: 780, y: 0, w: 20, h: 600 },
+        // Gap y=150..290 is the only crossing on each column.
+        { x: 240, y: 20, w: 20, h: 130 },
+        { x: 240, y: 290, w: 20, h: 290 },
+        { x: 470, y: 20, w: 20, h: 130 },
+        { x: 470, y: 290, w: 20, h: 290 },
+        { x: 630, y: 20, w: 20, h: 130 },
+        { x: 630, y: 290, w: 20, h: 290 }
+    ],
     doors: [
-        { x: 470, y: 380, w: 20, h: 70, id: 'doorA', type: 'standard' },
-        { x: 610, y: 380, w: 20, h: 70, id: 'doorB', type: 'standard' },
-        { x: 690, y: 380, w: 20, h: 70, id: 't', type: 'timer', openT: 240, closedT: 780 }
+        { x: 240, y: 150, w: 20, h: 140, id: 'doorA', type: 'standard' },
+        { x: 470, y: 150, w: 20, h: 140, id: 'doorB', type: 'standard' },
+        { x: 630, y: 150, w: 20, h: 140, id: 't', type: 'timer', openT: 420, closedT: 100 }
     ],
     plates: [
-        { x: 180, y: 40, linkedIds: ['doorA'], id: 'a', type: 'standard' },
-        { x: 510, y: 395, linkedIds: ['doorB'], id: 'b', type: 'standard' }
+        { x: 150, y: 160, linkedIds: ['doorA'], id: 'a', type: 'standard' },
+        { x: 330, y: 460, linkedIds: ['doorB'], id: 'b', type: 'standard' }
     ],
-    packages: [{ x: 78, y: 40, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    packages: [{ x: 40, y: 420, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
     hints: [],
     ...emptyActors()
 };
@@ -675,8 +667,8 @@ export function cloneDemo(demo) {
 export const LEVELS = [
     { name: "First Shift", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, first shift on the floor. That plate holds the door, but you cannot stand on it and walk through. Leave an echo on the plate. The echo is company property. Move the parcel." }, obj: "Stand on the plate and loop. Your echo holds the door while you deliver the package.", maxGhosts: 1, loopTime: 20, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L1_LAYOUT, demo: LEVEL1_DEMO, demos: { intro: LEVEL1_DEMO } },
     { name: "Return Trip", story: { speaker: "ChronoHaul Dispatch", text: "The drop bay is behind the door. The plate is down the left shaft. Record that plate first. Haul the parcel over to the shaft and the loop clock runs out before anyone is left holding the door." }, obj: "Loop on the shaft plate first, then carry the package through. Fetching the box first does not fit in the loop.", maxGhosts: 1, loopTime: 5, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L2_LAYOUT },
-    { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T cycles open two seconds, shut three, on the depot clock. Your echo has to still be on the plate when that window opens. Walk off early and the plate door is shut when the timer lets you through." }, obj: "Keep the echo on the plate through the loop. Cross the timer door in its second open window.", maxGhosts: 1, loopTime: 18, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
-    { name: "Airlock Relay", story: { speaker: "ChronoHaul Dispatch", text: "Two airlocks, one timer, two echoes. Door A shuts the moment its plate is empty, so one recording cannot hold A and reach plate B. Park an echo on A, park the next on B, and carry the parcel through on the timer's window. Three loops. No spare timeline." }, obj: "Park an echo on plate A, then one on plate B. Carry the package through both doors and the timer.", maxGhosts: 2, loopTime: 25, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_L4_LAYOUT },
+    { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T's first opening is gone before you can reach it. The parcel is down in the pocket. Hold the plate with an echo and take the second window. Walk off the plate early and that window opens onto a shut door." }, obj: "Keep the echo on the plate. The timer's first opening is too early — cross on the second.", maxGhosts: 1, loopTime: 14, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
+    { name: "Airlock Relay", story: { speaker: "ChronoHaul Dispatch", text: "Two airlocks, one timer, two echoes. Door A shuts the moment its plate is empty, so one recording cannot hold A and reach plate B. Park an echo on A, park the next on B, and carry the parcel through. Three loops." }, obj: "Park an echo on plate A, then one on plate B. Carry the package through both doors and the timer.", maxGhosts: 2, loopTime: 12, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_L4_LAYOUT },
     { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. An empty plate locks its door. Fill them in order or the vault stays shut." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper audits three plates on a fixed beat. Be on the right plate at the right beat or that door locks for the loop. Break all three shields and the vault opens." }, obj: "Echo on g1 by the first audit, echo on g2 by the second, you on g3 at the third. Deliver from the vault.", maxGhosts: 2, loopTime: 24, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },
     ...W2_LEVELS,
     { name: "Level 3: Sweep Coverage", voiceKey: "level-2-story", story: { speaker: "Sector Surveillance", text: "Camera grid online in Transit Spur C. Cloak is still locked behind procurement. Time the cone, use cover, and remember: discarded timelines trip the same sensors you do." }, obj: "One camera. Cross on the gap in the sweep. Echoes trigger cameras too.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL3_LAYOUT, demos: { intro: LEVEL3_DEMO } },

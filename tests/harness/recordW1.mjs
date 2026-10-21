@@ -138,52 +138,42 @@ function solveL2() {
 }
 
 function solveL3() {
-    standOn('p', 210, 290);
-    wait(15);
+    standOn('p', 258, 298);
+    wait(8);
     pressR();
-    moveTo(115, 290, 2, 400);
+    moveTo(145, 280, 2, 400);
+    moveTo(145, 500, 2, 400);
     grab();
-    moveTo(460, 280, 2, 600);
-    waitUntil(() => doorOpen('d1'), 400, 'L3 plate door');
-    moveTo(590, 280, 2, 400);
+    moveTo(145, 280, 2, 400);
+    moveTo(390, 280, 2, 500);
+    waitUntil(() => doorOpen('d1'), 500, 'L3 plate door');
+    moveTo(600, 280, 2, 400);
     waitUntil(() => doorOpen('t'), 800, 'L3 timer');
-    moveTo(710, 290, 2, 400);
+    moveTo(724, 270, 4, 300);
     dropInZone();
-}
-
-const L4_Y = [40, 130, 220, 310, 400];
-
-function snakeToExit() {
-    moveTo(400, L4_Y[0], 2, 400);
-    moveTo(400, L4_Y[1], 2, 200);
-    moveTo(40, L4_Y[1], 2, 400);
-    moveTo(40, L4_Y[2], 2, 200);
-    moveTo(400, L4_Y[2], 2, 400);
-    moveTo(400, L4_Y[3], 2, 200);
-    moveTo(40, L4_Y[3], 2, 400);
-    moveTo(40, L4_Y[4], 2, 200);
 }
 
 function solveL4() {
     // Door A closes the tick the plate is empty, so one tape cannot hold A and also reach B.
-    standOn('a', 190, 48);
-    wait(24);
+    standOn('a', 158, 168);
+    wait(10);
     pressR();
-    waitUntil(() => doorOpen('doorA'), 500, 'L4 door A');
-    snakeToExit();
-    moveTo(530, 400, 4, 400);
-    standOn('b', 520, 405);
-    wait(24);
+    waitUntil(() => doorOpen('doorA'), 400, 'L4 door A');
+    moveTo(200, 170, 4, 300);
+    moveTo(360, 170, 4, 400);
+    moveTo(338, 468, 4, 500);
+    standOn('b', 338, 468);
+    wait(10);
     pressR();
-    moveTo(78, 40, 4, 300);
+    moveTo(40, 420, 4, 500);
     grab();
+    moveTo(40, 170, 4, 400);
     waitUntil(() => doorOpen('doorA'), 500, 'L4 door A again');
-    snakeToExit();
-    moveTo(560, 400, 4, 500);
-    waitUntil(() => doorOpen('doorB'), 900, 'L4 door B');
-    moveTo(650, 400, 4, 400);
-    waitUntil(() => doorOpen('t'), 1200, 'L4 timer');
-    moveTo(730, 400, 4, 300);
+    moveTo(360, 170, 4, 500);
+    waitUntil(() => doorOpen('doorB'), 800, 'L4 door B');
+    moveTo(560, 170, 4, 400);
+    waitUntil(() => doorOpen('t'), 800, 'L4 timer');
+    moveTo(710, 170, 4, 300);
     dropInZone();
 }
 
@@ -273,27 +263,54 @@ export function runNaive(which) {
         },
         'l3-leave-plate': () => {
             loadLevel({ level: 2 });
-            standOn('p', 210, 290);
-            wait(20);
-            moveTo(460, 280, 2, 500);
+            const plate = state.plates.find(p => p.id === 'p');
+            standOn('p', plate.x + 8, plate.y + 8);
+            wait(12);
+            moveTo(plate.x + 70, plate.y + 8, 4, 400, { allowBlocked: true });
             pressR();
-            moveTo(115, 290, 2, 400);
+            const pkg = state.packages.find(p => p.requiredForDelivery !== false);
+            moveTo(pkg.x, 280, 4, 400, { allowBlocked: true });
+            moveTo(pkg.x, pkg.y, 4, 400, { allowBlocked: true });
+            try { grab(); } catch { /* echo walked off; door is shut */ }
+            moveTo(600, 280, 4, 600, { allowBlocked: true });
+            for (let i = 0; i < 500 && state.gameState === 'PLAYING'; i++) tick();
+        },
+        'l3-first-window': () => {
+            // Echo holds the plate (so the only miss is the timer). Sprint for gate T
+            // and give up before its second opening.
+            loadLevel({ level: 2 });
+            const plate = state.plates.find(p => p.id === 'p');
+            const pkg = state.packages.find(p => p.requiredForDelivery !== false);
+            const timer = state.doors.find(d => d.id === 't');
+            const second = (timer.openT || 0) + (timer.closedT || 0);
+            standOn('p', plate.x + 8, plate.y + 8);
+            wait(6);
+            pressR();
+            moveTo(pkg.x, 280, 4, 400);
+            moveTo(pkg.x, pkg.y, 4, 400);
             grab();
-            moveTo(460, 280, 2, 500);
-            for (let i = 0; i < 900 && state.gameState === 'PLAYING'; i++) tick();
+            moveTo(pkg.x, 280, 4, 400);
+            moveTo(timer.x - 50, 280, 4, 800, { stopOnRewind: true, allowBlocked: true });
+            while (state.currentTick < second - 25 && state.gameState === 'PLAYING' && state.pastRuns.length < 2) {
+                moveTo(timer.x + timer.w + 8, 280, 4, 6, { stopOnRewind: true, allowBlocked: true });
+            }
+            moveTo(timer.x - 90, 280, 4, 40, { allowBlocked: true });
         },
         'l4-two-loops': () => {
             loadLevel({ level: 3 });
             // One echo can hold A or B, not both. Carry through with only A held.
-            standOn('a', 190, 48);
-            wait(12);
+            const plate = state.plates.find(p => p.id === 'a');
+            const pkg = state.packages.find(p => p.requiredForDelivery !== false);
+            standOn('a', plate.x + 8, plate.y + 8);
+            wait(8);
             pressR();
-            moveTo(78, 40, 4, 300);
+            moveTo(pkg.x, pkg.y, 4, 500);
             grab();
+            moveTo(pkg.x, 170, 4, 400);
             waitUntil(() => doorOpen('doorA'), 500, 'L4 naive door A');
-            snakeToExit();
-            moveTo(560, 400, 4, 400);
-            for (let i = 0; i < 900 && state.gameState === 'PLAYING'; i++) tick();
+            moveTo(360, 170, 4, 500);
+            moveTo(450, 170, 4, 400, { allowBlocked: true });
+            for (let i = 0; i < 700 && state.gameState === 'PLAYING'; i++) tick();
         },
         'mb-rush-vault': () => {
             loadLevel({ level: 4 });
