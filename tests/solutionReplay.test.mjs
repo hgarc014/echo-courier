@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { replaySolution, loadLevel, main, state, keys } from './harness/replay.mjs';
 import { runNaive as runNaiveW1 } from './harness/recordW1.mjs';
-import { getLevelSetup, serializeLevel } from '../src/data/levels.js';
+import { LEVELS, getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 import { runNaive as runNaiveW4 } from './harness/recordW4.mjs';
 
@@ -87,7 +87,7 @@ for (const plan of ['l2-fetch-first', 'l3-leave-plate', 'l3-first-window', 'l4-t
 // Editor playtest path: W1-L1 inputs against that level's layout loaded from the editor.
 check('w1-l1 inputs replay via editor-playtest path', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'w1-l1.json'), 'utf8'));
-    const setup = getLevelSetup(0);
+    const setup = getLevelSetup(LEVELS.findIndex(level => level.name === 'First Shift'));
     const layout = serializeLevel({ ...setup, width: setup.mapWidth, height: setup.mapHeight, meta: {} });
     const r = replaySolution({
         level: null,

@@ -9,6 +9,7 @@ import { installDomStubs } from './harness/domStub.mjs';
 installDomStubs();
 const { main, state, keys, loadLevel, replaySolution } = await import('./harness/replay.mjs');
 const { LEVELS } = await import('../src/data/levels.js');
+const firstShift = LEVELS.findIndex(level => level.name === 'First Shift');
 const { displayedLoopNumber, finishedWithinLoops, finishLoopLine, plannedLoopBudget } = await import('../src/core/loopDisplay.js');
 
 const elements = new Map();
@@ -118,7 +119,7 @@ function hudPhrase() {
 }
 
 check('HUD shows the live loop, including after the echo buffer drops a run', () => {
-    loadLevel({ level: 0 });
+    loadLevel({ level: firstShift });
     const hud = document.getElementById('loop-count');
     assert.equal(state.gameState, 'PLAYING');
     assert.equal(state.loopNumber, 1);
@@ -131,7 +132,7 @@ check('HUD shows the live loop, including after the echo buffer drops a run', ()
     assert.equal(state.loopNumber, 2);
     assert.equal(hud.innerText, '2');
     assert.equal(document.getElementById('echo-count').innerText, '1');
-    assert.equal(LEVELS[0].challenge.check(), true);
+    assert.equal(LEVELS[firstShift].challenge.check(), true);
 
     rewind();
     rewind();
@@ -140,7 +141,7 @@ check('HUD shows the live loop, including after the echo buffer drops a run', ()
     assert.equal(hud.innerText, '4');
     assert.equal(hudPhrase(), 'Loop 4 · over par (2) · Echoes 1/1');
     assert.doesNotMatch(hudPhrase(), / of /);
-    assert.equal(LEVELS[0].challenge.check(), false);
+    assert.equal(LEVELS[firstShift].challenge.check(), false);
 
     main.restartLevel();
     assert.equal(state.loopNumber, 1);
@@ -150,8 +151,8 @@ check('HUD shows the live loop, including after the echo buffer drops a run', ()
 });
 
 check('two rewinds on Level 1 keep going and do not read as Loop 3 / Max 2', () => {
-    loadLevel({ level: 0 });
-    assert.equal(LEVELS[0].maxGhosts, 1);
+    loadLevel({ level: firstShift });
+    assert.equal(LEVELS[firstShift].maxGhosts, 1);
     rewind();
     rewind();
     assert.equal(state.loopNumber, 3);
@@ -163,14 +164,14 @@ check('two rewinds on Level 1 keep going and do not read as Loop 3 / Max 2', () 
     // Past the planned budget the HUD stops saying "N of B". Another rewind is still allowed.
     rewind();
     assert.equal(state.loopNumber, 4);
-    assert.equal(state.pastRuns.length, LEVELS[0].maxGhosts);
+    assert.equal(state.pastRuns.length, LEVELS[firstShift].maxGhosts);
     assert.equal(hudPhrase(), 'Loop 4 · over par (2) · Echoes 1/1');
     assert.equal(document.getElementById('loop-of').classList.contains('hidden'), true);
     assert.equal(document.getElementById('loop-over').classList.contains('hidden'), false);
 });
 
 check('editor playtest starts on loop 1', () => {
-    loadLevel({ level: 0 });
+    loadLevel({ level: firstShift });
     main.startPlaytestFromEditor();
     assert.equal(state.playtesting, true);
     assert.equal(state.loopNumber, 1);
@@ -202,8 +203,8 @@ check('results text uses the same 1-based count as the HUD', () => {
 
     // First Shift replaced the old no-par Level 1. Clear par for this replay so the
     // results panel still covers a 2-loop finish that must not mention par.
-    const savedPar = LEVELS[0].par;
-    LEVELS[0].par = undefined;
+    const savedPar = LEVELS[firstShift].par;
+    LEVELS[firstShift].par = undefined;
     try {
         const basics = replaySolution(JSON.parse(readFileSync(new URL('./solutions/w1-l1.json', import.meta.url), 'utf8')));
         assert.equal(basics.completed, true);
@@ -213,7 +214,7 @@ check('results text uses the same 1-based count as the HUD', () => {
         assert.match(basicsMsg, /Finished in 2 loops\./);
         assert.doesNotMatch(basicsMsg, /par /);
     } finally {
-        LEVELS[0].par = savedPar;
+        LEVELS[firstShift].par = savedPar;
     }
 });
 
