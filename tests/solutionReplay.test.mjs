@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { replaySolution, state } from './harness/replay.mjs';
+import { replaySolution, loadLevel, main, state, keys } from './harness/replay.mjs';
 import { getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 
@@ -59,6 +59,100 @@ check('level01 inputs replay via editor-playtest path', () => {
     const layout = serializeLevel({ ...setup, width: setup.mapWidth, height: setup.mapHeight, meta: {} });
     const r = replaySolution({ level: null, layout, meta: { name: 'L1 via editor', maxGhosts: 1, grants: [] }, loops: sol.loops });
     assert.ok(r.completed, `editor playtest replay did not complete; fails: ${r.failMessages.join(' | ') || 'none'}`);
+});
+
+function releaseKeys() {
+    for (const k of Object.keys(keys)) keys[k] = false;
+}
+
+function tap(frameKey) {
+    releaseKeys();
+    if (frameKey) for (const part of frameKey.split('+')) keys[part] = true;
+    main.stepSimulation();
+}
+
+function loopCapTicks() {
+    const seconds = Number(state.currentLevelMeta?.loopTime);
+    const tps = state.TICK_RATE > 0 ? (1000 / state.TICK_RATE) : 60;
+    return Math.round(seconds * tps);
+}
+
+function holdRestOfLoop1() {
+    const cap = loopCapTicks();
+    let steps = 0;
+    while (state.gameState === 'PLAYING' && state.loopNumber === 1 && state.pastRuns.length === 0 && state.currentTick < cap && steps < cap + 5) {
+        tap('');
+        steps++;
+    }
+    return cap;
+}
+
+// Sinkhole's recorded route, stopped after loop 1 (no rewind, no later loops).
+check('w2-mb one-loop attempt does not clear', () => {
+    const sol = JSON.parse(readFileSync(join(dir, 'w2-mb.json'), 'utf8'));
+    const first = sol.loops[0].filter(([k]) => k !== 'r');
+    const r = replaySolution({ ...sol, loops: [first] }, { extraTicks: 0 });
+    assert.equal(r.completed, false);
+    assert.equal(r.loopsUsed, 1);
+    assert.equal(state.pastRuns.length, 0);
+    const cap = holdRestOfLoop1();
+    assert.notEqual(state.gameState, 'LEVEL_COMPLETE');
+    assert.equal(state.loopNumber, 1);
+    assert.equal(state.pastRuns.length, 0);
+    assert.equal(state.currentTick, cap);
+    const boss = state.burrowers[0];
+    assert.equal(boss.defeated, false);
+    assert.ok(boss.hp > 0, `boss died in one loop (hp ${boss.hp})`);
+    const door = state.doors.find(d => d.id === boss.defeatDoorId);
+    assert.equal(door.isOpen, false);
+});
+
+// Camp one core plate for the whole loop. Several burrower cycles fit in that
+// loop; with no echoes the boss may stun once and then stays dormant.
+check('w2-mb idle on one core plate does not solo loop 1', () => {
+    const sol = JSON.parse(readFileSync(join(dir, 'w2-mb.json'), 'utf8'));
+    loadLevel(sol);
+    const plate = state.plates.find(p => p.id === 'c3');
+    assert.ok(plate, 'core plate c3 missing');
+    const parked = () => {
+        const p = state.player;
+        return p.x >= plate.x && p.y >= plate.y && p.x + p.w <= plate.x + plate.w && p.y + p.h <= plate.y + plate.h;
+    };
+    for (let i = 0; i < 500 && !parked(); i++) {
+        const p = state.player;
+        const underSep = p.x < 360 && p.y + p.h > 400;
+        let frame = '';
+        if (underSep) frame = 'd';
+        else {
+            const dx = (plate.x + 5) - p.x;
+            const dy = (plate.y + 5) - p.y;
+            if (dy < -1) frame += 'w';
+            else if (dy > 1) frame += 's';
+            if (dx > 1) frame += (frame ? '+' : '') + 'd';
+            else if (dx < -1) frame += (frame ? '+' : '') + 'a';
+        }
+        tap(frame);
+        assert.equal(state.loopNumber, 1);
+        assert.equal(state.pastRuns.length, 0);
+        assert.notEqual(state.gameState, 'LEVEL_COMPLETE');
+    }
+    assert.equal(parked(), true, `did not park on c3 (player ${state.player.x},${state.player.y})`);
+    const boss = state.burrowers[0];
+    const cap = holdRestOfLoop1();
+    assert.equal(state.gameState, 'PLAYING');
+    assert.equal(state.loopNumber, 1);
+    assert.equal(state.pastRuns.length, 0);
+    assert.equal(state.activeGhosts.length, 0);
+    assert.equal(state.currentTick, cap);
+    assert.ok(cap >= boss.intervalTicks() * 3, 'loop did not cover several surface cycles');
+    assert.equal(boss.hp, boss.maxHp - 1);
+    assert.equal(boss.stunsThisLoop, 1);
+    assert.equal(boss.phase, 'dormant');
+    assert.equal(boss.defeated, false);
+    assert.equal(boss.maxStunsPerLoop, 1);
+    const door = state.doors.find(d => d.id === boss.defeatDoorId);
+    assert.equal(door.isOpen, false);
+    assert.equal(parked(), true);
 });
 
 process.exit(failures ? 1 : 0);

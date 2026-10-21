@@ -67,10 +67,10 @@ for (const { level, index } of w2) {
             assert.equal(boss.stunTime, 2);
             assert.deepStrictEqual(boss.corePlateIds, ['c1', 'c2', 'c3']);
             assert.equal(boss.defeatDoorId, 'boss_door');
-            assert.equal(boss.maxStunsPerLoop, undefined);
+            assert.equal(boss.maxStunsPerLoop, 1);
             assert.equal(loaded.burrowers[0].maxHp, 3);
             assert.equal(loaded.burrowers[0].hp, 3);
-            assert.equal(loaded.burrowers[0].maxStunsPerLoop, null);
+            assert.equal(loaded.burrowers[0].maxStunsPerLoop, 1);
             assert.equal(json.meta.isBoss, true);
         } else {
             assert.deepStrictEqual(json.burrowers, []);
