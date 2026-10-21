@@ -907,12 +907,29 @@ export function normalizeWorldId(value) {
     return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+// A world is on the counter once the linear cursor has reached its first index.
+// Beamworks is appended past that cursor and clearing it does not advance the
+// cursor, so it also counts once every earlier world is already behind the cursor.
+function worldReachedForShop(worldIndex, cursor) {
+    const levels = WORLDS[worldIndex].levels;
+    const first = levels[0];
+    if (first === undefined) return false;
+    if (first <= cursor) return true;
+    if (worldIndex <= 0) return false;
+    for (let i = 0; i < worldIndex; i++) {
+        for (const idx of WORLDS[i].levels) {
+            if (!(idx < cursor)) return false;
+        }
+    }
+    return true;
+}
+
 export function getShopUnlockedAbilities(maxUnlockedLevel) {
     const unlocked = [];
-    for (const entry of WORLDS) {
-        const first = entry.levels[0];
-        if (first === undefined || first > maxUnlockedLevel) continue;
-        for (const ability of entry.unlocks) {
+    const cursor = maxUnlockedLevel | 0;
+    for (let wi = 0; wi < WORLDS.length; wi++) {
+        if (!worldReachedForShop(wi, cursor)) continue;
+        for (const ability of WORLDS[wi].unlocks) {
             if (!unlocked.includes(ability)) unlocked.push(ability);
         }
     }

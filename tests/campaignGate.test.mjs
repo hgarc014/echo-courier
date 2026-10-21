@@ -9,7 +9,7 @@ const { state, isLevelUnlocked, recordLevelClear, getUnlockedAbilities, isDevMod
 const {
     LEVELS, WORLDS, CAMPAIGN_LEVEL_COUNT,
     levelSelectEntries, nextCampaignLevelIndex, firstSelectableLevel,
-    getWorldUnlockedAbilitiesForWorld
+    getWorldUnlockedAbilitiesForWorld, getShopUnlockedAbilities
 } = await import('../src/data/levels.js');
 
 let failures = 0;
@@ -57,8 +57,11 @@ check('fresh profile keeps W4 locked until the previous world is complete', () =
     assert.equal(isLevelUnlocked(overclock.levels[0], LEVELS[overclock.levels[0]]), false);
 
     // Prior world complete via the linear cursor. W4's own indices stay ahead of it.
+    state.maxUnlockedLevel = prior.levels[prior.levels.length - 1];
+    assert.equal(getShopUnlockedAbilities(state.maxUnlockedLevel).includes('ghostShield'), false, 'Echo Shield stays off the counter until the previous world is finished');
     state.maxUnlockedLevel = prior.levels[prior.levels.length - 1] + 1;
     assert.ok(beam.levels[0] > state.maxUnlockedLevel, 'W4 still sits past the linear cursor');
+    assert.ok(getShopUnlockedAbilities(state.maxUnlockedLevel).includes('ghostShield'), 'Echo Shield is for sale once Beamworks can be entered');
     assert.equal(isLevelUnlocked(first, LEVELS[first]), true, 'first W4 level opens after the prior world');
     assert.equal(isLevelUnlocked(second, LEVELS[second]), false, 'the rest of W4 stays locked');
     assert.equal(isLevelUnlocked(overclock.levels[0], LEVELS[overclock.levels[0]]), false, 'W5 waits for W4');
