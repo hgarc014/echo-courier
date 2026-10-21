@@ -7,6 +7,7 @@ import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor,
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { normalizeTimeline } from '../systems/temporalPlate.js';
+import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, degToRad, radToDeg } from './editorInspector.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -625,9 +626,13 @@ export function initEditor(canvas, ctx) {
         }
         if (!isDragging || !selectedEntity) return;
         const world = screenToWorld(sx, sy);
-        selectedEntity.x = Math.round((world.x - dragX)/10)*10;
-        selectedEntity.y = Math.round((world.y - dragY)/10)*10;
-        if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
+        const nx = Math.round((world.x - dragX)/10)*10;
+        const ny = Math.round((world.y - dragY)/10)*10;
+        if (getWaypoints(selectedEntity)) moveEntityTo(selectedEntity, nx, ny);
+        else {
+            selectedEntity.x = nx; selectedEntity.y = ny;
+            if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
+        }
     });
 
     const endPointer = () => {
@@ -765,6 +770,19 @@ function updatePropertiesPanel() {
         }
     }
 
+    const wps = getWaypoints(selectedEntity);
+    if (wps) {
+        html += `<div style="margin-top:8px;">Waypoints (X/Y moves the whole route)</div>`;
+        wps.forEach((p, i) => {
+            html += `<div class="prop-wp-row">${i}: <input type="number" class="prop-wp-x" data-i="${i}" value="${p.x}" style="width:56px"> <input type="number" class="prop-wp-y" data-i="${i}" value="${p.y}" style="width:56px"> <button class="prop-wp-del secondary-btn" data-i="${i}" ${wps.length <= 2 ? 'disabled' : ''} title="Remove waypoint">✕</button></div>`;
+        });
+        html += `<button id="prop-wp-add" class="secondary-btn" style="width:100%; margin-top:4px;">+ Add waypoint</button><br>`;
+    }
+    if (selectedEntity instanceof SweepCamera) {
+        html += `<label>Angle°: <input type="number" id="prop-cam-angle" step="5" value="${radToDeg(selectedEntity.baseAngle)}" style="width:60px"></label> `;
+        html += `<label>Sweep°: <input type="number" id="prop-cam-sweep" step="5" min="1" value="${radToDeg(selectedEntity.sweepRange)}" style="width:60px"></label><br>`;
+    }
+
     html += `<button id="prop-save" class="secondary-btn" style="width:100%; margin-top:10px; border-color:#0ff; color:#0ff;">Apply</button>`;
     panel.innerHTML = html;
     
@@ -775,10 +793,45 @@ function updatePropertiesPanel() {
         };
     }
 
+    const origX = selectedEntity.x; const origY = selectedEntity.y;
+    const readWaypointInputs = () => [...panel.querySelectorAll('.prop-wp-x')].map(el => ({
+        x: parseFloat(el.value),
+        y: parseFloat(panel.querySelector(`.prop-wp-y[data-i="${el.dataset.i}"]`).value)
+    }));
+    const wpAdd = document.getElementById('prop-wp-add');
+    if (wpAdd) wpAdd.onclick = () => {
+        pushUndo();
+        applyInspectorEdits(selectedEntity, { waypoints: readWaypointInputs() });
+        addWaypoint(selectedEntity);
+        updatePropertiesPanel();
+    };
+    panel.querySelectorAll('.prop-wp-del').forEach(btn => {
+        btn.onclick = () => {
+            pushUndo();
+            applyInspectorEdits(selectedEntity, { waypoints: readWaypointInputs() });
+            removeWaypoint(selectedEntity, parseInt(btn.dataset.i, 10));
+            updatePropertiesPanel();
+        };
+    });
+
     document.getElementById('prop-save').onclick = () => {
         pushUndo();
-        selectedEntity.x = parseFloat(document.getElementById('prop-x').value);
-        selectedEntity.y = parseFloat(document.getElementById('prop-y').value);
+        const nx = parseFloat(document.getElementById('prop-x').value);
+        const ny = parseFloat(document.getElementById('prop-y').value);
+        if (wps) {
+            const edits = { waypoints: readWaypointInputs() };
+            if (nx !== origX || ny !== origY) { edits.x = nx; edits.y = ny; }
+            applyInspectorEdits(selectedEntity, edits);
+        } else {
+            selectedEntity.x = nx;
+            selectedEntity.y = ny;
+        }
+        if (document.getElementById('prop-cam-angle')) {
+            applyInspectorEdits(selectedEntity, {
+                baseAngle: degToRad(parseFloat(document.getElementById('prop-cam-angle').value)),
+                sweepRange: degToRad(parseFloat(document.getElementById('prop-cam-sweep').value))
+            });
+        }
         if (document.getElementById('prop-w')) selectedEntity.w = parseFloat(document.getElementById('prop-w').value);
         if (document.getElementById('prop-h')) selectedEntity.h = parseFloat(document.getElementById('prop-h').value);
         if (document.getElementById('prop-id')) selectedEntity.id = document.getElementById('prop-id').value;
