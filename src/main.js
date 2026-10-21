@@ -17,6 +17,7 @@ import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
+import { displayedLoopNumber, finishLoopLine } from './core/loopDisplay.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -325,6 +326,11 @@ function hideLevelDialog() {
     let ds = document.getElementById('dialog-speaker'); if (ds) ds.innerText = '';
     let dt = document.getElementById('dialog-text'); if (dt) dt.innerText = '';
     stopDialogSpeech();
+}
+
+function syncLoopCountUI() {
+    const el = document.getElementById('loop-count');
+    if (el) el.innerText = String(displayedLoopNumber(state.loopNumber));
 }
 
 function applyChallengeHud(level, levelIndex) {
@@ -853,10 +859,10 @@ export function startGame(levelIndex) {
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(lv, levelIndex);
-    state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    state.pastRuns = []; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
-    uiAppLayout.classList.remove('hidden'); document.getElementById('loop-count').innerText = state.pastRuns.length; Object.assign(prevKeys, keys);
+    uiAppLayout.classList.remove('hidden'); syncLoopCountUI(); Object.assign(prevKeys, keys);
     document.getElementById('mobile-controls')?.classList.remove('hidden');
     syncTouchUi();
     
@@ -909,6 +915,7 @@ export function resetRun() {
         const cap = loopRecordCap();
         const run = (cap != null && state.currentRun.length > cap) ? state.currentRun.slice(0, cap) : state.currentRun;
         state.pastRuns.push([...run]);
+        state.loopNumber = displayedLoopNumber(state.loopNumber) + 1;
     }
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
@@ -921,7 +928,7 @@ export function resetRun() {
     if (state.currentLevelMeta?.isBoss) engageBossEncounter(state.currentLevelMeta);
     state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
     if (recorded) warnEchoesEndingOnCracks();
-    document.getElementById('loop-count').innerText = state.pastRuns.length;
+    syncLoopCountUI();
     updateDeliveryProgressUI();
     beginRewindJuice();
 }
@@ -940,10 +947,10 @@ export function restartLevel() {
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
     applyLoadedLevel(loadCurrentEntities());
-    state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.pastRuns = []; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     clearLoopFx();
-    document.getElementById('loop-count').innerText = 0;
+    syncLoopCountUI();
     updateDeliveryProgressUI();
     applyChallengeHud(lv, state.currentLevelIndex);
     document.getElementById('objective-text').innerText = localizeControlHints(lv.obj);
@@ -1039,12 +1046,12 @@ export function startPlaytestFromEditor() {
     state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(state.currentLevelMeta, state.currentLevelIndex);
-    state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.pastRuns = []; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false;
     clearLoopFx();
     uiLevelComplete.classList.add('hidden');
     uiGameOver.classList.add('hidden');
-    document.getElementById('loop-count').innerText = '0';
+    syncLoopCountUI();
     if (state.currentLevelMeta?.story?.text) {
         showLevelDialog(state.currentLevelMeta.story.speaker || 'Briefing', state.currentLevelMeta.story.text);
         state.gameState = 'DIALOG';
@@ -1378,18 +1385,19 @@ function update() {
         let chalMsg = document.getElementById('challenge-result');
         let nextBtn = document.getElementById('next-level-btn');
         let menuBtn = document.getElementById('menu-btn');
+        const loopLine = finishLoopLine(state.loopNumber, state.currentLevelMeta?.par);
         if (state.playtesting || state.currentLevelMeta?.isPlaytest) {
-            if (chalMsg) { chalMsg.innerHTML = "Playtest complete."; chalMsg.style.color = '#00f3ff'; }
+            if (chalMsg) { chalMsg.innerHTML = `Playtest complete.<br>${loopLine}`; chalMsg.style.color = '#00f3ff'; }
             nextBtn.innerText = "RETURN TO EDITOR";
             if (menuBtn) menuBtn.innerText = "RETURN TO EDITOR";
         } else if (state.currentLevelMeta?.isSandbox) {
-            if (chalMsg) { chalMsg.innerHTML = "Sandbox delivery complete."; chalMsg.style.color = '#00f3ff'; }
+            if (chalMsg) { chalMsg.innerHTML = `Sandbox delivery complete.<br>${loopLine}`; chalMsg.style.color = '#00f3ff'; }
             nextBtn.innerText = "RETURN TO MENU";
             if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         } else if (state.currentLevelMeta?.isTutorial) {
             state.tutorialProgress[state.currentLevelIndex] = true;
             saveState();
-            if (chalMsg) { chalMsg.innerHTML = "Tutorial complete. You can replay this module any time from TRAINING."; chalMsg.style.color = '#00f3ff'; }
+            if (chalMsg) { chalMsg.innerHTML = `Tutorial complete. You can replay this module any time from TRAINING.<br>${loopLine}`; chalMsg.style.color = '#00f3ff'; }
             let nextIndex = getNextLevelIndex(state.currentLevelIndex);
             nextBtn.innerText = nextIndex !== null ? "NEXT LEVEL" : "RETURN TO MENU";
             if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
@@ -1400,14 +1408,15 @@ function update() {
             }
             let earnedMsg = isFirstTimeLevel ? "Level Clear: +$50<br><br>" : "";
             let chalSuccess = !state.challengesCompleted[state.currentLevelIndex] && LEVELS[state.currentLevelIndex].challenge.check();
+            const resultPrefix = `${loopLine}<br>` + earnedMsg;
             if (chalSuccess) {
                 state.challengesCompleted[state.currentLevelIndex] = true;
                 localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
                 applyChallengeHud(LEVELS[state.currentLevelIndex], state.currentLevelIndex);
-                if (chalMsg) { chalMsg.innerHTML = earnedMsg + "⭐ Challenge Passed! (+$50) ⭐"; chalMsg.style.color = 'gold'; }
+                if (chalMsg) { chalMsg.innerHTML = resultPrefix + "⭐ Challenge Passed! (+$50) ⭐"; chalMsg.style.color = 'gold'; }
             } else {
                 let previouslyDone = state.challengesCompleted[state.currentLevelIndex];
-                if (chalMsg) { chalMsg.innerHTML = earnedMsg + (previouslyDone ? "⭐ Challenge Already Claimed ⭐" : "Challenge Failed (Try again!)"); chalMsg.style.color = previouslyDone ? 'gold' : '#888'; }
+                if (chalMsg) { chalMsg.innerHTML = resultPrefix + (previouslyDone ? "⭐ Challenge Already Claimed ⭐" : "Challenge Failed (Try again!)"); chalMsg.style.color = previouslyDone ? 'gold' : '#888'; }
             }
             let nextIndex = getNextLevelIndex(state.currentLevelIndex);
             nextBtn.innerText = nextIndex !== null ? "NEXT LEVEL" : "FINISH SHIFT";
@@ -1901,7 +1910,7 @@ export function stepSimulation() {
 export function exportSolution() {
     const recording = getRecording();
     if (!recording) return null;
-    if (state.gameState === 'LEVEL_COMPLETE') recording.completedLoops = state.pastRuns.length + 1;
+    if (state.gameState === 'LEVEL_COMPLETE') recording.completedLoops = displayedLoopNumber(state.loopNumber);
     return JSON.stringify(recording);
 }
 

@@ -98,6 +98,14 @@ export function applyBurrowerConfig(ent, cfg = {}) {
     applySeconds('surfaceInterval', 0.05);
     applySeconds('telegraphTime', 0.05);
     applySeconds('stunTime', 0);
+    if (Object.prototype.hasOwnProperty.call(cfg, 'maxStunsPerLoop')) {
+        const raw = cfg.maxStunsPerLoop;
+        if (raw == null || raw === '') ent.maxStunsPerLoop = null;
+        else {
+            const n = Math.round(Number(raw));
+            ent.maxStunsPerLoop = Number.isFinite(n) && n >= 1 ? n : null;
+        }
+    }
     if (cfg.corePlateIds != null) {
         const raw = Array.isArray(cfg.corePlateIds) ? cfg.corePlateIds : String(cfg.corePlateIds).split(',');
         ent.corePlateIds = raw.map(s => String(s).trim()).filter(Boolean);

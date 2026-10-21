@@ -760,6 +760,7 @@ function updatePropertiesPanel() {
         html += `<label>Surface interval (sec): <input type="number" min="0.05" step="0.05" id="prop-burrower-surface" value="${selectedEntity.surfaceInterval ?? 3}" style="width:70px"></label><br>`;
         html += `<label>Telegraph (sec): <input type="number" min="0.05" step="0.05" id="prop-burrower-telegraph" value="${selectedEntity.telegraphTime ?? 1}" style="width:70px"></label><br>`;
         html += `<label>Stun (sec): <input type="number" min="0" step="0.05" id="prop-burrower-stun" value="${selectedEntity.stunTime ?? 2}" style="width:70px"></label><br>`;
+        html += `<label title="Blank = unlimited. After this many stuns the burrower stays down until rewind.">Max stuns / loop: <input type="number" min="1" step="1" id="prop-burrower-maxstuns" placeholder="unlimited" value="${selectedEntity.maxStunsPerLoop ?? ''}" style="width:70px"></label><br>`;
         html += `<label>Core plate ids: <input type="text" id="prop-burrower-cores" value="${escapeAttr((selectedEntity.corePlateIds || []).join(', '))}" style="width:100%"></label><br>`;
         html += `<label>Defeat door id: <input type="text" id="prop-burrower-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
     }
@@ -871,6 +872,7 @@ function updatePropertiesPanel() {
                 surfaceInterval: document.getElementById('prop-burrower-surface').value,
                 telegraphTime: document.getElementById('prop-burrower-telegraph').value,
                 stunTime: document.getElementById('prop-burrower-stun').value,
+                maxStunsPerLoop: document.getElementById('prop-burrower-maxstuns').value,
                 corePlateIds: document.getElementById('prop-burrower-cores').value,
                 defeatDoorId: document.getElementById('prop-burrower-door').value
             });

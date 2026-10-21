@@ -53,6 +53,7 @@ export const state = {
     worldAtlas: null,
     
     pastRuns: [],
+    loopNumber: 1,
     currentRun: [],
     currentTick: 0,
     activeGhosts: [],
