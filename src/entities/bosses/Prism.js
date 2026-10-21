@@ -1,9 +1,9 @@
 // Beamworks mini-boss. A turret whose beam angle is a function of the loop tick
 // (calling update twice in one tick does not spin it twice). Checkpoint stores hp.
-import { state } from '../../core/state.js';
+import { state, getUnlockedAbilities } from '../../core/state.js';
 import { Entity } from '../base.js';
 import { SFX } from '../../core/audio.js';
-import { segmentHitsBox } from '../../systems/laserShield.js';
+import { collectShieldSlabs, segmentHitsBox } from '../../systems/laserShield.js';
 
 const TICKS_PER_SECOND = 60;
 
@@ -69,6 +69,70 @@ function centerOf(box) {
         x: box.x + (box.w || 30) / 2,
         y: box.y + (box.h || 30) / 2
     };
+}
+
+function rayRectDistance(ox, oy, dx, dy, rx, ry, rw, rh) {
+    const minX = rx;
+    const maxX = rx + rw;
+    const minY = ry;
+    const maxY = ry + rh;
+    let tmin = 0;
+    let tmax = Infinity;
+    const axes = [[dx, ox, minX, maxX], [dy, oy, minY, maxY]];
+    for (const [d, o, mn, mx] of axes) {
+        if (Math.abs(d) < 1e-12) {
+            if (o < mn || o > mx) return null;
+            continue;
+        }
+        let t1 = (mn - o) / d;
+        let t2 = (mx - o) / d;
+        if (t1 > t2) { const swap = t1; t1 = t2; t2 = swap; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return null;
+    }
+    if (tmax < 0) return null;
+    return tmin < 0 ? 0 : tmin;
+}
+
+/** Distance along a ray until the first wall or shield slab. Doors are not blockers. */
+export function blockerRayDistance(x, y, angle, maxDist, blockers) {
+    const max = Number(maxDist);
+    if (!Number.isFinite(max) || max <= 0) return 0;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    let best = max;
+    for (const w of blockers || []) {
+        if (!w) continue;
+        const rw = Number(w.w);
+        const rh = Number(w.h);
+        if (!Number.isFinite(rw) || !Number.isFinite(rh) || rw <= 0 || rh <= 0) continue;
+        const hit = rayRectDistance(x, y, dx, dy, w.x || 0, w.y || 0, rw, rh);
+        if (hit != null && hit < best) best = hit;
+    }
+    return best;
+}
+
+function traceSector(ctx, ox, oy, a0, a1, range, blockers) {
+    const start = Math.min(a0, a1);
+    const end = Math.max(a0, a1);
+    const span = end - start;
+    const samples = Math.max(8, Math.ceil(span / (Math.PI / 48)));
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    for (let i = 0; i <= samples; i++) {
+        const a = start + (span * i) / samples;
+        const dist = blockerRayDistance(ox, oy, a, range, blockers);
+        ctx.lineTo(ox + Math.cos(a) * dist, oy + Math.sin(a) * dist);
+    }
+    ctx.closePath();
+}
+
+function visualBlockers() {
+    const walls = state.walls || [];
+    if (!getUnlockedAbilities().includes('ghostShield')) return walls;
+    const slabs = collectShieldSlabs(state.player, state.activeGhosts, true);
+    return slabs.length ? walls.concat(slabs) : walls;
 }
 
 export class Prism extends Entity {
@@ -267,29 +331,23 @@ export class Prism extends Entity {
         const angle = this.beamAngle(tick);
         ctx.save();
         if (!this.defeated && this.hp > 0) {
+            const blockers = visualBlockers();
             const lead = this.arc / 2;
             const reach = lead + this.sweepSpeed * this.telegraphTime;
             const a0 = angle + this.spin * lead;
             const a1 = angle + this.spin * reach;
             ctx.fillStyle = 'rgba(255, 220, 40, 0.18)';
-            ctx.beginPath();
-            ctx.moveTo(origin.x, origin.y);
-            ctx.arc(origin.x, origin.y, this.range, Math.min(a0, a1), Math.max(a0, a1));
-            ctx.closePath();
+            traceSector(ctx, origin.x, origin.y, a0, a1, this.range, blockers);
             ctx.fill();
             ctx.fillStyle = 'rgba(255, 40, 40, 0.28)';
-            ctx.beginPath();
-            ctx.moveTo(origin.x, origin.y);
-            ctx.arc(origin.x, origin.y, this.range, angle - this.arc / 2, angle + this.arc / 2);
-            ctx.closePath();
+            traceSector(ctx, origin.x, origin.y, angle - this.arc / 2, angle + this.arc / 2, this.range, blockers);
             ctx.fill();
-            const bx = origin.x + Math.cos(angle) * this.range;
-            const by = origin.y + Math.sin(angle) * this.range;
+            const beamReach = blockerRayDistance(origin.x, origin.y, angle, this.range, blockers);
             ctx.strokeStyle = 'rgba(255, 60, 60, 0.9)';
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(origin.x, origin.y);
-            ctx.lineTo(bx, by);
+            ctx.lineTo(origin.x + Math.cos(angle) * beamReach, origin.y + Math.sin(angle) * beamReach);
             ctx.stroke();
             const back = angle + Math.PI;
             ctx.strokeStyle = 'rgba(255, 180, 40, 0.95)';

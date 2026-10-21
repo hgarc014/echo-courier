@@ -6,10 +6,10 @@ import { installDomStubs } from './harness/domStub.mjs';
 installDomStubs();
 
 const { state } = await import('../src/core/state.js');
-const { LEVELS, WORLDS, getLevelSetup, serializeLevel, deserializeLevel } = await import('../src/data/levels.js');
+const { LEVELS, WORLDS, getLevelSetup, serializeLevel, deserializeLevel, formatParTooltip } = await import('../src/data/levels.js');
 const { setEditorLevelMetaFromLevel } = await import('../src/ui/editor.js');
 const { applyPrismConfig } = await import('../src/ui/editorInspector.js');
-const { Prism, PRISM_DEFAULTS, normalizePrismParams, angleDiff } = await import('../src/entities/bosses/Prism.js');
+const { Prism, PRISM_DEFAULTS, normalizePrismParams, angleDiff, blockerRayDistance } = await import('../src/entities/bosses/Prism.js');
 const { Door, Package } = await import('../src/entities/interactables.js');
 const { shieldSlab, laserThreatens, dominantFacing } = await import('../src/systems/laserShield.js');
 
@@ -229,6 +229,54 @@ check('prism render does not throw on a stub context', () => {
     prism.render(ctx);
     prism.defeated = true;
     prism.render(ctx);
+});
+
+check('telegraph and beam stop at the first wall', () => {
+    const origin = { x: 124, y: 124 };
+    assert.equal(blockerRayDistance(origin.x, origin.y, 0, 400, []), 400);
+    const wall = { x: 180, y: 0, w: 20, h: 400 };
+    const hit = blockerRayDistance(origin.x, origin.y, 0, 400, [wall]);
+    assert.ok(Math.abs(hit - (180 - origin.x)) < 1e-6, `ray entered the wall (${hit})`);
+    const behind = { x: 40, y: 0, w: 20, h: 400 };
+    assert.equal(blockerRayDistance(origin.x, origin.y, 0, 400, [behind]), 400);
+    const gap = { x: 180, y: 0, w: 20, h: 40 };
+    assert.equal(blockerRayDistance(origin.x, origin.y, 0, 400, [gap]), 400);
+
+    resetWorld();
+    state.currentTick = 0;
+    state.walls = [wall];
+    const prism = new Prism(100, 100, { range: 400, arc: Math.PI / 6, telegraphTime: 0.75 });
+    const pts = [];
+    const ctx = {
+        save() {}, restore() {}, beginPath() {}, moveTo() {}, arc() {},
+        lineTo(x, y) { pts.push([x, y]); },
+        closePath() {}, fill() {}, stroke() {}, fillRect() {}, strokeRect() {}
+    };
+    prism.render(ctx);
+    assert.ok(pts.length > 4, 'expected a traced telegraph');
+    for (const [x, y] of pts) {
+        assert.ok(x <= wall.x + 1e-4, `telegraph drew through the wall at ${x},${y}`);
+    }
+    state.walls = [];
+    const openPts = [];
+    prism.render({ ...ctx, lineTo(x, y) { openPts.push([x, y]); } });
+    assert.ok(openPts.some(([x]) => x > 400), 'open beam should reach its range');
+});
+
+check('level tooltips use challenge.desc without a second Par prefix', () => {
+    assert.equal(formatParTooltip('Finish in 2 loops or fewer'), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Par: Finish in 2 loops or fewer'), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Par: par already'), 'Par: par already');
+    for (const lvl of LEVELS) {
+        if (!lvl.challenge?.desc) continue;
+        const title = formatParTooltip(lvl.challenge.desc);
+        assert.equal(/^par:\s*par\b/i.test(title), false, `${lvl.name} tooltip doubled: ${title}`);
+    }
+    for (const { level } of w4) {
+        const title = formatParTooltip(level.challenge.desc);
+        assert.match(title, /^Par: Finish in \d+ loops? or fewer$/);
+        assert.equal(title.includes(level.challenge.desc), true);
+    }
 });
 
 console.log(failures ? `\n${failures} failed` : '\nall world4 checks passed');
