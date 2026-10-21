@@ -85,6 +85,12 @@ for (let i = 0; i < LEVELS.length; i++) {
         }
         // 2. Level config matches the original level definition.
         assert.deepStrictEqual(pickMeta(loadedMeta), JSON.parse(JSON.stringify(expectedMeta(level))), 'meta differs from original');
+        // crackSpeed: top-level + meta export, editor meta, and every loaded crack.
+        const speed = level.crackSpeed === 'fast' ? 'fast' : 'normal';
+        assert.equal(json.crackSpeed ?? 'normal', speed, 'top-level crackSpeed');
+        assert.equal(json.meta.crackSpeed ?? 'normal', speed, 'meta.crackSpeed');
+        assert.equal(loadedMeta.crackSpeed ?? 'normal', speed, 'editor meta crackSpeed');
+        for (const c of data.cracks) assert.equal(c.crackSpeed, speed, 'crack entity crackSpeed');
         // 3. Re-export is identical.
         const second = serializeLevel({ ...data, meta: loadedMeta });
         assert.deepStrictEqual(JSON.parse(JSON.stringify(second)), json, 're-export not identical');
