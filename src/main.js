@@ -3,12 +3,13 @@ import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, sy
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, normalizeLoopTime } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
+import { pickCourierFrame } from './core/atlas.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -858,8 +859,26 @@ export function startGame(levelIndex) {
     }
 }
 
+function loopRecordCap() {
+    const seconds = normalizeLoopTime(state.currentLevelMeta?.loopTime);
+    if (seconds == null) return null;
+    const ticksPerSecond = state.TICK_RATE > 0 ? (1000 / state.TICK_RATE) : (state.FPS || 60);
+    const ticks = Math.round(seconds * ticksPerSecond);
+    return ticks > 0 ? ticks : null;
+}
+
+function loopTimeExpired() {
+    const cap = loopRecordCap();
+    if (cap == null) return false;
+    return state.currentTick >= cap || state.currentRun.length >= cap;
+}
+
 export function resetRun() {
-    if (state.currentTick > 0) state.pastRuns.push([...state.currentRun]);
+    if (state.currentTick > 0) {
+        const cap = loopRecordCap();
+        const recorded = (cap != null && state.currentRun.length > cap) ? state.currentRun.slice(0, cap) : state.currentRun;
+        state.pastRuns.push([...recorded]);
+    }
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
     const loopLevel = state.currentLevelMeta || LEVELS[state.currentLevelIndex];
@@ -953,6 +972,8 @@ export function startPlaytestFromEditor() {
         isPlaytest: true,
         demo: cloneDemo(em.demo)
     };
+    const playtestLoopTime = normalizeLoopTime(em.loopTime);
+    if (playtestLoopTime != null) state.currentLevelMeta.loopTime = playtestLoopTime;
     state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
     state.worldUnlockedAbilities = null;
     state.pendingBossIntro = null;
@@ -1083,7 +1104,7 @@ function update() {
     }
 
     if (!isDemoActive() && isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
-    if (isKeyJustPressed('r')) { resetRun(); updatePrevKeys(); return; }
+    if (isKeyJustPressed('r') || loopTimeExpired()) { resetRun(); updatePrevKeys(); return; }
     if (state.rewindFreeze > 0) {
         state.rewindFreeze--;
         updatePrevKeys();
@@ -1338,19 +1359,22 @@ function update() {
         }
     }
     
-    state.currentRun.push({
-        x: state.player.x,
-        y: state.player.y,
-        moveX: mx,
-        moveY: my,
-        facingX: state.player.facingX,
-        facingY: state.player.facingY,
-        cloakTimer: state.player.cloakTimer,
-        interact: interactJustPressed,
-        toss: tossFired,
-        dash: dashFired,
-        heavy: !!(carried && carried.type === 'heavy')
-    });
+    const recordCap = loopRecordCap();
+    if (recordCap == null || state.currentRun.length < recordCap) {
+        state.currentRun.push({
+            x: state.player.x,
+            y: state.player.y,
+            moveX: mx,
+            moveY: my,
+            facingX: state.player.facingX,
+            facingY: state.player.facingY,
+            cloakTimer: state.player.cloakTimer,
+            interact: interactJustPressed,
+            toss: tossFired,
+            dash: dashFired,
+            heavy: !!(carried && carried.type === 'heavy')
+        });
+    }
     state.currentTick++; updatePrevKeys();
 }
 
@@ -1390,6 +1414,120 @@ function drawAbilityCooldowns(target) {
     target.restore();
 }
 
+function drawLoopCountdown(target) {
+    if (state.gameState !== 'PLAYING') return;
+    const cap = loopRecordCap();
+    if (cap == null) return;
+    const ticksPerSecond = state.TICK_RATE > 0 ? (1000 / state.TICK_RATE) : (state.FPS || 60);
+    const left = Math.max(0, cap - (state.currentTick || 0));
+    const frac = left / cap;
+    const secondsLeft = left / ticksPerSecond;
+    const label = String(Math.ceil(secondsLeft - 1e-6));
+    const cx = 58;
+    const cy = 58;
+    const r = 26;
+    const color = secondsLeft <= 2 ? '#ff3355' : (secondsLeft <= 5 ? '#ffdd00' : '#00f3ff');
+    target.save();
+    target.globalAlpha = 1;
+    target.beginPath();
+    target.arc(cx, cy, r, 0, Math.PI * 2);
+    target.fillStyle = '#05070a';
+    target.fill();
+    target.lineWidth = 5;
+    target.strokeStyle = 'rgba(0, 243, 255, 0.28)';
+    target.stroke();
+    target.beginPath();
+    target.strokeStyle = color;
+    target.lineWidth = 5;
+    target.lineCap = 'butt';
+    target.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac, false);
+    target.stroke();
+    target.fillStyle = color;
+    target.font = 'bold 18px "Space Grotesk", sans-serif';
+    target.textAlign = 'center';
+    target.textBaseline = 'middle';
+    target.fillText(label, cx, cy + 1);
+    target.font = 'bold 10px "Space Grotesk", sans-serif';
+    target.fillText('SEC', cx, cy + r + 14);
+    target.restore();
+}
+
+function drawEchoEndMarkers(target) {
+    if (state.gameState === 'EDITOR') return;
+    const ghosts = state.activeGhosts;
+    if (!ghosts || !ghosts.length) return;
+    for (const ghost of ghosts) {
+        const run = ghost.runData;
+        if (!run || !run.length) continue;
+        const end = run[run.length - 1];
+        if (!end || !Number.isFinite(end.x) || !Number.isFinite(end.y)) continue;
+        const w = ghost.w || state.player?.w || 30;
+        const h = ghost.h || state.player?.h || 30;
+        const facingX = end.facingX || 0;
+        const facingY = end.facingY || 0;
+        const picked = pickCourierFrame(state.playerAtlas, {
+            cloaking: false, dashing: false, carrying: false, moving: false,
+            facingX, facingY, tick: 0
+        });
+        const img = picked?.img || state.assets.player;
+        const flipX = picked ? !!picked.flipX : facingX < 0;
+        const tint = state.playerColor || '#ff7b00';
+        let drew = false;
+        if (img) {
+            drew = drawSprite(target, img, end.x, end.y, w, h, {
+                tint, tintAlpha: 1, alpha: 1, flipX, valign: 'bottom', scanlines: false
+            });
+        }
+        if (!drew) {
+            target.save();
+            target.globalAlpha = 1;
+            target.fillStyle = tint;
+            target.fillRect(end.x, end.y, w, h);
+            target.restore();
+        }
+    }
+}
+
+function drawEchoEndMarkerBadges(target) {
+    if (state.gameState === 'EDITOR') return;
+    const ghosts = state.activeGhosts;
+    if (!ghosts || !ghosts.length) return;
+    const placed = [];
+    for (const ghost of ghosts) {
+        const run = ghost.runData;
+        if (!run || !run.length) continue;
+        const end = run[run.length - 1];
+        if (!end || !Number.isFinite(end.x) || !Number.isFinite(end.y)) continue;
+        const w = ghost.w || state.player?.w || 30;
+        const h = ghost.h || state.player?.h || 30;
+        const label = String((ghost.id ?? 0) + 1);
+        const cx = end.x + w / 2;
+        let cy = end.y - 14;
+        while (placed.some((badge) => Math.abs(badge.x - cx) < 26 && Math.abs(badge.y - cy) < 26)) {
+            cy -= 24;
+        }
+        placed.push({ x: cx, y: cy });
+        target.save();
+        target.globalAlpha = 1;
+        target.beginPath();
+        target.arc(cx, cy, 11, 0, Math.PI * 2);
+        target.fillStyle = state.playerColor || '#ff7b00';
+        target.fill();
+        target.lineWidth = 3;
+        target.strokeStyle = '#041018';
+        target.stroke();
+        target.font = 'bold 15px "Space Grotesk", sans-serif';
+        target.textAlign = 'center';
+        target.textBaseline = 'middle';
+        target.lineWidth = 3;
+        target.strokeStyle = '#041018';
+        target.fillStyle = '#ffffff';
+        target.strokeText(label, cx, cy);
+        target.fillText(label, cx, cy);
+        target.restore();
+    }
+}
+
 function draw() {
     // Popup demos no longer freeze the main canvas — live world always draws.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1426,6 +1564,7 @@ function draw() {
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx); state.plates.forEach(p => p.render(ctx)); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
     state.lasers.forEach(l => l.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
+    drawEchoEndMarkers(ctx);
     state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
 
     if (state.gameState === 'PLAYING' && state.currentRun.length > 0) {
@@ -1523,6 +1662,15 @@ function draw() {
             ctx.textAlign = 'left';
         }
     }
+
+    drawLoopCountdown(ctx);
+
+    // End-marker badges must render after (on top of) the loop countdown ring
+    // so a badge near the top-left is never hidden beneath it.
+    ctx.save();
+    applyCamera(ctx, shakeX, shakeY);
+    drawEchoEndMarkerBadges(ctx);
+    ctx.restore();
 
     if (isPopupDemo()) {
         drawMiniDemo();

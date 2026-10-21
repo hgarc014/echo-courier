@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
@@ -70,6 +70,8 @@ export function setEditorLevelMetaFromLevel(level) {
         maxGhosts: level.maxGhosts ?? 3,
         demo: cloneDemo(level.demo)
     };
+    const loopTime = normalizeLoopTime(level.loopTime);
+    if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
     return state.editorLevelMeta;
 }
 
@@ -79,10 +81,12 @@ function syncLevelConfigForm() {
     const text = document.getElementById('editor-meta-text');
     const obj = document.getElementById('editor-meta-obj');
     const maxG = document.getElementById('editor-meta-maxghosts');
+    const loopEl = document.getElementById('editor-meta-looptime');
     if (speaker) speaker.value = meta.story?.speaker || '';
     if (text) text.value = meta.story?.text || '';
     if (obj) obj.value = meta.obj || '';
     if (maxG) maxG.value = meta.maxGhosts ?? 3;
+    if (loopEl) loopEl.value = meta.loopTime != null ? String(meta.loopTime) : '';
     const grants = new Set(meta.grants || []);
     for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
         const el = document.getElementById('editor-meta-' + id);
@@ -125,6 +129,9 @@ function applyLevelConfigForm() {
         setSaveStatus(err.message || 'Demo JSON invalid', false);
         return;
     }
+    const loopTime = normalizeLoopTime(document.getElementById('editor-meta-looptime')?.value);
+    const loopEl = document.getElementById('editor-meta-looptime');
+    if (loopEl && loopTime == null) loopEl.value = '';
     state.editorLevelMeta = {
         name: ensureEditorLevelMeta().name || 'Editor Level',
         story: {
@@ -136,6 +143,7 @@ function applyLevelConfigForm() {
         maxGhosts: parseInt(document.getElementById('editor-meta-maxghosts')?.value, 10) || 0,
         demo
     };
+    if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
     setSaveStatus('Level config applied');
 }
 
