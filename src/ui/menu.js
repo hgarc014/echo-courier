@@ -1,5 +1,6 @@
 import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi, isUnlockAll, isLevelUnlocked, purchaseAbility } from '../core/state.js';
 import { LEVELS, WORLDS, getShopUnlockedAbilities, formatParTooltip } from '../data/levels.js';
+import { DEV_PROGRESS_NOTE } from '../core/loopDisplay.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
 
@@ -60,9 +61,7 @@ export function refreshLevelSelectGrid() {
         btn.setAttribute('aria-label', hasGold
             ? `${label}, gold star challenge complete`
             : unlocked ? label : `${label}, locked`);
-        if (hasGold) btn.title = 'Gold star challenge complete';
-        else if (!unlocked) btn.title = 'Locked';
-        else if (lvl.challenge?.desc) btn.title = formatParTooltip(lvl.challenge.desc);
+        btn.title = levelSelectTitle(lvl, { unlocked, hasGold });
         if (unlocked) btn.onclick = () => startGame(idx);
         uiLevelGrid.appendChild(btn);
     };
@@ -198,16 +197,37 @@ export function initMenu() {
     }
 }
 
+export function levelSelectTitle(lvl, { unlocked, hasGold } = {}) {
+    if (hasGold) return 'Gold star challenge complete';
+    if (!unlocked) return 'Locked';
+    if (lvl?.challenge?.desc) return formatParTooltip(lvl.challenge.desc, lvl.par);
+    return '';
+}
+
 export function refreshShopButtons() {
     const devShop = isDevMode();
     const shopUnlocked = getShopUnlockedAbilities(state.maxUnlockedLevel);
+    const note = document.getElementById('shop-dev-note');
+    if (note) {
+        note.textContent = DEV_PROGRESS_NOTE;
+        note.hidden = !devShop;
+        note.classList.toggle('hidden', !devShop);
+    }
     const configureShopButton = (btn, abilityId, label, price) => {
         if (!btn) return;
+        btn.title = '';
+        btn.style.cursor = '';
         if (state.abilitiesPurchased[abilityId]) {
             btn.innerText = `${label} (OWNED)`;
             btn.style.opacity = '0.5';
             btn.disabled = true;
-        } else if (!devShop && !shopUnlocked.includes(abilityId)) {
+        } else if (devShop) {
+            btn.innerText = `${label} ($${price})`;
+            btn.style.opacity = '0.45';
+            btn.style.cursor = 'not-allowed';
+            btn.disabled = true;
+            btn.title = DEV_PROGRESS_NOTE;
+        } else if (!shopUnlocked.includes(abilityId)) {
             const world = WORLDS.find(w => w.unlocks.includes(abilityId));
             btn.innerText = world ? `${label} (LOCKED — World ${world.id})` : `${label} (LOCKED)`;
             btn.style.opacity = '0.4';
@@ -216,8 +236,13 @@ export function refreshShopButtons() {
             btn.innerText = `${label} ($${price})`;
             btn.style.opacity = '1';
             btn.disabled = false;
+            btn.style.cursor = 'pointer';
         }
-        btn.onclick = () => { if (getCredits() >= price && purchaseAbility(abilityId)) initMenu(); };
+        btn.classList.toggle('shop-locked', !!btn.disabled);
+        btn.onclick = () => {
+            if (btn.disabled || isDevMode()) return;
+            if (getCredits() >= price && purchaseAbility(abilityId)) initMenu();
+        };
     };
     configureShopButton(document.getElementById('shop-dash'), 'dash', 'DASH', 150);
     configureShopButton(document.getElementById('shop-toss'), 'toss', 'TOSS', 150);

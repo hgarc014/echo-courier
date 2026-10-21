@@ -61,12 +61,14 @@ export function normalizePar(value) {
     return n;
 }
 
-// Level-select tooltip. Challenge text that already starts with "Par" is not prefixed again.
-export function formatParTooltip(desc) {
+// Level-select tooltip. "Par:" only when `par` is a real par field (positive integer).
+// Challenge wording is not parsed — "Finish in N loops" without a par stays a challenge.
+export function formatParTooltip(desc, par) {
     const text = String(desc ?? '').trim();
     if (!text) return '';
     if (/^par\b/i.test(text)) return text;
-    return `Par: ${text}`;
+    if (/^challenge\b/i.test(text)) return text;
+    return normalizePar(par) != null ? `Par: ${text}` : `Challenge: ${text}`;
 }
 
 // Optional par challenge. Skips levels that already define their own challenge.
@@ -668,10 +670,10 @@ export function cloneDemo(demo) {
 
 export const LEVELS = [
     { name: "First Shift", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, first shift on the floor. That plate holds the door, but you cannot stand on it and walk through. Leave an echo on the plate. The echo is company property. Move the parcel." }, obj: "Stand on the plate and loop. Your echo holds the door while you deliver the package.", maxGhosts: 1, loopTime: 20, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L1_LAYOUT, demo: LEVEL1_DEMO, demos: { intro: LEVEL1_DEMO } },
-    { name: "Return Trip", story: { speaker: "ChronoHaul Dispatch", text: "The drop bay is behind the door. The plate is down the left shaft. Record that plate first. Haul the parcel over to the shaft and the loop clock runs out before anyone is left holding the door." }, obj: "Loop on the shaft plate first, then carry the package through. Fetching the box first does not fit in the loop.", maxGhosts: 1, loopTime: 5, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L2_LAYOUT },
-    { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T's first opening is gone before you can reach it. The parcel is down in the pocket. Hold the plate with an echo and take the second window. Walk off the plate early and that window opens onto a shut door." }, obj: "Keep the echo on the plate. The timer's first opening is too early — cross on the second.", maxGhosts: 1, loopTime: 14, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
+    { name: "Return Trip", story: { speaker: "ChronoHaul Dispatch", text: "The drop bay is sealed. The plate for that door is not beside the parcel, and the loop clock on this spur is short. One pass is not long enough to mind the door and haul the box." }, obj: "The door and the parcel are apart. This loop is too short to handle both before it rewinds.", maxGhosts: 1, loopTime: 5, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L2_LAYOUT },
+    { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T keeps a maintenance clock, and it does not wait while you are still fetching cargo. The other door only listens while its plate is occupied." }, obj: "A gate on a timer, and a door that needs someone on its plate. Not every opening is one you can reach.", maxGhosts: 1, loopTime: 14, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
     { name: "Airlock Relay", story: { speaker: "ChronoHaul Dispatch", text: "Two airlocks, one timer, two echoes. Door A shuts the moment its plate is empty, so one recording cannot hold A and reach plate B. Park an echo on A, park the next on B, and carry the parcel through. Three loops." }, obj: "Park an echo on plate A, then one on plate B. Carry the package through both doors and the timer.", maxGhosts: 2, loopTime: 12, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_L4_LAYOUT },
-    { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. Step on when the beam flares — a plate held from the start fails. An empty plate locks its door." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper audits g1, then g2, then g3. An early hold does not count. Put an echo on g1 and g2 as each warning flares, stand on g3 yourself for the last beat, and the vault opens." }, obj: "Time echoes onto g1 and g2 during their warnings. Step onto g3 in its window, then deliver from the vault.", maxGhosts: 2, loopTime: 14, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },
+    { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. I count a step when I look, not one that was already waiting. An empty plate locks its door." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper checks the plates on its own schedule. A hold that started before the beat does not count. Miss a beat and that door stays locked. The vault opens only when the audit is finished." }, obj: "Meet each audit while it is watching. Early holds and empty plates do not open the vault.", maxGhosts: 2, loopTime: 14, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },
     ...W2_LEVELS,
     { name: "Level 3: Sweep Coverage", voiceKey: "level-2-story", story: { speaker: "Sector Surveillance", text: "Camera grid online in Transit Spur C. Cloak is still locked behind procurement. Time the cone, use cover, and remember: discarded timelines trip the same sensors you do." }, obj: "One camera. Cross on the gap in the sweep. Echoes trigger cameras too.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL3_LAYOUT, demos: { intro: LEVEL3_DEMO } },
     { name: "Level 4: Overlapping Watch", voiceKey: "level-3-story", story: { speaker: "Local Hub Manager", text: "They stacked a patrol and a camera on the same corridor. Budget says that is your problem. Coordinate echoes and keep the parcel moving." }, obj: "Guard and camera together. Hold the door, avoid both sensors, deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT, demos: { intro: LEVEL4_DEMO } },

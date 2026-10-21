@@ -339,6 +339,25 @@ h2 { color: var(--accent-safe); font-size: 2.5rem; margin-bottom: 16px; letter-s
     margin-top: 12px; padding: 12px 30px; font-size: 0.9rem;
 }
 .secondary-btn:hover { color: var(--text-main); border-color: var(--text-main); }
+.secondary-btn:disabled,
+.secondary-btn:disabled:hover,
+#shop-container .shop-locked {
+    opacity: 0.45;
+    cursor: not-allowed;
+    filter: grayscale(0.55);
+    color: var(--text-dim);
+    border-color: #3d4a55;
+    transform: none;
+    box-shadow: none;
+}
+.shop-dev-note {
+    margin: 0 0 12px;
+    max-width: 420px;
+    color: #ffdd00;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.3px;
+}
 
 /* Level Grid */
 .level-grid {

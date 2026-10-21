@@ -6,7 +6,7 @@ import { installDomStubs } from './harness/domStub.mjs';
 installDomStubs();
 const { state } = await import('../src/core/state.js');
 const { serializeLevel, deserializeLevel } = await import('../src/data/levels.js');
-const { Gatekeeper, normalizeFreshTicks, wallRayDistance, GATEKEEPER_WINDUP_TICKS } = await import('../src/entities/bosses/gatekeeper.js');
+const { Gatekeeper, normalizeFreshTicks, wallRayDistance, GATEKEEPER_WINDUP_TICKS, auditWarningInk } = await import('../src/entities/bosses/gatekeeper.js');
 const { PressurePlate } = await import('../src/entities/interactables.js');
 
 let passed = 0;
@@ -279,6 +279,43 @@ test('normalizeFreshTicks keeps 0 and rejects blank or negative', () => {
 
 test('audit wind-up is between 90 and 120 ticks', () => {
     assert.ok(GATEKEEPER_WINDUP_TICKS >= 90 && GATEKEEPER_WINDUP_TICKS <= 120);
+});
+
+test('audit warning is strong from its first frame through the opening 0.6s', () => {
+    assert.equal(auditWarningInk(0), null);
+    assert.equal(auditWarningInk(GATEKEEPER_WINDUP_TICKS + 1), null);
+    for (let elapsed = 0; elapsed <= 36; elapsed++) {
+        const ink = auditWarningInk(GATEKEEPER_WINDUP_TICKS - elapsed);
+        assert.ok(ink, `missing ink at +${elapsed}`);
+        assert.ok(ink.fill >= 0.3, `fill faint at +${elapsed}: ${ink.fill}`);
+        assert.ok(ink.stroke >= 0.8, `stroke faint at +${elapsed}: ${ink.stroke}`);
+    }
+    const first = auditWarningInk(GATEKEEPER_WINDUP_TICKS);
+    assert.ok(first.fill >= 0.4, 'first frame should be the bright half of the flash');
+});
+
+test('render paints a strong warning beam on the first wind-up frame', () => {
+    resetAttempt();
+    state.currentTick = 100 - GATEKEEPER_WINDUP_TICKS;
+    state.plates = [{ id: 'p1', x: 240, y: 200, w: 40, h: 40 }];
+    state.doors = [];
+    state.walls = [];
+    const g = gk();
+    const fills = [];
+    const ctx = new Proxy(function () {}, {
+        get: () => () => {},
+        set(_t, key, value) {
+            if (key === 'fillStyle') fills.push(String(value));
+            return true;
+        },
+        apply: () => ctx
+    });
+    g.render(ctx);
+    const beam = fills.find(s => s.includes('255, 60, 40'));
+    assert.ok(beam, `warning wedge missing: ${fills.join(' | ')}`);
+    const alpha = Number(beam.slice(beam.lastIndexOf(',') + 1).replace(')', ''));
+    assert.ok(alpha >= 0.3, beam);
+    state.plates = [];
 });
 
 test('wall ray stops at the first wall and ignores anything that is not a wall', () => {
