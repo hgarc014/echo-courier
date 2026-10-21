@@ -188,7 +188,7 @@ export function initMenu() {
 }
 
 export function refreshShopButtons() {
-    const devShop = document.getElementById('dev-mode-checkbox').checked;
+    const devShop = isDevMode();
     const shopUnlocked = getShopUnlockedAbilities(state.maxUnlockedLevel);
     const configureShopButton = (btn, abilityId, label, price) => {
         if (!btn) return;
