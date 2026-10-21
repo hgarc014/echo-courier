@@ -279,6 +279,20 @@
           <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-cloak"> cloak</label>
           <label><input type="checkbox" id="editor-meta-ghostShield"> ghostShield</label>
         </div>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">World <select id="editor-meta-world" style="padding:6px; background:#000; color:var(--text-main); border:1px solid #444;">
+          <option value="">None (no world gate)</option>
+          <option value="1">1: Dispatch</option>
+          <option value="2">2: Subfloor (dash)</option>
+          <option value="3">3: Panopticon (toss, cloak)</option>
+          <option value="4">4: Beamworks (ghostShield)</option>
+          <option value="5">5: Overclock</option>
+        </select></label>
+        <div style="font-size:0.8rem; margin:8px 0;" title="Extra abilities this level's world unlocks (purchased abilities allowed in playtest)">World unlocks:
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-unlock-dash"> dash</label>
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-unlock-toss"> toss</label>
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-unlock-cloak"> cloak</label>
+          <label><input type="checkbox" id="editor-meta-unlock-ghostShield"> ghostShield</label>
+        </div>
         <h4 style="margin: 12px 0 8px;">In-Game Demo</h4>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-autoplay" checked> Auto-play on first enter</label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-skippable" checked> Skippable</label>

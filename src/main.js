@@ -3,7 +3,7 @@ import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, sy
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, normalizeLoopTime } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
@@ -924,7 +924,7 @@ export function restartLevel() {
     if (!lv) return;
     state.currentLevelMeta = lv;
     state.levelAbilityOverrides = [...(lv.grants || [])];
-    state.worldUnlockedAbilities = state.playtesting ? null : getWorldUnlockedAbilities(state.currentLevelIndex);
+    state.worldUnlockedAbilities = state.playtesting ? getPlaytestWorldUnlocks(lv) : getWorldUnlockedAbilities(state.currentLevelIndex);
     applyLoadedLevel(loadCurrentEntities());
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
@@ -972,6 +972,13 @@ function handleEscape() {
     else returnToMenu();
 }
 
+// Editor playtest: gate purchased abilities by the edited level's world (+ its unlocks), like the campaign.
+function getPlaytestWorldUnlocks(meta) {
+    const worldId = normalizeWorldId(meta?.world);
+    if (worldId == null) return null;
+    return getWorldUnlockedAbilitiesForWorld(worldId, meta.unlocks || []);
+}
+
 export function startPlaytestFromEditor() {
     const layout = serializeLevel(state);
     state.editorReturnLayout = layout;
@@ -990,15 +997,17 @@ export function startPlaytestFromEditor() {
         obj: em.obj || 'Playtest the current editor layout.',
         challenge: { desc: 'Playtest', check: () => false },
         maxGhosts: em.maxGhosts ?? 3,
-        grants: Array.isArray(em.grants) && em.grants.length ? [...em.grants] : ['dash', 'toss', 'cloak', 'ghostShield'],
         crackSpeed: em.crackSpeed === 'fast' ? 'fast' : 'normal',
+        grants: Array.isArray(em.grants) && (em.grants.length || normalizeWorldId(em.world) != null) ? [...em.grants] : ['dash', 'toss', 'cloak', 'ghostShield'],
+        world: normalizeWorldId(em.world) ?? undefined,
+        unlocks: Array.isArray(em.unlocks) ? [...em.unlocks] : undefined,
         isPlaytest: true,
         demo: cloneDemo(em.demo)
     };
     const playtestLoopTime = normalizeLoopTime(em.loopTime);
     if (playtestLoopTime != null) state.currentLevelMeta.loopTime = playtestLoopTime;
     state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
-    state.worldUnlockedAbilities = null;
+    state.worldUnlockedAbilities = getPlaytestWorldUnlocks(state.currentLevelMeta);
     state.pendingBossIntro = null;
     document.getElementById('max-loops').innerText = state.currentLevelMeta.maxGhosts + 1;
     document.getElementById('level-display').innerText = getLevelDisplayLabel(0, state.currentLevelMeta);

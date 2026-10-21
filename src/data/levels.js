@@ -572,6 +572,13 @@ export function getWorldForLevel(idx) {
 export function getWorldUnlockedAbilities(idx) {
     const world = getWorldForLevel(idx);
     if (!world) return null;
+    return getWorldUnlockedAbilitiesForWorld(world.id);
+}
+
+// Abilities unlocked by world `worldId` and every earlier world, plus optional extra unlocks.
+export function getWorldUnlockedAbilitiesForWorld(worldId, extraUnlocks = []) {
+    const world = WORLDS.find(w => w.id === worldId);
+    if (!world) return null;
     const unlocked = [];
     for (const entry of WORLDS) {
         if (entry.id > world.id) continue;
@@ -579,7 +586,16 @@ export function getWorldUnlockedAbilities(idx) {
             if (!unlocked.includes(ability)) unlocked.push(ability);
         }
     }
+    for (const ability of extraUnlocks || []) {
+        if (!unlocked.includes(ability)) unlocked.push(ability);
+    }
     return unlocked;
+}
+
+export function normalizeWorldId(value) {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 export function getShopUnlockedAbilities(maxUnlockedLevel) {
@@ -680,6 +696,9 @@ export function serializeLevel(src = state) {
         };
         const loopTime = normalizeLoopTime(m.loopTime);
         if (loopTime != null) payload.meta.loopTime = loopTime;
+        const worldId = normalizeWorldId(m.world);
+        if (worldId != null) payload.meta.world = worldId;
+        if (Array.isArray(m.unlocks)) payload.meta.unlocks = [...m.unlocks];
         if (demo) payload.meta.demo = demo;
     }
     return payload;
@@ -742,6 +761,9 @@ export function deserializeLevel(data) {
             };
             const loopTime = normalizeLoopTime(data.meta.loopTime);
             if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+            const worldId = normalizeWorldId(data.meta.world);
+            if (worldId != null) state.editorLevelMeta.world = worldId;
+            if (Array.isArray(data.meta.unlocks)) state.editorLevelMeta.unlocks = [...data.meta.unlocks];
         } else if (demo || crackSpeed) {
             if (!state.editorLevelMeta) {
                 state.editorLevelMeta = {
