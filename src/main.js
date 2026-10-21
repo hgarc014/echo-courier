@@ -328,9 +328,21 @@ function hideLevelDialog() {
     stopDialogSpeech();
 }
 
+// maxGhosts is the echo budget, not a loop cap. Extra rewinds drop the oldest echo
+// (resetRun) while the loop index keeps climbing, so the HUD must not read as "Loop N / Max".
+function echoBudgetLabel(maxGhosts) {
+    const n = Number(maxGhosts);
+    if (!Number.isFinite(n) || n < 0) return '∞';
+    return String(Math.floor(n));
+}
+
 function syncLoopCountUI() {
     const el = document.getElementById('loop-count');
     if (el) el.innerText = String(displayedLoopNumber(state.loopNumber));
+    const usedEl = document.getElementById('echo-count');
+    if (usedEl) usedEl.innerText = String((state.pastRuns || []).length);
+    const maxEl = document.getElementById('max-echoes');
+    if (maxEl) maxEl.innerText = echoBudgetLabel(state.currentLevelMeta?.maxGhosts);
 }
 
 function applyChallengeHud(level, levelIndex) {
@@ -841,8 +853,6 @@ export function startGame(levelIndex) {
     state.currentLevelMeta = LEVELS[levelIndex];
     state.pendingBossIntro = state.currentLevelMeta?.bossIntro || null;
     startMusic();
-    let maxLoops = LEVELS[levelIndex].maxGhosts + 1;
-    document.getElementById('max-loops').innerText = maxLoops;
     let lv = LEVELS[levelIndex];
     state.levelAbilityOverrides = [...(lv.grants || [])];
     state.worldUnlockedAbilities = getWorldUnlockedAbilities(levelIndex);
@@ -1036,7 +1046,6 @@ export function startPlaytestFromEditor() {
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
     state.pendingBossIntro = state.currentLevelMeta.bossIntro || null;
-    document.getElementById('max-loops').innerText = state.currentLevelMeta.maxGhosts + 1;
     document.getElementById('level-display').innerText = getLevelDisplayLabel(0, state.currentLevelMeta);
     document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
 

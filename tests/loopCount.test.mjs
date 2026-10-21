@@ -1,4 +1,6 @@
 // HUD loop index is 1-based and is not capped when the oldest echo is dropped.
+// The echo budget (maxGhosts) is shown separately as echoes kept / max. Extra rewinds
+// still drop the oldest echo; they do not stop at "Max".
 // Run: node tests/loopCount.test.mjs
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -36,6 +38,8 @@ document.getElementById = (id) => {
     if (!elements.has(id)) elements.set(id, makeEl(id));
     return elements.get(id);
 };
+
+const markup = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 let failures = 0;
 function check(name, fn) {
@@ -75,17 +79,28 @@ function rewind() {
     for (let i = 0; i < 20; i++) main.stepSimulation();
 }
 
+function hudPhrase() {
+    assert.match(markup, /class="loop-stat">Loop&nbsp;<span id="loop-count">[\s\S]*?<\/span>&nbsp;·&nbsp;Echoes&nbsp;<span id="echo-count">[\s\S]*?<\/span>\/<span id="max-echoes">/);
+    const loop = document.getElementById('loop-count').innerText;
+    const echoes = document.getElementById('echo-count').innerText;
+    const max = document.getElementById('max-echoes').innerText;
+    return `Loop ${loop} · Echoes ${echoes}/${max}`;
+}
+
 check('HUD shows the live loop, including after the echo buffer drops a run', () => {
     loadLevel({ level: 0 });
     const hud = document.getElementById('loop-count');
     assert.equal(state.gameState, 'PLAYING');
     assert.equal(state.loopNumber, 1);
     assert.equal(hud.innerText, '1');
-    assert.equal(String(document.getElementById('max-loops').innerText), '2');
+    assert.equal(document.getElementById('echo-count').innerText, '0');
+    assert.equal(document.getElementById('max-echoes').innerText, '1');
+    assert.equal(hudPhrase(), 'Loop 1 · Echoes 0/1');
 
     rewind();
     assert.equal(state.loopNumber, 2);
     assert.equal(hud.innerText, '2');
+    assert.equal(document.getElementById('echo-count').innerText, '1');
     assert.equal(LEVELS[0].challenge.check(), true);
 
     rewind();
@@ -93,12 +108,31 @@ check('HUD shows the live loop, including after the echo buffer drops a run', ()
     assert.equal(state.loopNumber, 4);
     assert.equal(state.pastRuns.length, 1);
     assert.equal(hud.innerText, '4');
+    assert.equal(hudPhrase(), 'Loop 4 · Echoes 1/1');
     assert.equal(LEVELS[0].challenge.check(), false);
 
     main.restartLevel();
     assert.equal(state.loopNumber, 1);
     assert.equal(hud.innerText, '1');
     assert.equal(state.pastRuns.length, 0);
+    assert.equal(hudPhrase(), 'Loop 1 · Echoes 0/1');
+});
+
+check('two rewinds on Level 1 keep going and do not read as Loop 3 / Max 2', () => {
+    loadLevel({ level: 0 });
+    assert.equal(LEVELS[0].maxGhosts, 1);
+    rewind();
+    rewind();
+    assert.equal(state.loopNumber, 3);
+    assert.equal(state.pastRuns.length, 1);
+    assert.equal(hudPhrase(), 'Loop 3 · Echoes 1/1');
+    assert.doesNotMatch(hudPhrase(), /Max/);
+    assert.notEqual(hudPhrase(), 'Loop 3 / Max 2');
+    // The budget is full, but another rewind is allowed and drops the oldest echo.
+    rewind();
+    assert.equal(state.loopNumber, 4);
+    assert.equal(state.pastRuns.length, LEVELS[0].maxGhosts);
+    assert.equal(hudPhrase(), 'Loop 4 · Echoes 1/1');
 });
 
 check('editor playtest starts on loop 1', () => {
@@ -107,8 +141,8 @@ check('editor playtest starts on loop 1', () => {
     assert.equal(state.playtesting, true);
     assert.equal(state.loopNumber, 1);
     assert.equal(document.getElementById('loop-count').innerText, '1');
-    const max = Number(document.getElementById('max-loops').innerText);
-    assert.equal(max, (state.currentLevelMeta.maxGhosts ?? 0) + 1);
+    assert.equal(document.getElementById('echo-count').innerText, '0');
+    assert.equal(document.getElementById('max-echoes').innerText, String(state.currentLevelMeta.maxGhosts));
 });
 
 check('results text uses the same 1-based count as the HUD', () => {
@@ -128,10 +162,12 @@ check('results text uses the same 1-based count as the HUD', () => {
     assert.doesNotMatch(basicsMsg, /par /);
 });
 
-const markup = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 check('menu par wording stays 1-based and the HUD markup starts at loop 1', () => {
     assert.match(markup, /id="loop-count">1</);
     assert.match(markup, /Loop&nbsp;/);
+    assert.match(markup, /Echoes&nbsp;<span id="echo-count">0<\/span>\/<span id="max-echoes">/);
+    assert.doesNotMatch(markup, /id="max-loops"/);
+    assert.doesNotMatch(markup, /Loop&nbsp;<span id="loop-count">1<\/span>&nbsp;\/&nbsp;Max/);
 });
 
 process.exit(failures ? 1 : 0);

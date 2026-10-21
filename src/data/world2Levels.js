@@ -163,6 +163,8 @@ const W2_MB_LAYOUT = base({
     burrowers: [{
         x: 470, y: 200, w: 36, h: 36, id: 'burrower',
         hp: 3, surfaceInterval: 3, telegraphTime: 1, stunTime: 2,
+        // One stun per loop, so camping a single core plate cannot drain every phase.
+        maxStunsPerLoop: 1,
         corePlateIds: ['c1', 'c2', 'c3'],
         defeatDoorId: 'boss_door'
     }]
