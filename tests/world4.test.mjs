@@ -65,7 +65,7 @@ for (const { level, index } of w4) {
         assert.equal(level.hints?.length || 0, 0);
         assert.ok(level.story?.text);
         assert.ok(level.obj);
-        assert.equal(level.isPendingCampaign, true);
+        assert.equal(level.isPendingCampaign, false);
     });
 
     check(`editor round-trip ${level.name}`, () => {

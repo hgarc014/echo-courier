@@ -1,9 +1,9 @@
-import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage } from './core/state.js';
+import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
@@ -241,10 +241,7 @@ function getLevelDisplayLabel(levelIndex, levelDef) {
 }
 
 function getNextLevelIndex(levelIndex) {
-    const level = LEVELS[levelIndex];
-    if (!level) return null;
-    if (level.isSandbox || level.isPlaytest) return null;
-    return levelIndex < CAMPAIGN_LEVEL_COUNT - 1 ? levelIndex + 1 : null;
+    return nextCampaignLevelIndex(levelIndex);
 }
 
 function buildProjectedEchoPath(runData) {
@@ -2087,7 +2084,7 @@ window.onload = () => {
     document.body.addEventListener('keydown', () => { unlockAudio(); });
     applyDevModeUi();
     window.startNextAvailableLevel = () => {
-        let lvl = isDevMode() ? 0 : Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
+        let lvl = isDevMode() ? 0 : firstSelectableLevel(state.maxUnlockedLevel, isLevelUnlocked);
         startGame(lvl);
     };
     window.startTutorialTrack = () => startGame(0);
@@ -2097,7 +2094,7 @@ window.onload = () => {
     };
     window.skipTutorialPrompt = () => {
         hideTutorialPrompt();
-        let lvl = Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
+        let lvl = firstSelectableLevel(state.maxUnlockedLevel, isLevelUnlocked);
         startGame(lvl);
     };
     window.SANDBOX_LEVEL_INDEX = SANDBOX_LEVEL_INDEX;
