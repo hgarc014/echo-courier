@@ -1532,7 +1532,6 @@ function draw() {
     }
     
     state.player.render(ctx);
-    drawEchoEndMarkerBadges(ctx);
     
     state.dashTrails.forEach(t => {
         ctx.save(); ctx.globalAlpha = t.life; ctx.strokeStyle = state.playerColor; ctx.lineWidth = state.player.w * 0.8;
@@ -1578,6 +1577,13 @@ function draw() {
     }
 
     drawLoopCountdown(ctx);
+
+    // End-marker badges must render after (on top of) the loop countdown ring
+    // so a badge near the top-left is never hidden beneath it.
+    ctx.save();
+    applyCamera(ctx, shakeX, shakeY);
+    drawEchoEndMarkerBadges(ctx);
+    ctx.restore();
 
     if (isPopupDemo()) {
         drawMiniDemo();
