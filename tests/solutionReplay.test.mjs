@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { replaySolution, loadLevel, main, state, keys } from './harness/replay.mjs';
+import { runNaive } from './harness/recordW1.mjs';
 import { getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 
@@ -38,12 +39,14 @@ for (const f of files) {
     });
 }
 
-// Harness sanity: a truncated solution must NOT complete, so passing means something.
-check('truncated level01 solution fails', () => {
-    const sol = JSON.parse(readFileSync(join(dir, 'level01.json'), 'utf8'));
-    const r = replaySolution({ ...sol, loops: sol.loops.slice(0, 1) }, { extraTicks: 60 });
-    assert.equal(r.completed, false);
-});
+const w1Files = ['w1-l1.json', 'w1-l2.json', 'w1-l3.json', 'w1-l4.json', 'w1-mb.json'];
+for (const f of w1Files) {
+    check(`truncated ${f} fails`, () => {
+        const sol = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+        const r = replaySolution({ ...sol, loops: sol.loops.slice(0, -1) }, { extraTicks: 90 });
+        assert.equal(r.completed, false, 'dropping the last loop still completed');
+    });
+}
 
 check('truncated w2-l1 solution fails', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'w2-l1.json'), 'utf8'));
@@ -52,12 +55,29 @@ check('truncated w2-l1 solution fails', () => {
     assert.equal(r.completed, false);
 });
 
-// Editor playtest path: the same inputs replayed against Level 1's layout loaded as an editor level.
-check('level01 inputs replay via editor-playtest path', () => {
-    const sol = JSON.parse(readFileSync(join(dir, 'level01.json'), 'utf8'));
+for (const plan of ['l2-fetch-first', 'l3-leave-plate', 'l3-first-window', 'l4-two-loops', 'mb-park-early', 'mb-rush-vault']) {
+    check(`naive ${plan} fails`, () => {
+        const r = runNaive(plan);
+        if (plan === 'l2-fetch-first') {
+            const withinPar = r.completed && (r.par == null || r.loops <= r.par);
+            assert.equal(withinPar, false, `${plan} completed within par (${r.loops} loops, par ${r.par})`);
+            return;
+        }
+        assert.equal(r.completed, false, `${plan} completed`);
+    });
+}
+
+// Editor playtest path: W1-L1 inputs against that level's layout loaded from the editor.
+check('w1-l1 inputs replay via editor-playtest path', () => {
+    const sol = JSON.parse(readFileSync(join(dir, 'w1-l1.json'), 'utf8'));
     const setup = getLevelSetup(0);
     const layout = serializeLevel({ ...setup, width: setup.mapWidth, height: setup.mapHeight, meta: {} });
-    const r = replaySolution({ level: null, layout, meta: { name: 'L1 via editor', maxGhosts: 1, grants: [] }, loops: sol.loops });
+    const r = replaySolution({
+        level: null,
+        layout,
+        meta: { name: 'First Shift via editor', maxGhosts: 1, loopTime: 20, grants: [] },
+        loops: sol.loops
+    });
     assert.ok(r.completed, `editor playtest replay did not complete; fails: ${r.failMessages.join(' | ') || 'none'}`);
 });
 

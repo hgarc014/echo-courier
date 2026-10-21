@@ -74,7 +74,8 @@ export const state = {
     currentLevelMeta: null,
     pendingBossIntro: null,
     
-    walls: [], doors: [], plates: [], hints: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], projectiles: [], dashTrails: [],
+    walls: [], doors: [], plates: [], hints: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], gatekeepers: [], projectiles: [], dashTrails: [],
+    gatekeeperCheckpoint: {},
     deliveryZone: null, player: null,
     bossCheckpoint: null,
     bossCheckpointLive: false,
@@ -85,7 +86,7 @@ export const state = {
     editorReturnLayout: null,
     
     resetRunData: function() {
-        this.walls=[]; this.doors=[]; this.plates=[]; this.hints=[]; this.packages=[]; this.lasers=[]; this.guards=[]; this.cameras=[]; this.drones=[]; this.winds=[]; this.statics=[]; this.cracks=[]; this.robots=[]; this.burrowers=[]; this.projectiles=[]; this.dashTrails=[]; this.deliveryZone=null; this.player=null;
+        this.walls=[]; this.doors=[]; this.plates=[]; this.hints=[]; this.packages=[]; this.lasers=[]; this.guards=[]; this.cameras=[]; this.drones=[]; this.winds=[]; this.statics=[]; this.cracks=[]; this.robots=[]; this.burrowers=[]; this.gatekeepers=[]; this.projectiles=[]; this.dashTrails=[]; this.deliveryZone=null; this.player=null;
         this.failTimer=0; this.failMessage=""; this.failFx=null; this.rewindFx=null; this.ghostFellFx=[]; this.shakeTimer=0; this.shakeMax=0; this.shakeMag=0; this.rewindFreeze=0;
         this.camX=0; this.camY=0;
     }
@@ -181,10 +182,24 @@ export function getPlayerRank() {
     return 0;
 }
 
+// levels.js registers this after WORLDS exists. state.js must not import levels.js (that import is already the other way).
+let dashUnlockedByProgression = () => null;
+export function registerDashProgression(fn) {
+    if (typeof fn === 'function') dashUnlockedByProgression = fn;
+}
+
+function applyDashProgression(set, level) {
+    const flag = dashUnlockedByProgression(level);
+    if (flag === true) set.add('dash');
+    else if (flag === false) set.delete('dash');
+}
+
 export function applyLevelAbilityOverrides(level) {
     // unlocks is a synonym of grants (GAME_REFERENCE): both turn the ability on for this level.
-    const granted = [...(level?.grants || []), ...(level?.unlocks || [])];
-    state.levelAbilityOverrides = [...new Set(granted)];
+    // Dash itself follows dashUnlockedByProgression, so a copied world unlock list cannot grant it early.
+    const granted = new Set([...(level?.grants || []), ...(level?.unlocks || [])]);
+    applyDashProgression(granted, level);
+    state.levelAbilityOverrides = [...granted];
 }
 
 export function getUnlockedAbilities() {
@@ -202,6 +217,7 @@ export function getUnlockedAbilities() {
         for (let ability of (meta.grants || [])) unlocks.add(ability);
         for (let ability of (meta.unlocks || [])) unlocks.add(ability);
     }
+    applyDashProgression(unlocks, meta);
     return Array.from(unlocks);
 }
 

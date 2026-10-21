@@ -209,7 +209,7 @@ export const W2_LEVELS = [
         'Heavy cargo cannot beat the crack. Dash to the plate; your echo holds the door while you haul.',
         'Dash implants are live on this route. The crack is too wide to walk, and the heavy crate will not survive it. Put an echo on the plate and drag the crate through the door.',
         2, 1, 30, W2_L3_LAYOUT,
-        { unlocks: ['dash'], grants: ['dash'] }
+        { unlocks: ['dash'], grants: ['dash'], flags: { dashFrom: true } }
     ),
     level(
         'W2-L4: Sinking Freight',

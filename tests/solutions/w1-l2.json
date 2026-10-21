@@ -1,0 +1,27 @@
+{
+ "format": "echo-courier-solution/v1",
+ "level": 1,
+ "levelName": "Return Trip",
+ "loops": [
+  [
+   ["", 1],
+   ["s", 110],
+   ["d", 1],
+   ["s", 1],
+   ["", 8],
+   ["r", 1]
+  ],
+  [
+   ["d", 136],
+   ["space", 1],
+   ["", 1],
+   ["d", 33],
+   ["s", 1],
+   ["d", 1],
+   ["s", 1],
+   ["w", 5],
+   ["space", 1]
+  ]
+ ],
+ "completedLoops": 2
+}

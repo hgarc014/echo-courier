@@ -301,11 +301,26 @@ export class Package extends Entity {
 }
 
 export class PressurePlate extends Entity {
-    constructor(id, x, y, linkedIds) { super(x, y, 40, 40, 'plate'); this.id=id; this.linkedIds=Array.isArray(linkedIds)?linkedIds:[linkedIds]; this.isPressed=false; }
+    constructor(id, x, y, linkedIds) { super(x, y, 40, 40, 'plate'); this.id=id; this.linkedIds=Array.isArray(linkedIds)?linkedIds:[linkedIds]; this.isPressed=false; this.arrivalTicks=[]; }
     update(actors, pkgs) {
-        this.isPressed = false;
-        for (let a of actors) if (actorPressesPlate(a, this, PLATE_PRESS_FRACTION)) { this.isPressed = true; break; }
-        if (!this.isPressed) for (let p of pkgs) if (!p.isDestroyed && !p.carriedBy && actorPressesPlate(p, this, PLATE_PRESS_FRACTION)) { this.isPressed = true; break; }
+        const now = Number(state.currentTick) || 0;
+        const prev = this._occupantArrivals || new Map();
+        const next = new Map();
+        const consider = (key, box) => {
+            if (!actorPressesPlate(box, this, PLATE_PRESS_FRACTION)) return;
+            next.set(key, prev.has(key) ? prev.get(key) : now);
+        };
+        (actors || []).forEach((a, i) => {
+            if (!a || a.isActive === false) return;
+            consider(a.id != null ? `a:${a.id}` : `a#${i}`, a);
+        });
+        (pkgs || []).forEach((p, i) => {
+            if (!p || p.isDestroyed || p.carriedBy) return;
+            consider(p.id != null ? `p:${p.id}` : `p#${i}`, p);
+        });
+        this._occupantArrivals = next;
+        this.isPressed = next.size > 0;
+        this.arrivalTicks = [...next.values()];
     }
     render(ctx) {
         const pulse = this.isPressed ? 1 : 0.88 + 0.08 * Math.sin(state.currentTick * 0.12);

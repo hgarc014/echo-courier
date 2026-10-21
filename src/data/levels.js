@@ -1,24 +1,26 @@
-import { state } from '../core/state.js';
+import { state, registerDashProgression } from '../core/state.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
 import { Burrower, normalizeMaxStunsPerLoop } from '../entities/bosses/Burrower.js';
 import { finishedWithinLoops } from '../core/loopDisplay.js';
+import { Gatekeeper, normalizeFreshTicks } from '../entities/bosses/gatekeeper.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
 import { PIT_KILL_FRACTION, clampKillFraction } from '../core/hitZones.js';
 
-// ==== PROVISIONAL WORLD MAPPING (PR2) — replace when world content PRs land ====
+// W1 Dispatch is 0–4. W2 Subfloor (#47) is 5–9. Older campaign levels follow, shifted
+// past both. Provisional Subfloor slots (originally indices 2–4) sit at the front of Panopticon.
 export const WORLDS = [
-  { id: 1, name: 'Dispatch',   unlocks: [],                 levels: [0, 1] },
-  { id: 2, name: 'Subfloor',   unlocks: ['dash'],           levels: [2, 3, 4] },
-  { id: 3, name: 'Panopticon', unlocks: ['toss', 'cloak'],  levels: [5, 6, 7] },
-  { id: 4, name: 'Beamworks',  unlocks: ['ghostShield'],    levels: [8, 9] },
-  { id: 5, name: 'Overclock',  unlocks: [],                 levels: [10, 11] },
+  { id: 1, name: 'Dispatch',   unlocks: [],                 levels: [0, 1, 2, 3, 4] },
+  { id: 2, name: 'Subfloor',   unlocks: ['dash'],           levels: [5, 6, 7, 8, 9] },
+  { id: 3, name: 'Panopticon', unlocks: ['toss', 'cloak'],  levels: [10, 11, 12, 13, 14, 15] },
+  { id: 4, name: 'Beamworks',  unlocks: ['ghostShield'],    levels: [16, 17] },
+  { id: 5, name: 'Overclock',  unlocks: [],                 levels: [18, 19] },
 ];
 
-let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, projectiles;
+let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, projectiles;
 
 export function createBoundWalls(w, h, t = 20) {
     return [
@@ -50,6 +52,35 @@ export function normalizeLoopTime(value) {
     const n = typeof value === 'number' ? value : Number(String(value).trim());
     if (!Number.isFinite(n) || n <= 0) return null;
     return n;
+}
+
+// Positive integer loop counts only. Blank, zero, and non-integers mean "no par".
+export function normalizePar(value) {
+    if (value == null || value === '') return null;
+    const n = typeof value === 'number' ? value : Number(String(value).trim());
+    if (!Number.isInteger(n) || n <= 0) return null;
+    return n;
+}
+
+// Level-select tooltip. Challenge text that already starts with "Par" is not prefixed again.
+export function formatParTooltip(desc) {
+    const text = String(desc ?? '').trim();
+    if (!text) return '';
+    if (/^par\b/i.test(text)) return text;
+    return `Par: ${text}`;
+}
+
+// Optional par challenge. Skips levels that already define their own challenge.
+// Desc has no "Par:" prefix — the level button adds it once via formatParTooltip.
+export function installParChallenge(level) {
+    if (!level || level.par == null || level.challenge) return;
+    const par = normalizePar(level.par);
+    if (par == null) return;
+    const noun = par === 1 ? 'loop' : 'loops';
+    level.challenge = {
+        desc: `Finish in ${par} ${noun} or fewer`,
+        check: () => finishedWithinLoops(state.loopNumber, par)
+    };
 }
 
 function setupDevSandbox() {
@@ -98,43 +129,161 @@ function setupDevSandbox() {
     robots[0].engaged = true;
     robots[0].fireCooldown = 90;
     projectiles = [];
+    gatekeepers = [];
 }
 
-const LEVEL1_LAYOUT = {
-    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
-    player: { x: 170, y: 240 },
-    deliveryZone: { x: 50, y: 220, w: 100, h: 100 },
-    walls: [
-        { x: 40, y: 180, w: 700, h: 20 },
-        { x: 40, y: 340, w: 700, h: 20 },
-        { x: 0, y: 170, w: 40, h: 200 },
-        { x: 740, y: 170, w: 40, h: 200 }
-    ],
-    doors: [{ x: 380, y: 200, w: 40, h: 150, id: "d1", type: "standard" }],
-    plates: [{ x: 300, y: 250, linkedIds: ["d1"], id: "p1", type: "standard" }],
-    packages: [{ x: 600, y: 280, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
-    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 220, y: 290, demoId: "intro", autoOpen: true, title: "Ghost Hold" }]
-};
+function emptyActors() {
+    return { lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], gatekeepers: [] };
+}
 
-const LEVEL2_LAYOUT = {
+// W1-L1. Plate sits on the LEVEL1_DEMO move target so the intro hint still lines up.
+const W1_L1_LAYOUT = {
     width: 800, height: 600, mapWidth: 800, mapHeight: 600,
-    player: { x: 70, y: 280 },
-    deliveryZone: { x: 640, y: 240, w: 100, h: 100 },
+    player: { x: 80, y: 250 },
+    deliveryZone: { x: 620, y: 420, w: 120, h: 120 },
     walls: [
         { x: 0, y: 0, w: 800, h: 20 },
         { x: 0, y: 580, w: 800, h: 20 },
         { x: 0, y: 0, w: 20, h: 600 },
         { x: 780, y: 0, w: 20, h: 600 },
-        { x: 340, y: 20, w: 40, h: 220 },
-        { x: 340, y: 340, w: 40, h: 240 }
+        { x: 400, y: 20, w: 20, h: 190 },
+        { x: 400, y: 370, w: 20, h: 210 }
     ],
-    doors: [{ x: 340, y: 240, w: 40, h: 100, id: "d1", type: "standard" }],
-    plates: [{ x: 120, y: 260, linkedIds: ["d1"], id: "p1", type: "standard" }],
-    packages: [{ x: 200, y: 360, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
-    lasers: [],
-    guards: [{ path: [{ x: 520, y: 120 }, { x: 520, y: 420 }] }],
-    cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: []
+    doors: [{ x: 400, y: 210, w: 20, h: 160, id: 'd1', type: 'standard' }],
+    plates: [{ x: 275, y: 235, linkedIds: ['d1'], id: 'p1', type: 'standard' }],
+    packages: [{ x: 575, y: 250, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    hints: [{ id: 'hint_intro', x: 140, y: 170, demoId: 'intro', autoOpen: true, title: 'Ghost Hold' }],
+    ...emptyActors()
+};
+
+// Top strip holds the package and the door into the drop bay. The plate is down
+// the left shaft. Plate-first fits in the loop; package-then-shaft does not.
+const W1_L2_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 40, y: 60 },
+    deliveryZone: { x: 650, y: 40, w: 110, h: 100 },
+    walls: [
+        { x: 0, y: 0, w: 800, h: 20 },
+        { x: 0, y: 580, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        // Drop bay. Door gap is y=50..150.
+        { x: 600, y: 20, w: 20, h: 30 },
+        { x: 600, y: 150, w: 20, h: 430 },
+        // Everything under the top strip is solid except the left shaft (x < 130).
+        { x: 130, y: 200, w: 470, h: 380 }
+    ],
+    doors: [{ x: 600, y: 50, w: 20, h: 100, id: 'd1', type: 'standard' }],
+    plates: [{ x: 40, y: 500, linkedIds: ['d1'], id: 'p1', type: 'standard' }],
+    packages: [{ x: 520, y: 60, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    hints: [],
+    ...emptyActors()
+};
+
+// Corridor. Plate holds d1. Timer T's first opening (openT) shuts before a courier
+// can reach it; the parcel pocket adds a detour so the second window is the one that lines up.
+const W1_L3_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 40, y: 280 },
+    deliveryZone: { x: 720, y: 250, w: 50, h: 100 },
+    walls: [
+        { x: 0, y: 0, w: 800, h: 20 },
+        { x: 0, y: 580, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        { x: 20, y: 220, w: 760, h: 20 },
+        // Pocket gap x=110..210.
+        { x: 20, y: 400, w: 90, h: 20 },
+        { x: 210, y: 400, w: 570, h: 20 },
+        { x: 110, y: 420, w: 20, h: 160 },
+        { x: 210, y: 420, w: 20, h: 160 }
+    ],
+    doors: [
+        { x: 430, y: 240, w: 20, h: 160, id: 'd1', type: 'standard' },
+        { x: 660, y: 240, w: 20, h: 160, id: 't', type: 'timer', openT: 50, closedT: 260 }
+    ],
+    plates: [{ x: 250, y: 290, linkedIds: ['d1'], id: 'p', type: 'standard' }],
+    packages: [{ x: 145, y: 500, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    hints: [],
+    ...emptyActors()
+};
+
+// Three door columns on one corridor. Plate B is below the lane, not a serpentine.
+// Door A still closes the tick its plate is empty, so the tape that reaches B is a second loop.
+const W1_L4_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 40, y: 170 },
+    deliveryZone: { x: 700, y: 155, w: 60, h: 90 },
+    walls: [
+        { x: 0, y: 0, w: 800, h: 20 },
+        { x: 0, y: 580, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        // Gap y=150..290 is the only crossing on each column.
+        { x: 240, y: 20, w: 20, h: 130 },
+        { x: 240, y: 290, w: 20, h: 290 },
+        { x: 470, y: 20, w: 20, h: 130 },
+        { x: 470, y: 290, w: 20, h: 290 },
+        { x: 630, y: 20, w: 20, h: 130 },
+        { x: 630, y: 290, w: 20, h: 290 }
+    ],
+    doors: [
+        { x: 240, y: 150, w: 20, h: 140, id: 'doorA', type: 'standard' },
+        { x: 470, y: 150, w: 20, h: 140, id: 'doorB', type: 'standard' },
+        { x: 630, y: 150, w: 20, h: 140, id: 't', type: 'timer', openT: 420, closedT: 100 }
+    ],
+    plates: [
+        { x: 150, y: 160, linkedIds: ['doorA'], id: 'a', type: 'standard' },
+        { x: 330, y: 460, linkedIds: ['doorB'], id: 'b', type: 'standard' }
+    ],
+    packages: [{ x: 40, y: 420, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    hints: [],
+    ...emptyActors()
+};
+
+// Plates sit off the corridor. An audit counts only if that plate's occupant
+// arrived inside freshTicks of the beat, so parking at the start fails.
+const W1_MB_LAYOUT = {
+    width: 800, height: 600, mapWidth: 800, mapHeight: 600,
+    player: { x: 50, y: 270 },
+    deliveryZone: { x: 690, y: 400, w: 80, h: 100 },
+    walls: [
+        { x: 0, y: 0, w: 800, h: 20 },
+        { x: 0, y: 580, w: 800, h: 20 },
+        { x: 0, y: 0, w: 20, h: 600 },
+        { x: 780, y: 0, w: 20, h: 600 },
+        { x: 220, y: 20, w: 20, h: 210 },
+        { x: 220, y: 360, w: 20, h: 220 },
+        { x: 450, y: 20, w: 20, h: 210 },
+        { x: 450, y: 360, w: 20, h: 220 },
+        { x: 640, y: 20, w: 20, h: 210 },
+        { x: 640, y: 360, w: 20, h: 220 }
+    ],
+    doors: [
+        { x: 220, y: 230, w: 20, h: 130, id: 'd1', type: 'standard' },
+        { x: 450, y: 230, w: 20, h: 130, id: 'd2', type: 'standard' },
+        { x: 640, y: 230, w: 20, h: 130, id: 'vault', type: 'standard' }
+    ],
+    plates: [
+        { x: 60, y: 470, linkedIds: ['d1'], id: 'g1', type: 'standard' },
+        { x: 290, y: 470, linkedIds: ['d2'], id: 'g2', type: 'standard' },
+        { x: 510, y: 470, linkedIds: [], id: 'g3', type: 'standard' }
+    ],
+    packages: [{ x: 700, y: 270, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    hints: [],
+    ...emptyActors(),
+    gatekeepers: [{
+        id: 'gk',
+        x: 300,
+        y: 40,
+        vaultDoorId: 'vault',
+        freshTicks: 110,
+        audits: [
+            { plateId: 'g1', tick: 220 },
+            { plateId: 'g2', tick: 420 },
+            { plateId: 'g3', tick: 560 }
+        ]
+    }]
 };
 
 const LEVEL3_LAYOUT = {
@@ -244,30 +393,6 @@ const LEVEL1_DEMO = {
         { type: 'move-to', x: 200, y: 240, tolerance: 20 },
         { type: 'caption', text: 'Your turn' },
         { type: 'wait', ticks: 50 },
-        { type: 'end' }
-    ]
-};
-
-const LEVEL2_DEMO = {
-    autoPlayOnFirstEnter: false,
-    skippable: true,
-    steps: [
-        { type: 'caption', text: 'Guards spot anything in their vision cone' },
-        { type: 'wait', ticks: 36 },
-        { type: 'move-to', x: 125, y: 265, tolerance: 8 },
-        { type: 'wait', ticks: 28 },
-        { type: 'caption', text: 'Wait for a gap — or send an echo to distract them' },
-        { type: 'highlight-ui', target: 'r' },
-        { type: 'wait', ticks: 70 },
-        { type: 'press-key', key: 'r' },
-        { type: 'highlight-ui', target: null },
-        { type: 'wait-until', condition: 'door-open', doorId: 'd1', timeout: 240 },
-        { type: 'caption', text: 'Echo holds the door while you slip past' },
-        { type: 'move-to', x: 290, y: 278, tolerance: 8 },
-        { type: 'wait', ticks: 58 },
-        { type: 'move-to', x: 424, y: 278, tolerance: 10 },
-        { type: 'caption', text: 'Your turn' },
-        { type: 'wait', ticks: 28 },
         { type: 'end' }
     ]
 };
@@ -543,32 +668,83 @@ export function cloneDemo(demo) {
 }
 
 export const LEVELS = [
-    { name: "Level 1: The Basics", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, welcome to your shift. Route efficiency is down 4%. Deploy your Temporal Payload to generate a logistics artifact (Echo). Echoes are non-sentient and property of ChronoHaul." }, obj: "Deliver the package using an echo to hold the door.", challenge: { desc: "Finish in 2 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 2) }, maxGhosts: 1, mapWidth: 800, mapHeight: 600, layout: LEVEL1_LAYOUT, demo: LEVEL1_DEMO, demos: { intro: LEVEL1_DEMO } },
-    { name: "Level 2: Floor Security", story: { speaker: "Local Hub Manager", text: "Yard security walked a patrol into your lane. Corporate will not authorize cloak hardware for a junior route. Wait them out, or let an echo pull their attention." }, obj: "One guard. Hold the door with an echo, then deliver without getting caught.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL2_LAYOUT, demos: { intro: LEVEL2_DEMO } },
-    { name: "Level 3: Sweep Coverage", story: { speaker: "Sector Surveillance", text: "Camera grid online in Transit Spur C. Cloak is still locked behind procurement. Time the cone, use cover, and remember: discarded timelines trip the same sensors you do." }, obj: "One camera. Cross on the gap in the sweep. Echoes trigger cameras too.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL3_LAYOUT, demos: { intro: LEVEL3_DEMO } },
-    { name: "Level 4: Overlapping Watch", story: { speaker: "Local Hub Manager", text: "They stacked a patrol and a camera on the same corridor. Budget says that is your problem. Coordinate echoes and keep the parcel moving." }, obj: "Guard and camera together. Hold the door, avoid both sensors, deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT, demos: { intro: LEVEL4_DEMO } },
-    { name: "Level 5: Unstable Deck", story: { speaker: "ChronoHaul Dispatch", text: "Maintenance skipped the subfloor again. Cracked plating covers both sides of the door and collapses under courier mass. Dash implants are paywalled. Hold the door with an echo and cross the cracks quickly." }, obj: "Cracks cover both sides of the door. Echo-hold the door and cross the cracks quickly.", challenge: { desc: "Finish in 2 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 2) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL5_LAYOUT, demos: { intro: LEVEL5_DEMO } },
-    { name: "Level 6: Dual Airlock", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, double-echo clearance is live on this airlock. Two doors, two timelines. One logistics artifact cannot hold both gates. Park an echo on each plate and walk the parcel back." }, obj: "Two doors. Park an echo on each plate, then bring the package back.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL6_LAYOUT, demos: { intro: LEVEL6_DEMO } },
-    { name: "Level 7: Heavy Lifting", story: { speaker: "Local Hub Manager", text: "High-density cargo on your lane. Pick it up and your pace is cut in half. Loop an echo onto the plate before you start dragging, then haul the parcel through the door." }, obj: "Heavy package slows you. Echo holds the door; you drag the cargo through.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL7_LAYOUT, demos: { intro: LEVEL7_DEMO } },
-    { name: "Level 8: Timed Gate", story: { speaker: "Sector Surveillance", text: "Gate TD-1 is locked to a maintenance cycle. Plates are offline in this spur. The door opens and shuts on its own clock. Cross with the parcel while the gate is open." }, obj: "Timer door cycles open and shut. Carry the package through while it is open.", challenge: { desc: "Finish in 2 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 2) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL8_LAYOUT, demos: { intro: LEVEL8_DEMO } },
-    { name: "Level 9: Fragile Grid", story: { speaker: "Local Hub Manager", text: "Class-4 fragile tech on this manifest. The laser grid vaporizes it on contact, and a live beam will burn you too. Hold both plates with echoes, then walk the cargo to the zone." }, obj: "Lasers vaporize fragile cargo. Echo-hold both plates, then deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 3, mapWidth: 800, mapHeight: 600, layout: LEVEL9_LAYOUT, demos: { intro: LEVEL9_DEMO } },
+    { name: "First Shift", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, first shift on the floor. That plate holds the door, but you cannot stand on it and walk through. Leave an echo on the plate. The echo is company property. Move the parcel." }, obj: "Stand on the plate and loop. Your echo holds the door while you deliver the package.", maxGhosts: 1, loopTime: 20, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L1_LAYOUT, demo: LEVEL1_DEMO, demos: { intro: LEVEL1_DEMO } },
+    { name: "Return Trip", story: { speaker: "ChronoHaul Dispatch", text: "The drop bay is behind the door. The plate is down the left shaft. Record that plate first. Haul the parcel over to the shaft and the loop clock runs out before anyone is left holding the door." }, obj: "Loop on the shaft plate first, then carry the package through. Fetching the box first does not fit in the loop.", maxGhosts: 1, loopTime: 5, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L2_LAYOUT },
+    { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T's first opening is gone before you can reach it. The parcel is down in the pocket. Hold the plate with an echo and take the second window. Walk off the plate early and that window opens onto a shut door." }, obj: "Keep the echo on the plate. The timer's first opening is too early — cross on the second.", maxGhosts: 1, loopTime: 14, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
+    { name: "Airlock Relay", story: { speaker: "ChronoHaul Dispatch", text: "Two airlocks, one timer, two echoes. Door A shuts the moment its plate is empty, so one recording cannot hold A and reach plate B. Park an echo on A, park the next on B, and carry the parcel through. Three loops." }, obj: "Park an echo on plate A, then one on plate B. Carry the package through both doors and the timer.", maxGhosts: 2, loopTime: 12, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_L4_LAYOUT },
+    { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. Step on when the beam flares — a plate held from the start fails. An empty plate locks its door." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper audits g1, then g2, then g3. An early hold does not count. Put an echo on g1 and g2 as each warning flares, stand on g3 yourself for the last beat, and the vault opens." }, obj: "Time echoes onto g1 and g2 during their warnings. Step onto g3 in its window, then deliver from the vault.", maxGhosts: 2, loopTime: 14, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },
+    ...W2_LEVELS,
+    { name: "Level 3: Sweep Coverage", voiceKey: "level-2-story", story: { speaker: "Sector Surveillance", text: "Camera grid online in Transit Spur C. Cloak is still locked behind procurement. Time the cone, use cover, and remember: discarded timelines trip the same sensors you do." }, obj: "One camera. Cross on the gap in the sweep. Echoes trigger cameras too.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL3_LAYOUT, demos: { intro: LEVEL3_DEMO } },
+    { name: "Level 4: Overlapping Watch", voiceKey: "level-3-story", story: { speaker: "Local Hub Manager", text: "They stacked a patrol and a camera on the same corridor. Budget says that is your problem. Coordinate echoes and keep the parcel moving." }, obj: "Guard and camera together. Hold the door, avoid both sensors, deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT, demos: { intro: LEVEL4_DEMO } },
+    { name: "Level 5: Unstable Deck", voiceKey: "level-4-story", story: { speaker: "ChronoHaul Dispatch", text: "Maintenance skipped the subfloor again. Cracked plating covers both sides of the door and collapses under courier mass. Dash implants are paywalled. Hold the door with an echo and cross the cracks quickly." }, obj: "Cracks cover both sides of the door. Echo-hold the door and cross the cracks quickly.", challenge: { desc: "Finish in 2 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 2) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL5_LAYOUT, demos: { intro: LEVEL5_DEMO } },
+    { name: "Level 6: Dual Airlock", voiceKey: "level-5-story", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, double-echo clearance is live on this airlock. Two doors, two timelines. One logistics artifact cannot hold both gates. Park an echo on each plate and walk the parcel back." }, obj: "Two doors. Park an echo on each plate, then bring the package back.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL6_LAYOUT, demos: { intro: LEVEL6_DEMO } },
+    { name: "Level 7: Heavy Lifting", voiceKey: "level-6-story", story: { speaker: "Local Hub Manager", text: "High-density cargo on your lane. Pick it up and your pace is cut in half. Loop an echo onto the plate before you start dragging, then haul the parcel through the door." }, obj: "Heavy package slows you. Echo holds the door; you drag the cargo through.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL7_LAYOUT, demos: { intro: LEVEL7_DEMO } },
+    { name: "Level 8: Timed Gate", voiceKey: "level-7-story", story: { speaker: "Sector Surveillance", text: "Gate TD-1 is locked to a maintenance cycle. Plates are offline in this spur. The door opens and shuts on its own clock. Cross with the parcel while the gate is open." }, obj: "Timer door cycles open and shut. Carry the package through while it is open.", challenge: { desc: "Finish in 2 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 2) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL8_LAYOUT, demos: { intro: LEVEL8_DEMO } },
+    { name: "Level 9: Fragile Grid", voiceKey: "level-8-story", story: { speaker: "Local Hub Manager", text: "Class-4 fragile tech on this manifest. The laser grid vaporizes it on contact, and a live beam will burn you too. Hold both plates with echoes, then walk the cargo to the zone." }, obj: "Lasers vaporize fragile cargo. Echo-hold both plates, then deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 3, mapWidth: 800, mapHeight: 600, layout: LEVEL9_LAYOUT, demos: { intro: LEVEL9_DEMO } },
 
-    { name: "Level 10: Fast Shipping", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Critical: Package is highly unstable. Detonation sequence activates upon handling. The company expects immediate delivery. Do not fail." }, obj: "Timed packages explode! Toss them over the gap instantly.", challenge: { desc: "Do NOT use Dash", check: () => state.runStats.dashes === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,40,40)); packages=[new Package('pkg1',100,300,'timed')]; doors=[]; plates=[]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; } },
-    { name: "Level 11: Time Dilation", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; } },
+    { name: "Level 10: Fast Shipping", voiceKey: "level-9-story", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Critical: Package is highly unstable. Detonation sequence activates upon handling. The company expects immediate delivery. Do not fail." }, obj: "Timed packages explode! Toss them over the gap instantly.", challenge: { desc: "Do NOT use Dash", check: () => state.runStats.dashes === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,40,40)); packages=[new Package('pkg1',100,300,'timed')]; doors=[]; plates=[]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; gatekeepers=[]; } },
+    { name: "Level 11: Time Dilation", voiceKey: "level-10-story", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; gatekeepers=[]; } },
 
-    { name: "Level 12: Danger Courier", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => finishedWithinLoops(state.loopNumber, 1) }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; } },
-    { name: "Dev Sandbox", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox },
-    ...W2_LEVELS
+    { name: "Level 12: Danger Courier", voiceKey: "level-11-story", bossVoiceKey: "level-11-boss-intro", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => finishedWithinLoops(state.loopNumber, 1) }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; gatekeepers=[]; } },
+    { name: "Dev Sandbox", voiceKey: "level-12-story", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox }
 ];
+
+// #47 shipped these after the sandbox as pending. They are World 2 now, so they
+// count in the campaign. voiceKey misses the manifest and will not play another level's clip.
+W2_LEVELS.forEach((level, i) => {
+    level.isPendingCampaign = false;
+    if (!level.voiceKey) level.voiceKey = `w2-${i}-story`;
+    if (level.isBoss && !level.bossVoiceKey) level.bossVoiceKey = `w2-${i}-boss-intro`;
+});
+
+for (const level of LEVELS) installParChallenge(level);
 
 for (const world of WORLDS) {
     for (const idx of world.levels) {
         const level = LEVELS[idx];
         if (!level) continue;
-        level.world = world.id;
-        level.unlocks = [...world.unlocks];
+        // Keep per-level world/unlocks already set by world content (W2). Fill the rest from WORLDS.
+        if (level.world == null) level.world = world.id;
+        if (!Array.isArray(level.unlocks)) level.unlocks = [...world.unlocks];
     }
 }
+
+// Dash starts at the level marked dashFrom (W2-L3 Heavy Going) and stays on for every
+// later campaign level. Order is world id, then that world's own level list — not a LEVELS index.
+// true / false when the level sits in that order. null when it does not (sandbox, unnamed playtest).
+export function dashUnlockedByProgression(level) {
+    if (!level || typeof level !== 'object') return null;
+    const worlds = [...WORLDS].sort((a, b) => a.id - b.id);
+    let passed = false;
+    for (const world of worlds) {
+        for (const idx of world.levels) {
+            const lv = LEVELS[idx];
+            if (!lv) continue;
+            const marker = lv.dashFrom === true;
+            if (lv === level) return marker || passed;
+            if (marker) passed = true;
+        }
+    }
+    if (level.dashFrom === true) return true;
+    const worldId = normalizeWorldId(level.world);
+    if (worldId == null) return null;
+    if (worldId < 2) return false;
+    if (worldId > 2) return true;
+    const w2 = worlds.find(w => w.id === 2);
+    if (!w2) return null;
+    let markerAt = -1;
+    const names = w2.levels.map((idx, pos) => {
+        const lv = LEVELS[idx];
+        if (lv?.dashFrom === true) markerAt = pos;
+        return lv?.name;
+    });
+    if (markerAt < 0 || level.name == null) return null;
+    const pos = names.indexOf(level.name);
+    if (pos < 0) return null;
+    return pos >= markerAt;
+}
+
+registerDashProgression(dashUnlockedByProgression);
 
 export function getWorldForLevel(idx) {
     return WORLDS.find(world => world.levels.includes(idx)) || null;
@@ -666,6 +842,33 @@ function deserializeBurrower(b) {
     });
 }
 
+function serializeGatekeeper(g) {
+    const audits = (g.audits || []).map(a => ({
+        plateId: a.plateId == null ? '' : String(a.plateId),
+        tick: Number(a.tick)
+    })).filter(a => Number.isFinite(a.tick));
+    const out = {
+        id: g.id,
+        x: g.x,
+        y: g.y,
+        audits,
+        vaultDoorId: g.vaultDoorId == null ? '' : String(g.vaultDoorId)
+    };
+    const shields = Number.isFinite(Number(g.maxShields)) ? Math.max(0, Math.floor(Number(g.maxShields))) : g.shields;
+    if (shields !== audits.length) out.shields = shields;
+    const fresh = normalizeFreshTicks(g.freshTicks);
+    if (fresh != null) out.freshTicks = fresh;
+    return out;
+}
+
+function deserializeGatekeeper(raw) {
+    const g = raw || {};
+    const opts = { audits: g.audits || [], vaultDoorId: g.vaultDoorId || '' };
+    if (Object.prototype.hasOwnProperty.call(g, 'shields')) opts.shields = g.shields;
+    if (Object.prototype.hasOwnProperty.call(g, 'freshTicks')) opts.freshTicks = g.freshTicks;
+    return new Gatekeeper(g.id, g.x, g.y, opts);
+}
+
 // Boss/challenge level config shared by serialize, deserialize and the editor.
 // challengeRef names the campaign level whose code-defined challenge applies (challenges are functions).
 export const BOSS_META_KEYS = ['isBoss', 'bossIntro', 'bossIntroDoorId', 'challengeRef'];
@@ -760,6 +963,7 @@ export function serializeLevel(src = state) {
         cracks: (src.cracks || []).map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
         robots: (src.robots || []).map(serializeRobot),
         burrowers: (src.burrowers || []).map(serializeBurrower),
+        gatekeepers: (src.gatekeepers || []).map(serializeGatekeeper),
         crackSpeed: crackSpeedFromMeta(m, src.crackSpeed)
     };
     if (demo) payload.demo = demo;
@@ -783,6 +987,8 @@ export function serializeLevel(src = state) {
         };
         const loopTime = normalizeLoopTime(m.loopTime);
         if (loopTime != null) payload.meta.loopTime = loopTime;
+        const par = normalizePar(m.par);
+        if (par != null) payload.meta.par = par;
         const worldId = normalizeWorldId(m.world);
         if (worldId != null) payload.meta.world = worldId;
         if (Array.isArray(m.unlocks)) payload.meta.unlocks = [...m.unlocks];
@@ -805,7 +1011,7 @@ export function deserializeLevel(data) {
     walls = (data.walls||[]).map(w => new Wall(w.x, w.y, w.w, w.h));
     doors = (data.doors||[]).map(d => {
         if (d.type === 'alarm') return new AlarmDoor(d.id, d.x, d.y, d.w, d.h);
-        if (d.type === 'timer') return new TimerDoor(d.id, d.x, d.y, d.w, d.h, d.openT || 60, d.closedT || 60);
+        if (d.type === 'timer') return new TimerDoor(d.id, d.x, d.y, d.w, d.h, d.openT ?? 60, d.closedT ?? 60);
         return new Door(d.id, d.x, d.y, d.w, d.h);
     });
     plates = (data.plates||[]).map(p => {
@@ -824,7 +1030,7 @@ export function deserializeLevel(data) {
         const path = g.path || g.points || [{ x: g.x, y: g.y }];
         return new Guard(path.length ? path : [{ x: 50, y: 50 }]);
     });
-    cameras = (data.cameras||[]).map(c => new SweepCamera(c.x, c.y, c.baseAngle || 0, c.sweepRange || Math.PI/2));
+    cameras = (data.cameras||[]).map(c => new SweepCamera(c.x, c.y, c.baseAngle ?? 0, c.sweepRange ?? Math.PI/2));
     drones = (data.drones||[]).map(d => {
         const path = d.path || d.points || [{ x: d.x, y: d.y }];
         return new Drone(path.length ? path : [{ x: 50, y: 50 }]);
@@ -835,6 +1041,7 @@ export function deserializeLevel(data) {
     cracks = (data.cracks||[]).map(c => new CrackedFloor(c.x, c.y, c.w, c.h, crackSpeed || undefined));
     robots = (data.robots||[]).map(deserializeRobot);
     burrowers = (data.burrowers||[]).map(deserializeBurrower);
+    gatekeepers = (data.gatekeepers||[]).map(deserializeGatekeeper);
     projectiles = [];
 
     const demo = cloneDemo(data.demo || data.meta?.demo);
@@ -851,6 +1058,8 @@ export function deserializeLevel(data) {
             };
             const loopTime = normalizeLoopTime(data.meta.loopTime);
             if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+            const par = normalizePar(data.meta.par);
+            if (par != null) state.editorLevelMeta.par = par;
             const worldId = normalizeWorldId(data.meta.world);
             if (worldId != null) state.editorLevelMeta.world = worldId;
             if (Array.isArray(data.meta.unlocks)) state.editorLevelMeta.unlocks = [...data.meta.unlocks];
@@ -875,7 +1084,7 @@ export function deserializeLevel(data) {
         }
     }
     
-    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, projectiles }, size);
+    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, projectiles }, size);
 }
 
 export function getLevelSetup(index) {
@@ -884,6 +1093,7 @@ export function getLevelSetup(index) {
     const size = { mapWidth: level.mapWidth || DEFAULT_MAP_WIDTH, mapHeight: level.mapHeight || DEFAULT_MAP_HEIGHT };
     
     if (level.setup) {
+        gatekeepers = [];
         level.setup();
         hints = [];
         burrowers = [];
@@ -893,7 +1103,7 @@ export function getLevelSetup(index) {
         return withMapSize({
             player, deliveryZone, walls, doors, plates, hints, packages,
             lasers, guards, cameras, drones, winds, statics, cracks,
-            robots, burrowers, projectiles
+            robots, burrowers, gatekeepers, projectiles
         }, size);
     } else if (level.layout) {
         const payload = { ...level.layout, ...size, demos: level.demos, demo: level.demo };

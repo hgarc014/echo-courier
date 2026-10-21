@@ -3,7 +3,7 @@ import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, sy
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, copyBossMeta, getChallengeByRef, normalizePitKillFraction } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
@@ -398,6 +398,7 @@ function applyLoadedLevel(setupData) {
     Object.assign(state, setupData);
     if (!Array.isArray(state.hints)) state.hints = [];
     if (!Array.isArray(state.burrowers)) state.burrowers = [];
+    if (!Array.isArray(state.gatekeepers)) state.gatekeepers = [];
     setMapSize(setupData.mapWidth || DEFAULT_MAP_WIDTH, setupData.mapHeight || DEFAULT_MAP_HEIGHT);
     resetPlayerLoopState();
     if (state.gameState !== 'EDITOR' && state.player) {
@@ -414,7 +415,8 @@ function startBossIntro(level) {
     if (!level?.bossIntro) return;
     state.pendingBossIntro = null;
     state.gameState = 'BOSS_INTRO';
-    showLevelDialog(level.bossIntro.speaker, level.bossIntro.text, '#ff5555', `level-${state.currentLevelIndex}-boss-intro`);
+    const bossKey = level.bossVoiceKey || `level-${state.currentLevelIndex}-boss-intro`;
+    showLevelDialog(level.bossIntro.speaker, level.bossIntro.text, '#ff5555', bossKey);
 }
 
 function beginBossEncounter(level) {
@@ -573,6 +575,7 @@ function buildPopupDemoWorld() {
         cameras: bag.cameras || [],
         drones: bag.drones || [],
         robots: bag.robots || [],
+        gatekeepers: bag.gatekeepers || [],
         lasers: bag.lasers || [],
         projectiles: [],
         currentTick: 0
@@ -643,6 +646,7 @@ function drawMiniDemo() {
     paint(world.player);
     (world.guards || []).forEach(paint);
     (world.robots || []).forEach(paint);
+    (world.gatekeepers || []).forEach(paint);
     (world.cameras || []).forEach(paint);
     (world.drones || []).forEach(d => { if (d && d.alive !== false) paint(d); });
     mctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -873,6 +877,7 @@ export function startGame(levelIndex) {
     state.robots = []; state.burrowers = []; state.projectiles = [];
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
+    clearGatekeeperCheckpoint();
     state.playtesting = false;
     state.customLayout = null;
     state.editorReturnLayout = null;
@@ -895,7 +900,7 @@ export function startGame(levelIndex) {
     beginRecording({ level: levelIndex, levelName: lv.name });
     if (lv.story) {
         state.gameState = 'DIALOG';
-        showLevelDialog(lv.story.speaker, lv.story.text, '#39ff14', `level-${levelIndex}-story`);
+        showLevelDialog(lv.story.speaker, lv.story.text, '#39ff14', lv.voiceKey || `level-${levelIndex}-story`);
     } else {
         state.gameState = 'PLAYING';
         hideLevelDialog();
@@ -916,6 +921,11 @@ function loopTimeExpired() {
     const cap = loopRecordCap();
     if (cap == null) return false;
     return state.currentTick >= cap || state.currentRun.length >= cap;
+}
+
+// Broken Gatekeeper shields survive R (resetRun). A new attempt clears this.
+function clearGatekeeperCheckpoint() {
+    state.gatekeeperCheckpoint = {};
 }
 
 function warnEchoesEndingOnCracks() {
@@ -951,6 +961,7 @@ export function resetRun() {
     state.bossCheckpointLive = true;
     applyLoadedLevel(loadCurrentEntities());
     state.bossCheckpointLive = false;
+    // gatekeeperCheckpoint intentionally kept so broken shields survive this loop reset.
     if (state.currentLevelMeta?.isBoss) engageBossEncounter(state.currentLevelMeta);
     state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
     if (recorded) warnEchoesEndingOnCracks();
@@ -972,6 +983,7 @@ export function restartLevel() {
     state.worldUnlockedAbilities = state.playtesting ? getPlaytestWorldUnlocks(lv) : getWorldUnlockedAbilities(state.currentLevelIndex);
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
+    clearGatekeeperCheckpoint();
     applyLoadedLevel(loadCurrentEntities());
     state.pastRuns = []; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
@@ -1062,6 +1074,8 @@ export function startPlaytestFromEditor() {
     if (playtestHint) state.currentLevelMeta.hintLine = playtestHint;
     const playtestPit = normalizePitKillFraction(em.pitKillFraction);
     if (playtestPit != null) state.currentLevelMeta.pitKillFraction = playtestPit;
+    const playtestPar = normalizePar(em.par);
+    if (playtestPar != null) state.currentLevelMeta.par = playtestPar;
     applyLevelAbilityOverrides(state.currentLevelMeta);
     state.worldUnlockedAbilities = getPlaytestWorldUnlocks(state.currentLevelMeta);
     state.bossCheckpoint = null;
@@ -1071,6 +1085,7 @@ export function startPlaytestFromEditor() {
     document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
     applyLevelHint(state.currentLevelMeta);
 
+    clearGatekeeperCheckpoint();
     applyLoadedLevel(deserializeLevel(layout));
     beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
     updateHUD();
@@ -1280,6 +1295,14 @@ function update() {
 
     for (const door of state.doors) {
         if (typeof door.update === 'function') door.update(allActors, state.packages);
+    }
+
+    for (const gk of state.gatekeepers || []) {
+        if (typeof gk.update === 'function') gk.update(state.currentTick, state.plates, state.doors);
+    }
+    // Lock wins over the plate assignment and door.update above for the rest of this loop.
+    for (const door of state.doors || []) {
+        if (door && door.gateLocked) door.isOpen = false;
     }
 
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
@@ -1873,7 +1896,7 @@ function draw() {
         ctx.stroke(); ctx.restore();
     });
     
-    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
+    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); (state.gatekeepers || []).forEach(g => g.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
     drawEchoHazardFlashes(ctx);
