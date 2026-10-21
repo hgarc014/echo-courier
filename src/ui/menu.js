@@ -200,7 +200,7 @@ export function initMenu() {
 export function levelSelectTitle(lvl, { unlocked, hasGold } = {}) {
     if (hasGold) return 'Gold star challenge complete';
     if (!unlocked) return 'Locked';
-    if (lvl?.challenge?.desc) return formatParTooltip(lvl.challenge.desc);
+    if (lvl?.challenge?.desc) return formatParTooltip(lvl.challenge.desc, lvl.par);
     return '';
 }
 

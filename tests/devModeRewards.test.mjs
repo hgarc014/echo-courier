@@ -8,7 +8,7 @@ installDomStubs();
 const { state, setUnlockAll, isDevMode, getCredits } = await import('../src/core/state.js');
 const { refreshShopButtons, levelSelectTitle } = await import('../src/ui/menu.js');
 const { formatCampaignClearMessage, DEV_PROGRESS_NOTE, finishLoopLine } = await import('../src/core/loopDisplay.js');
-const { LEVELS } = await import('../src/data/levels.js');
+const { LEVELS, normalizePar } = await import('../src/data/levels.js');
 
 const NOTE = 'Dev mode: progress not saved';
 assert.equal(DEV_PROGRESS_NOTE, NOTE);
@@ -141,5 +141,15 @@ for (const desc of restrictions) {
 }
 const parLvl = LEVELS.find(l => l.name === 'First Shift');
 assert.equal(levelSelectTitle(parLvl, { unlocked: true, hasGold: false }), 'Par: Finish in 2 loops or fewer');
+
+const noParFinish = LEVELS.filter(l =>
+    normalizePar(l.par) == null && /^Finish in \d+ loops?/i.test(l.challenge?.desc || ''));
+assert.ok(noParFinish.some(l => l.name.includes('Sweep Coverage')));
+assert.ok(noParFinish.some(l => l.name.includes('Fragile Grid')));
+for (const lvl of noParFinish) {
+    const title = levelSelectTitle(lvl, { unlocked: true, hasGold: false });
+    assert.equal(title.startsWith('Par:'), false, `${lvl.name}: ${title}`);
+    assert.equal(title, `Challenge: ${lvl.challenge.desc}`, lvl.name);
+}
 
 console.log('ok - dev mode results and shop');

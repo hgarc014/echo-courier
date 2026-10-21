@@ -61,17 +61,14 @@ export function normalizePar(value) {
     return n;
 }
 
-// Loop-count par lines only. "Do NOT use Dash" and the other old restrictions are not pars.
-const PAR_LINE = /^finish in \d+ loops? or fewer$/i;
-
-// Level-select tooltip. A par line is labeled "Par:". Any other challenge stays challenge text.
-export function formatParTooltip(desc) {
+// Level-select tooltip. "Par:" only when `par` is a real par field (positive integer).
+// Challenge wording is not parsed — "Finish in N loops" without a par stays a challenge.
+export function formatParTooltip(desc, par) {
     const text = String(desc ?? '').trim();
     if (!text) return '';
     if (/^par\b/i.test(text)) return text;
-    if (PAR_LINE.test(text)) return `Par: ${text}`;
     if (/^challenge\b/i.test(text)) return text;
-    return `Challenge: ${text}`;
+    return normalizePar(par) != null ? `Par: ${text}` : `Challenge: ${text}`;
 }
 
 // Optional par challenge. Skips levels that already define their own challenge.
