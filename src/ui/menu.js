@@ -1,4 +1,4 @@
-import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi } from '../core/state.js';
+import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi, isUnlockAll, isLevelUnlocked } from '../core/state.js';
 import { LEVELS, WORLDS, getShopUnlockedAbilities, formatParTooltip } from '../data/levels.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
@@ -47,7 +47,7 @@ export function refreshLevelSelectGrid() {
 
     const placed = new Set();
     const appendLevelButton = (lvl, idx) => {
-        let unlocked = isDevMode() || idx <= state.maxUnlockedLevel || !!lvl.isPendingCampaign;
+        let unlocked = isLevelUnlocked(idx, lvl);
         let btn = document.createElement('button');
         btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
         btn.type = 'button';
@@ -109,6 +109,8 @@ export function initMenu() {
     let displayRank = rankData[getPlayerRank()] || "Senior Courier";
     document.getElementById('player-rank-display').innerText = `Rank: ${displayRank}`;
     document.getElementById('credits-display').innerText = getCredits();
+    const unlockAllBox = document.getElementById('unlock-all-checkbox');
+    if (unlockAllBox) unlockAllBox.checked = isUnlockAll();
     document.getElementById('voice-dialog-checkbox').checked = state.audioSettings.dialogVoiceEnabled !== false;
     document.getElementById('dialog-volume-slider').value = Math.round((state.audioSettings.dialogVolume ?? 0.8) * 100);
     document.getElementById('dialog-volume-value').innerText = `${Math.round((state.audioSettings.dialogVolume ?? 0.8) * 100)}%`;

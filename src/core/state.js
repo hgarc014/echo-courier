@@ -149,6 +149,18 @@ export function getCredits() {
     return earned - spent;
 }
 
+export const PROGRESS_KEYS = [
+    'echoCourier_maxLevel',
+    'echoCourier_challenges',
+    'echoCourier_abilities',
+    'echoCourier_tutorials'
+];
+
+// demoPlayback.js stores tutorial "seen" flags as echoCourier_demoSeen_*.
+export const DEMO_SEEN_KEY_PREFIX = 'echoCourier_demoSeen_';
+
+export const UNLOCK_ALL_KEY = 'echoCourier_unlockAll';
+
 export function isDevUrlEnabled() {
     try {
         return new URLSearchParams(location.search).get('dev') === '1';
@@ -157,13 +169,38 @@ export function isDevUrlEnabled() {
     }
 }
 
+export function isUnlockAll() {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+        return localStorage.getItem(UNLOCK_ALL_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+export function setUnlockAll(enabled) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(UNLOCK_ALL_KEY, enabled ? '1' : '0');
+    } catch {
+        /* private mode / quota */
+    }
+}
+
 export function isDevMode() {
+    if (isUnlockAll()) return true;
     if (!isDevUrlEnabled()) return false;
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false;
     const el = document.getElementById('dev-mode-checkbox');
     return !!(el && el.checked);
 }
 
+export function isLevelUnlocked(idx, lvl) {
+    return isDevMode() || idx <= state.maxUnlockedLevel || !!(lvl && lvl.isPendingCampaign);
+}
+
 export function applyDevModeUi() {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
     const allowed = isDevUrlEnabled();
     const box = document.getElementById('dev-mode-controls');
     if (box) box.hidden = !allowed;
@@ -211,4 +248,29 @@ export function saveState() {
     localStorage.setItem('echoCourier_tutorials', JSON.stringify(state.tutorialProgress));
     localStorage.setItem('echoCourier_audio', JSON.stringify(state.audioSettings));
     localStorage.setItem('echoCourier_suit', state.playerColor);
+}
+
+function removeDemoSeenKeys() {
+    if (typeof localStorage === 'undefined' || typeof localStorage.key !== 'function') return;
+    const count = localStorage.length;
+    if (typeof count !== 'number') return;
+    const doomed = [];
+    for (let i = 0; i < count; i++) {
+        const key = localStorage.key(i);
+        if (typeof key === 'string' && key.startsWith(DEMO_SEEN_KEY_PREFIX)) doomed.push(key);
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+}
+
+export function wipeProgress() {
+    if (typeof localStorage !== 'undefined') {
+        for (const key of PROGRESS_KEYS) {
+            try { localStorage.removeItem(key); } catch { /* private mode */ }
+        }
+        removeDemoSeenKeys();
+    }
+    state.maxUnlockedLevel = 0;
+    state.challengesCompleted = {};
+    state.abilitiesPurchased = {};
+    state.tutorialProgress = {};
 }

@@ -1,4 +1,4 @@
-import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled } from './core/state.js';
+import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, wipeProgress, setUnlockAll } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
@@ -2078,6 +2078,14 @@ window.onload = () => {
     });
     document.getElementById('playtest-return-btn')?.addEventListener('click', () => returnToEditor());
     document.getElementById('dev-mode-checkbox').onchange = () => { refreshLevelSelectGrid(); refreshShopButtons(); };
+    const unlockAllBox = document.getElementById('unlock-all-checkbox');
+    if (unlockAllBox) {
+        unlockAllBox.onchange = () => {
+            setUnlockAll(unlockAllBox.checked);
+            initMenu();
+            showSubMenu('settings');
+        };
+    }
     
     document.getElementById('next-level-btn').onclick = () => window.nextLevel();
     document.getElementById('menu-btn')?.addEventListener('click', (e) => {
@@ -2087,7 +2095,11 @@ window.onload = () => {
             returnToEditor();
         }
     });
-    document.getElementById('reset-save-btn').onclick = () => { localStorage.clear(); location.reload(); };
+    document.getElementById('reset-save-btn').onclick = () => {
+        if (!confirm('Wipe all campaign progress? Level editor saves and settings are kept.')) return;
+        wipeProgress();
+        initMenu();
+    };
     
     document.body.addEventListener('click', () => {
         unlockAudio();
