@@ -12,6 +12,10 @@ import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevel
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
 import { pickCourierFrame } from './core/atlas.js';
+import { collectWires, drawWires } from './systems/wires.js';
+import { glyphsForGhost } from './systems/temporalPlate.js';
+import { sampleRun, predictEchoHazards } from './systems/preview.js';
+import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -1562,6 +1566,154 @@ function drawEchoEndMarkerBadges(target) {
     }
 }
 
+// ==== PR4: TemporalPlate head legends, echo hazard flashes, timeline scrubber ====
+function temporalModesInLevel() {
+    const set = new Set();
+    for (const p of state.plates || []) if (p instanceof TemporalPlate) set.add(p.requiredTimeline);
+    return set;
+}
+
+function drawTemporalHeadLegends(target) {
+    const modes = temporalModesInLevel();
+    if (!modes.size || state.gameState === 'EDITOR') return;
+    const ghosts = state.activeGhosts || [];
+    for (const g of ghosts) {
+        if (!g.isActive) continue;
+        const gl = glyphsForGhost(g.id, ghosts, modes);
+        gl.forEach((m, i) => drawTemporalGlyph(target, m, g.x + g.w / 2 + (i - (gl.length - 1) / 2) * 20, g.y - 12, 8));
+    }
+    if (modes.has('present') && state.player) drawTemporalGlyph(target, 'present', state.player.x + state.player.w / 2, state.player.y - 12, 8);
+}
+
+let echoHazardCache = { tick: -1, hits: [] };
+function currentEchoHazards() {
+    if (state.gameState !== 'PLAYING') return [];
+    const t = state.currentTick;
+    if (echoHazardCache.tick < 0 || t < echoHazardCache.tick || t - echoHazardCache.tick >= 6) {
+        echoHazardCache = { tick: t, hits: predictEchoHazards(state.activeGhosts, state.cameras, state.lasers) };
+    }
+    return echoHazardCache.hits;
+}
+
+function drawEchoHazardFlashes(target) {
+    const hits = currentEchoHazards();
+    if (!hits.length) return;
+    const blink = 0.35 + 0.65 * Math.abs(Math.sin(state.currentTick * 0.25));
+    target.save();
+    for (const h of hits) {
+        const cx = h.x + 15, cy = h.y + 15;
+        target.globalAlpha = blink;
+        target.strokeStyle = '#ff2a2a';
+        target.lineWidth = 3;
+        target.beginPath(); target.arc(cx, cy, 18, 0, Math.PI * 2); target.stroke();
+        target.beginPath(); target.moveTo(cx - 8, cy - 8); target.lineTo(cx + 8, cy + 8); target.moveTo(cx + 8, cy - 8); target.lineTo(cx - 8, cy + 8); target.stroke();
+        target.globalAlpha = 1;
+        target.fillStyle = '#ff6b6b';
+        target.font = 'bold 11px "Space Grotesk", sans-serif';
+        target.textAlign = 'center';
+        target.fillText(h.kind === 'laser' ? 'LASER' : 'SEEN', cx, cy + 30);
+    }
+    target.restore();
+}
+
+const SCRUB_BAR = { x: 140, y: 574, w: 520, h: 14 };
+let scrubTick = null;
+function scrubHorizon() {
+    let max = 0;
+    for (const g of state.activeGhosts || []) max = Math.max(max, g.runData?.length || 0);
+    return max;
+}
+function scrubberVisible() {
+    return state.gameState === 'PLAYING' && (state.activeGhosts || []).length > 0 && scrubHorizon() > 1;
+}
+function scrubEventToCanvas(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (canvas.width / (r.width || 1)), y: (e.clientY - r.top) * (canvas.height / (r.height || 1)) };
+}
+function scrubSet(e) {
+    const p = scrubEventToCanvas(e);
+    const u = Math.max(0, Math.min(1, (p.x - SCRUB_BAR.x) / SCRUB_BAR.w));
+    scrubTick = Math.round(u * (scrubHorizon() - 1));
+}
+if (canvas && canvas.addEventListener) {
+    canvas.addEventListener('pointerdown', e => {
+        if (!scrubberVisible()) return;
+        const p = scrubEventToCanvas(e);
+        if (p.x < SCRUB_BAR.x - 8 || p.x > SCRUB_BAR.x + SCRUB_BAR.w + 8 || p.y < SCRUB_BAR.y - 10 || p.y > SCRUB_BAR.y + SCRUB_BAR.h + 10) return;
+        scrubSet(e);
+        canvas.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+    });
+    canvas.addEventListener('pointermove', e => { if (scrubTick != null) scrubSet(e); });
+    const end = () => { scrubTick = null; };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+}
+
+function drawScrubPreviewGhosts(target) {
+    if (scrubTick == null || !scrubberVisible()) return;
+    target.save();
+    for (const g of state.activeGhosts) {
+        const s = sampleRun(g.runData, scrubTick);
+        if (!s) continue;
+        const w = g.w || 30, h = g.h || 30;
+        target.globalAlpha = 0.55;
+        target.strokeStyle = '#7df9ff';
+        target.setLineDash([4, 3]);
+        target.lineWidth = 2;
+        target.strokeRect(s.x, s.y, w, h);
+        target.setLineDash([]);
+        target.fillStyle = 'rgba(125,249,255,0.25)';
+        target.fillRect(s.x, s.y, w, h);
+        target.globalAlpha = 1;
+        target.fillStyle = '#7df9ff';
+        target.font = 'bold 12px "Space Grotesk", sans-serif';
+        target.textAlign = 'center';
+        target.fillText(String((g.id ?? 0) + 1), s.x + w / 2, s.y - 4);
+    }
+    target.restore();
+}
+
+function drawPreviewScrubber(target) {
+    if (!scrubberVisible()) return;
+    const horizon = scrubHorizon();
+    const b = SCRUB_BAR;
+    const toX = t => b.x + (Math.max(0, Math.min(horizon - 1, t)) / Math.max(1, horizon - 1)) * b.w;
+    target.save();
+    target.globalAlpha = scrubTick != null ? 0.95 : 0.7;
+    target.fillStyle = 'rgba(4,16,24,0.8)';
+    target.fillRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
+    target.strokeStyle = 'rgba(125,249,255,0.6)';
+    target.lineWidth = 1;
+    target.strokeRect(b.x, b.y, b.w, b.h);
+    for (const g of state.activeGhosts) {
+        const ex = toX((g.runData?.length || 1) - 1);
+        target.fillStyle = state.playerColor || '#ff7b00';
+        target.fillRect(ex - 1, b.y, 2, b.h);
+    }
+    for (const hz of currentEchoHazards()) {
+        target.fillStyle = '#ff2a2a';
+        target.fillRect(toX(hz.tick) - 2, b.y - 2, 4, b.h + 4);
+    }
+    const nowX = toX(state.currentTick);
+    target.fillStyle = 'rgba(255,255,255,0.85)';
+    target.fillRect(nowX - 1, b.y - 3, 2, b.h + 6);
+    if (scrubTick != null) {
+        const sx = toX(scrubTick);
+        target.fillStyle = '#7df9ff';
+        target.beginPath(); target.arc(sx, b.y + b.h / 2, 7, 0, Math.PI * 2); target.fill();
+        target.font = 'bold 11px "Space Grotesk", sans-serif';
+        target.textAlign = 'center';
+        target.fillText(`t=${(scrubTick / (state.FPS || 60)).toFixed(1)}s`, sx, b.y - 8);
+    } else {
+        target.fillStyle = 'rgba(125,249,255,0.75)';
+        target.font = '10px "Space Grotesk", sans-serif';
+        target.textAlign = 'left';
+        target.fillText('DRAG TO PREVIEW ECHOES', b.x, b.y - 7);
+    }
+    target.restore();
+}
+
 function draw() {
     // Popup demos no longer freeze the main canvas — live world always draws.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1596,7 +1748,7 @@ function draw() {
     }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
-    state.deliveryZone.render(ctx); state.plates.forEach(p => p.render(ctx)); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
+    state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); state.plates.forEach(p => p.render(ctx)); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
     state.lasers.forEach(l => l.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
     state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
@@ -1663,6 +1815,9 @@ function draw() {
     
     state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
+    drawTemporalHeadLegends(ctx);
+    drawEchoHazardFlashes(ctx);
+    drawScrubPreviewGhosts(ctx);
     if (state.failFx) drawBurst(ctx, state.failFx);
     if (state.rewindFx) drawBurst(ctx, state.rewindFx);
     renderEchoFellFx(ctx);
@@ -1706,6 +1861,7 @@ function draw() {
     applyCamera(ctx, shakeX, shakeY);
     drawEchoEndMarkerBadges(ctx);
     ctx.restore();
+    drawPreviewScrubber(ctx);
 
     if (isPopupDemo()) {
         drawMiniDemo();

@@ -4,6 +4,7 @@ import { AABB } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
 import { drawSprite, drawTiled } from '../core/sprites.js';
 import { resolveSprite } from '../core/atlas.js';
+import { normalizeTimeline, pickTemporalActor, TEMPORAL_GLYPH, TEMPORAL_COLOR } from '../systems/temporalPlate.js';
 
 export class Wall extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'wall'); }
@@ -317,14 +318,12 @@ export class PressurePlate extends Entity {
 export class TemporalPlate extends PressurePlate {
     constructor(id, x, y, linkedIds, requiredTimeline) { 
         super(id, x, y, linkedIds); 
-        this.requiredTimeline = requiredTimeline; 
+        this.requiredTimeline = normalizeTimeline(requiredTimeline); 
     }
     update(actors) { 
         this.isPressed = false;
-        let validActor = null;
-        if (this.requiredTimeline === 'present') validActor = actors.find(a => a.id === undefined && a.assetName === 'player');
-        else if (this.requiredTimeline === 'first') validActor = actors.find(a => a.id === 0);
-        else if (this.requiredTimeline === 'last') validActor = actors.find(a => a.id === state.activeGhosts.length - 1);
+        // `last` resolves to the newest surviving echo id after maxGhosts pruning.
+        const validActor = pickTemporalActor(this.requiredTimeline, actors, state.activeGhosts);
         
         if (validActor && AABB(this.x, this.y, this.w, this.h, validActor.x, validActor.y, validActor.w, validActor.h)) this.isPressed = true;
     }
@@ -345,7 +344,22 @@ export class TemporalPlate extends PressurePlate {
         const pulse = this.isPressed ? 1 : 0.75;
         if (img) drawSprite(ctx, img, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
         if (this.isPressed) { ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
+        drawTemporalGlyph(ctx, this.requiredTimeline, this.x + this.w / 2, this.y + this.h / 2, 13);
     }
+}
+
+/** Legend icon (1 / L / ▶) for a TemporalPlate mode; also used above actor heads. */
+export function drawTemporalGlyph(ctx, mode, cx, cy, r = 9) {
+    const m = normalizeTimeline(mode);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(4,16,24,0.85)'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = TEMPORAL_COLOR[m]; ctx.stroke();
+    ctx.fillStyle = TEMPORAL_COLOR[m];
+    ctx.font = `bold ${Math.round(r * 1.25)}px "Space Grotesk", sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(TEMPORAL_GLYPH[m], cx, cy + 1);
+    ctx.restore();
 }
 
 export class Door extends Entity {
