@@ -897,6 +897,17 @@ function swallowPackages(hazard) {
     return fail;
 }
 
+function playerCarriedFragileInto(hazard, actors) {
+    const player = (actors || []).find(isPresentPlayer);
+    if (!player || player !== state.player) return false;
+    if (!AABB(player.x, player.y, player.w, player.h, hazard.x, hazard.y, hazard.w, hazard.h)) return false;
+    for (const pkg of state.packages || []) {
+        if (!pkg || pkg.isDestroyed || pkg.type !== 'fragile' || pkg.carriedBy !== 'player') continue;
+        if (packageTouches(pkg, hazard)) return true;
+    }
+    return false;
+}
+
 export class Pit extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'pit'); }
     update(actors) {
@@ -906,7 +917,9 @@ export class Pit extends Entity {
             if (isPresentPlayer(a)) { playerFell = true; continue; }
             if (a.id !== undefined) a.isActive = false;
         }
+        const carriedFragile = playerFell && playerCarriedFragileInto(this, actors);
         const cargoFail = swallowPackages(this);
+        if (carriedFragile) return 'Fragile Package Destroyed!';
         if (playerFell) return 'Fell into pit!';
         return cargoFail;
     }

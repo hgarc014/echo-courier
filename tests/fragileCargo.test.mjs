@@ -103,6 +103,30 @@ check('carried fragile shatters when the carrier is over a pit or broken crack',
     assert.ok(carried.breakFx);
 });
 
+check('player carrying fragile into a pit reports fragile destruction', () => {
+    resetActors();
+    const player = box(120, 80);
+    state.player = player;
+    const pit = new Pit(120, 80, 40, 40);
+    const fragile = cargo('fragile', 500, 500, 'player');
+    state.packages = [fragile];
+    assert.equal(pit.update([player]), 'Fragile Package Destroyed!');
+    assert.equal(fragile.isDestroyed, true);
+    assert.ok(fragile.breakFx, 'carried fragile should shatter in the pit');
+
+    const again = box(120, 80);
+    state.player = again;
+    const plain = cargo('standard', 500, 500, 'player');
+    state.packages = [plain];
+    assert.equal(new Pit(120, 80, 40, 40).update([again]), 'Fell into pit!');
+    assert.equal(plain.isDestroyed, true);
+
+    const solo = box(40, 40);
+    state.player = solo;
+    state.packages = [];
+    assert.equal(new Pit(40, 40, 40, 40).update([solo]), 'Fell into pit!');
+});
+
 check('carried normal package is lost when an echo carries it into a broken crack', () => {
     resetActors();
     const ghost = { id: 1, x: 100, y: 100, w: 30, h: 30, isActive: true };
