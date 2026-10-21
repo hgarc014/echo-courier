@@ -1,4 +1,4 @@
-import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities } from '../core/state.js';
+import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi } from '../core/state.js';
 import { LEVELS, WORLDS, getShopUnlockedAbilities } from '../data/levels.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
@@ -47,10 +47,11 @@ export function refreshLevelSelectGrid() {
 
     const placed = new Set();
     const appendLevelButton = (lvl, idx) => {
-        let isDev = document.getElementById('dev-mode-checkbox').checked;
-        let unlocked = isDev || idx <= state.maxUnlockedLevel;
+        let unlocked = isDevMode() || idx <= state.maxUnlockedLevel;
         let btn = document.createElement('button');
         btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
+        btn.type = 'button';
+        btn.disabled = !unlocked;
 
         let hasGold = state.challengesCompleted[idx] === true;
         if (hasGold) btn.classList.add('gold-star');
@@ -59,6 +60,7 @@ export function refreshLevelSelectGrid() {
             ? `Level ${idx + 1}, gold star challenge complete`
             : unlocked ? `Level ${idx + 1}` : `Level ${idx + 1}, locked`);
         if (hasGold) btn.title = 'Gold star challenge complete';
+        else if (!unlocked) btn.title = 'Locked';
         else if (lvl.challenge?.desc) btn.title = `Par: ${lvl.challenge.desc}`;
         if (unlocked) btn.onclick = () => startGame(idx);
         uiLevelGrid.appendChild(btn);
@@ -84,6 +86,7 @@ export function refreshLevelSelectGrid() {
 }
 
 export function initMenu() {
+    applyDevModeUi();
     document.getElementById('title-screen').classList.remove('hidden');
     document.getElementById('app-layout').classList.add('hidden');
     document.getElementById('level-complete').classList.add('hidden');
@@ -229,7 +232,7 @@ function syncMuteButtons() {
 }
 
 function levelSelectIconHtml(unlocked, hasGold) {
-    if (!unlocked) return '<span class="level-lock">LOCK</span>';
+    if (!unlocked) return '<span class="level-lock" aria-hidden="true">🔒</span>';
     if (hasGold) return '<span class="level-star" aria-hidden="true">⭐</span>';
     return '<span class="level-star-slot" aria-hidden="true"></span>';
 }

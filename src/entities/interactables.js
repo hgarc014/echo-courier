@@ -364,8 +364,10 @@ export class Door extends Entity {
 
 export class AlarmDoor extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'door'); this.id=id; this.isOpen=true; }
-    render(ctx) {
+    update() {
         this.isOpen = !state.alarmState;
+    }
+    render(ctx) {
         if (!this.isOpen) {
             const img = resolveSprite(state, 'door');
             if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40);
@@ -377,11 +379,35 @@ export class AlarmDoor extends Entity {
 }
 
 export class TimerDoor extends Entity {
-    constructor(id, x, y, w, h, openT, closedT) { super(x, y, w, h, 'door'); this.id=id; this.openT=openT; this.closedT=closedT; this.isOpen=false; }
+    constructor(id, x, y, w, h, openT, closedT) {
+        super(x, y, w, h, 'door');
+        this.id = id;
+        this.openT = openT;
+        this.closedT = closedT;
+        this.isOpen = (openT || 0) > 0;
+    }
+    _occupied(actors, crates) {
+        const hit = (o) => o && AABB(this.x, this.y, this.w, this.h, o.x, o.y, o.w || 30, o.h || 30);
+        for (const a of actors || []) {
+            if (a.isActive === false) continue;
+            if (hit(a)) return true;
+        }
+        for (const p of crates || []) {
+            if (p.isDestroyed) continue;
+            if (hit(p)) return true;
+        }
+        return false;
+    }
+    update(actors = [], crates = []) {
+        const period = (this.openT || 0) + (this.closedT || 0);
+        const tick = state.currentTick || 0;
+        const cycle = period > 0 ? tick % period : 0;
+        const wantOpen = period > 0 ? cycle < this.openT : this.isOpen;
+        const nextOpen = wantOpen || this._occupied(actors, crates);
+        if (this.isOpen && !nextOpen) SFX.door();
+        this.isOpen = nextOpen;
+    }
     render(ctx) {
-        let cycle = state.currentTick % (this.openT + this.closedT);
-        if (cycle === this.openT) SFX.door();
-        this.isOpen = cycle < this.openT;
         if (!this.isOpen) {
             const img = resolveSprite(state, 'door');
             if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40);

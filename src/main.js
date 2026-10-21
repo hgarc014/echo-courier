@@ -1,4 +1,4 @@
-import { state, saveState, getUnlockedAbilities, getPlayerRank } from './core/state.js';
+import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
@@ -621,10 +621,23 @@ function positionHintPopup() {
     const sy = ((worldCy - (hintAnchor.camY || 0)) / VIEW_HEIGHT) * canvasRect.height + (canvasRect.top - areaRect.top);
     const pw = panel.offsetWidth || 300;
     const ph = panel.offsetHeight || 240;
+    const scaleY = canvasRect.height / VIEW_HEIGHT;
+    const plateBottom = sy + (hintAnchor.h || 36) * scaleY;
+    const plateTop = sy;
+    // Prefer below the plate so the L1 corridor and delivery zone stay visible.
     let left = sx - pw / 2;
-    let top = sy - ph - 16;
-    let placeAbove = top >= 8;
-    if (!placeAbove) top = sy + (hintAnchor.h || 36) * (canvasRect.height / VIEW_HEIGHT) + 12;
+    let top = plateBottom + 12;
+    let placeAbove = false;
+    if (top + ph > area.clientHeight - 4) {
+        const above = plateTop - ph - 16;
+        if (above >= 8) {
+            top = above;
+            placeAbove = true;
+        }
+    }
+    // Keep the left path + delivery zone (world x ≲ 180) clear of the bubble.
+    const keepClearRight = 180 * (canvasRect.width / VIEW_WIDTH);
+    if (left < keepClearRight) left = keepClearRight;
     const maxLeft = Math.max(4, area.clientWidth - pw - 4);
     const maxTop = Math.max(4, area.clientHeight - ph - 4);
     left = Math.max(4, Math.min(left, maxLeft));
@@ -639,7 +652,13 @@ window.addEventListener('resize', () => {
 });
 
 function openHintDemo(hint) {
-    if (!hint || isDemoActive()) return false;
+    if (!hint) return false;
+    if (isDemoActive()) {
+        stopDemo({ markSeen: false, skipped: true, invokeDismiss: false });
+        clearPopupDemoWorld();
+        clearHintPopupChrome();
+        activeHintId = null;
+    }
     const demo = resolveHintDemo(hint);
     if (!demo?.steps?.length) return false;
     const world = buildPopupDemoWorld();
@@ -707,10 +726,6 @@ function updateHintPlates(interactPressed) {
 
     const tick = state.currentTick || 0;
     const gated = tick < hintReopenGateUntil;
-    if (gated) {
-        hintWasStanding = nowStanding;
-        return;
-    }
     let toOpen = null;
     for (const hint of hints) {
         if (nowStanding.has(hint.id) && !hintWasStanding.has(hint.id)) {
@@ -718,7 +733,7 @@ function updateHintPlates(interactPressed) {
             break;
         }
     }
-    if (!toOpen && interactPressed && firstStanding) toOpen = firstStanding;
+    if (!toOpen && interactPressed && firstStanding && !gated) toOpen = firstStanding;
     hintWasStanding = nowStanding;
     if (toOpen) openHintDemo(toOpen);
 }
@@ -1080,6 +1095,10 @@ function update() {
         }
     });
 
+    for (const door of state.doors) {
+        if (typeof door.update === 'function') door.update(allActors, state.packages);
+    }
+
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
     for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
     
@@ -1234,7 +1253,7 @@ function update() {
             if (state.currentLevelIndex >= state.maxUnlockedLevel && state.currentLevelIndex < CAMPAIGN_LEVEL_COUNT - 1) {
                 state.maxUnlockedLevel = state.currentLevelIndex + 1; localStorage.setItem('echoCourier_maxLevel', state.maxUnlockedLevel);
             }
-            let earnedMsg = isFirstTimeLevel ? "Level Clear: +$50<br><br>" : "Level Clear: +$0<br><br>";
+            let earnedMsg = isFirstTimeLevel ? "Level Clear: +$50<br><br>" : "";
             let chalSuccess = !state.challengesCompleted[state.currentLevelIndex] && LEVELS[state.currentLevelIndex].challenge.check();
             if (chalSuccess) {
                 state.challengesCompleted[state.currentLevelIndex] = true;
@@ -1473,9 +1492,9 @@ window.onload = () => {
     preloadDialogVoice().catch(() => {});
     document.body.addEventListener('pointerdown', () => { unlockAudio(); }, { passive: true });
     document.body.addEventListener('keydown', () => { unlockAudio(); });
+    applyDevModeUi();
     window.startNextAvailableLevel = () => {
-        let devModeCheckbox = document.getElementById('dev-mode-checkbox');
-        let lvl = devModeCheckbox.checked ? 0 : Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
+        let lvl = isDevMode() ? 0 : Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
         startGame(lvl);
     };
     window.startTutorialTrack = () => startGame(0);
