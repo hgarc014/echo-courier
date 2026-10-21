@@ -63,7 +63,8 @@ export const radToDeg = r => Math.round(((Number(r) || 0) * 180 / Math.PI) * 100
 export function applyCameraConfig(cam, { baseAngle, sweepRange } = {}) {
     if (!cam) return;
     if (Number.isFinite(baseAngle)) cam.baseAngle = baseAngle;
-    if (Number.isFinite(sweepRange) && sweepRange > 0) cam.sweepRange = sweepRange;
+    // 0 is a fixed beam. Only non-finite and negative sweeps are ignored.
+    if (Number.isFinite(sweepRange) && sweepRange >= 0) cam.sweepRange = sweepRange;
     cam.currentAngle = cam.baseAngle;
     cam.sweepProgress = 0;
 }

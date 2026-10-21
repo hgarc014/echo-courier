@@ -114,4 +114,22 @@ test('camera angle + sweep apply live and round-trip', () => {
     assert.ok(Math.abs(t.sweepRange - Math.PI / 6) < 1e-9);
 });
 
+test('camera sweep 0 applies live, serializes, and deserializes as 0', () => {
+    const s = base(); const c = s.cameras[0];
+    assert.ok(c.sweepRange > 0);
+    applyInspectorEdits(c, { baseAngle: 0, sweepRange: 0 });
+    assert.equal(c.baseAngle, 0);
+    assert.equal(c.sweepRange, 0);
+    assert.equal(c.currentAngle, 0);
+    assert.equal(c.sweepProgress, 0);
+    const json = JSON.parse(JSON.stringify(serializeLevel(s)));
+    assert.equal(json.cameras[0].baseAngle, 0);
+    assert.equal(json.cameras[0].sweepRange, 0);
+    const again = deserializeLevel(json).cameras[0];
+    assert.equal(again.baseAngle, 0);
+    assert.equal(again.sweepRange, 0);
+    applyInspectorEdits(again, { sweepRange: -0.2 });
+    assert.equal(again.sweepRange, 0, 'negative sweep stays ignored');
+});
+
 console.log(`\n${passed} tests passed`);

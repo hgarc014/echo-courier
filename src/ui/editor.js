@@ -842,7 +842,7 @@ function updatePropertiesPanel() {
     }
     if (selectedEntity instanceof SweepCamera) {
         html += `<label>Angle°: <input type="number" id="prop-cam-angle" step="5" value="${radToDeg(selectedEntity.baseAngle)}" style="width:60px"></label> `;
-        html += `<label>Sweep°: <input type="number" id="prop-cam-sweep" step="5" min="1" value="${radToDeg(selectedEntity.sweepRange)}" style="width:60px"></label><br>`;
+        html += `<label>Sweep°: <input type="number" id="prop-cam-sweep" step="5" min="0" value="${radToDeg(selectedEntity.sweepRange)}" style="width:60px"></label><br>`;
     }
 
     html += `<button id="prop-save" class="secondary-btn" style="width:100%; margin-top:10px; border-color:#0ff; color:#0ff;">Apply</button>`;
