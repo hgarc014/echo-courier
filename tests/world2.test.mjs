@@ -83,7 +83,8 @@ for (const { level, index } of w2) {
             assert.equal(loaded.burrowers[0].maxStunsPerLoop, 1);
             assert.equal(json.meta.isBoss, true);
             assert.equal(json.meta.hintLine, level.hintLine);
-            assert.match(json.meta.hintLine, /stun it once per loop/);
+            assert.match(json.meta.hintLine, /crack touching a pressed core plate/);
+            assert.match(json.meta.hintLine, /once per loop/);
             assert.match(json.meta.hintLine, /becomes an echo/);
             assert.equal(json.meta.pitKillFraction, undefined);
         } else {
@@ -533,6 +534,56 @@ check('getUiState reports dormant, stun countdown, and player vs echo', () => {
     } finally {
         SFX.burrowerDormant = orig;
     }
+});
+
+check('a locked target counts down to a surface on that tile', () => {
+    resetWorld();
+    state.cracks = [
+        new CrackedFloor(0, 0, 40, 40, 'fast'),
+        new CrackedFloor(400, 0, 40, 40, 'fast')
+    ];
+    const player = { x: 0, y: 0, w: 30, h: 30 };
+    const echo = { x: 400, y: 0, w: 30, h: 30, isActive: true, id: 1, runData: [] };
+    const boss = fastBoss(10, 0, { surfaceInterval: 0.5, telegraphTime: 0.25 });
+    boss.update([]);
+    assert.equal(boss.phase, 'burrow');
+    assert.equal(boss.cycleTicks, 0);
+    assert.equal(boss.getUiState().targetKind, null);
+
+    boss.update([player, echo]);
+    assert.equal(boss.previewTile.x, 0);
+    assert.equal(boss.previewTile.y, 0);
+    assert.equal(boss.getUiState().targetKind, 'player');
+    let prev = boss.surfaceInTicks();
+    assert.ok(prev > 0);
+
+    // A nearer echo would steal a live re-aim. The locked tile must stay put.
+    echo.x = 10;
+    echo.y = 0;
+    player.x = 400;
+    let surfaced = false;
+    let sawTelegraph = false;
+    for (let i = 0; i < 120; i++) {
+        boss.update([player, echo]);
+        if (state.cracks[0].collapsing) {
+            surfaced = true;
+            assert.equal(state.cracks[1].collapsing, false);
+            assert.equal(state.cracks[1].ringShown, false);
+            break;
+        }
+        if (boss.phase === 'burrow' || boss.phase === 'telegraph') {
+            const tile = boss.aimedTile();
+            assert.equal(tile && tile.x, 0);
+            assert.equal(tile && tile.y, 0);
+            const left = boss.surfaceInTicks();
+            assert.ok(left <= prev, `countdown rose ${prev} -> ${left}`);
+            prev = left;
+            if (boss.phase === 'telegraph') sawTelegraph = true;
+        }
+    }
+    assert.equal(sawTelegraph, true);
+    assert.equal(surfaced, true);
+    assert.ok(prev <= 1);
 });
 
 check('hint line and a non-default pit fraction survive the editor round trip', () => {

@@ -188,7 +188,7 @@ function applyLevelConfigForm() {
         demo = parseDemoFromForm();
     } catch (err) {
         setSaveStatus(err.message || 'Demo JSON invalid', false);
-        return;
+        return false;
     }
     const loopTime = normalizeLoopTime(document.getElementById('editor-meta-looptime')?.value);
     const loopEl = document.getElementById('editor-meta-looptime');
@@ -227,6 +227,33 @@ function applyLevelConfigForm() {
         challengeRef: val('editor-meta-challenge')
     }, state.editorLevelMeta);
     setSaveStatus('Level config applied');
+    return true;
+}
+
+// Hint edits land in editorLevelMeta as they are typed. Apply Level Config is
+// not required, and save/playtest flush the field again in case input did not fire.
+export function commitEditorHintLine(raw) {
+    const meta = ensureEditorLevelMeta();
+    const hintLine = normalizeHintLine(raw);
+    if (hintLine) meta.hintLine = hintLine;
+    else delete meta.hintLine;
+    return meta.hintLine || '';
+}
+
+export function flushEditorLevelConfig() {
+    const hintEl = document.getElementById('editor-meta-hint');
+    if (hintEl && typeof hintEl.value === 'string') commitEditorHintLine(hintEl.value);
+    return applyLevelConfigForm();
+}
+
+let hintAutosaveBound = false;
+export function bindEditorHintAutosave() {
+    const hintEl = document.getElementById('editor-meta-hint');
+    if (!hintEl || hintAutosaveBound) return;
+    hintAutosaveBound = true;
+    const write = () => commitEditorHintLine(hintEl.value);
+    hintEl.addEventListener('input', write);
+    hintEl.addEventListener('change', write);
 }
 
 let crackSpeedControlBound = false;
@@ -416,6 +443,7 @@ export function syncEditorUi() {
     if (applyBtn) applyBtn.onclick = () => applyLevelConfigForm();
     ensureEditorLevelMeta();
     syncLevelConfigForm();
+    bindEditorHintAutosave();
     bindCrackSpeedControl();
     window.refreshEditorLevelConfigForm = syncLevelConfigForm;
 
@@ -477,10 +505,12 @@ export function initEditor(canvas, ctx) {
     });
 
     document.getElementById('editor-play-btn')?.addEventListener('click', () => {
+        if (flushEditorLevelConfig() === false) return;
         window.startPlaytestFromEditor();
     });
 
     document.getElementById('editor-save-btn')?.addEventListener('click', () => {
+        if (flushEditorLevelConfig() === false) return;
         const name = sanitizeSlotName(document.getElementById('editor-save-name')?.value);
         const nameEl = document.getElementById('editor-save-name');
         if (nameEl) nameEl.value = name;

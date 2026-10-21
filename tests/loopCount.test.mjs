@@ -100,15 +100,21 @@ function rewind() {
 }
 
 function hudPhrase() {
-    assert.match(markup, /class="loop-stat">Loop&nbsp;<span id="loop-count">[\s\S]*?<\/span><span id="loop-of"[\s\S]*?<\/span><\/span>&nbsp;·&nbsp;Echoes&nbsp;<span id="echo-count">[\s\S]*?<\/span>\/<span id="max-echoes">/);
+    assert.match(markup, /<span id="loop-of"[^>]*>[\s\S]*?<span id="loop-budget"><\/span><\/span>/);
+    assert.match(markup, /<span id="loop-over"[^>]*>[\s\S]*?<span id="loop-par"><\/span>\)<\/span>/);
     assert.match(markup, /id="loop-budget"/);
+    assert.match(markup, /id="loop-par"/);
     const loop = document.getElementById('loop-count').innerText;
     const echoes = document.getElementById('echo-count').innerText;
     const max = document.getElementById('max-echoes').innerText;
     const ofEl = document.getElementById('loop-of');
+    const overEl = document.getElementById('loop-over');
     const budget = document.getElementById('loop-budget').innerText;
-    const showOf = ofEl && !ofEl.classList.contains('hidden') && budget !== '';
-    return showOf ? `Loop ${loop} of ${budget} · Echoes ${echoes}/${max}` : `Loop ${loop} · Echoes ${echoes}/${max}`;
+    const par = document.getElementById('loop-par').innerText;
+    const over = overEl && !overEl.classList.contains('hidden');
+    const showOf = !over && ofEl && !ofEl.classList.contains('hidden') && budget !== '';
+    const head = over ? `Loop ${loop} · over par (${par})` : (showOf ? `Loop ${loop} of ${budget}` : `Loop ${loop}`);
+    return `${head} · Echoes ${echoes}/${max}`;
 }
 
 check('HUD shows the live loop, including after the echo buffer drops a run', () => {
@@ -132,7 +138,8 @@ check('HUD shows the live loop, including after the echo buffer drops a run', ()
     assert.equal(state.loopNumber, 4);
     assert.equal(state.pastRuns.length, 1);
     assert.equal(hud.innerText, '4');
-    assert.equal(hudPhrase(), 'Loop 4 of 2 · Echoes 1/1');
+    assert.equal(hudPhrase(), 'Loop 4 · over par (2) · Echoes 1/1');
+    assert.doesNotMatch(hudPhrase(), / of /);
     assert.equal(LEVELS[0].challenge.check(), false);
 
     main.restartLevel();
@@ -149,14 +156,17 @@ check('two rewinds on Level 1 keep going and do not read as Loop 3 / Max 2', () 
     rewind();
     assert.equal(state.loopNumber, 3);
     assert.equal(state.pastRuns.length, 1);
-    assert.equal(hudPhrase(), 'Loop 3 of 2 · Echoes 1/1');
+    assert.equal(hudPhrase(), 'Loop 3 · over par (2) · Echoes 1/1');
     assert.doesNotMatch(hudPhrase(), /Max/);
+    assert.doesNotMatch(hudPhrase(), / of /);
     assert.notEqual(hudPhrase(), 'Loop 3 / Max 2');
-    // "of 2" is the planned budget, not a cap. Another rewind is allowed and drops the oldest echo.
+    // Past the planned budget the HUD stops saying "N of B". Another rewind is still allowed.
     rewind();
     assert.equal(state.loopNumber, 4);
     assert.equal(state.pastRuns.length, LEVELS[0].maxGhosts);
-    assert.equal(hudPhrase(), 'Loop 4 of 2 · Echoes 1/1');
+    assert.equal(hudPhrase(), 'Loop 4 · over par (2) · Echoes 1/1');
+    assert.equal(document.getElementById('loop-of').classList.contains('hidden'), true);
+    assert.equal(document.getElementById('loop-over').classList.contains('hidden'), false);
 });
 
 check('editor playtest starts on loop 1', () => {

@@ -227,10 +227,10 @@ export const W2_LEVELS = [
             unlocks: ['dash'],
             flags: {
                 isBoss: true,
-                hintLine: 'Step on a core plate while it surfaces to stun it once per loop, then rewind so an echo covers the next plate. When the loop timer runs out, that run becomes an echo.',
+                hintLine: 'A surfacing on a crack touching a pressed core plate stuns it once per loop. Hold the plate — do not stand on the crack. When the loop timer runs out, that run becomes an echo.',
                 bossIntro: {
                     speaker: 'BURROWER',
-                    text: 'The floor shifts. Dust rings mark where it will surface. Stand a core plate and make it come to you.'
+                    text: 'Dust marks the crack where I surface. Hold a core plate beside that crack. I stun only when the crack touches the plate you are holding.'
                 }
             }
         }

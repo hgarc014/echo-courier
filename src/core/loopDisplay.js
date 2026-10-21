@@ -17,6 +17,17 @@ export function plannedLoopBudget(maxGhosts) {
     return Math.floor(n) + 1;
 }
 
+// HUD phrase for the live loop. "N of B" is only used while N is within the planned
+// budget. Extra rewinds still happen (the oldest echo is dropped); past that the
+// line keeps the real loop index and names the budget as par, so it never reads
+// "5 of 3".
+export function loopHudState(loopNumber, maxGhosts) {
+    const n = displayedLoopNumber(loopNumber);
+    const budget = plannedLoopBudget(maxGhosts);
+    if (budget == null) return { n, budget: null, over: false };
+    return { n, budget, over: n > budget };
+}
+
 /** True when the live loop is within a 1-based par ("finish in maxLoops loops"). */
 export function finishedWithinLoops(loopNumber, maxLoops) {
     const max = Math.floor(Number(maxLoops));

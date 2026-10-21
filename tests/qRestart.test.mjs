@@ -93,29 +93,35 @@ check('Q during the story skips the boss intro', () => {
     assert.notEqual(state.gameState, 'DIALOG');
 });
 
-check('Q during the boss intro skips it and still starts the encounter', () => {
+check('one Enter on the combined intro starts the encounter', () => {
     release();
     main.startGame(exterminator);
     assert.equal(state.gameState, 'DIALOG');
-    tap('enter');
-    assert.equal(state.gameState, 'BOSS_INTRO');
+    const text = document.getElementById('dialog-text').innerText;
+    assert.match(text, /kill authorization/i);
+    assert.match(text, /EXTERMINATOR/i);
     assert.equal(state.robots[0].isEmerging, false);
-    tap('q');
+    tap('enter');
     assert.equal(state.gameState, 'PLAYING');
+    assert.notEqual(state.gameState, 'BOSS_INTRO');
     assert.equal(state.pendingBossIntro, null);
     assert.equal(state.robots[0].isEmerging, true);
     assert.equal(document.getElementById('dialog-text').innerText, '');
     assert.equal(document.getElementById('dialog-overlay').classList.contains('hidden'), true);
 });
 
-check('Enter still walks story then boss intro into play', () => {
+check('one Enter starts Sinkhole after story and boss intro share a panel', () => {
     release();
     main.startGame(sinkhole);
-    tap('enter');
-    assert.equal(state.gameState, 'BOSS_INTRO');
+    assert.equal(state.gameState, 'DIALOG');
+    const text = document.getElementById('dialog-text').innerText;
+    assert.match(text, /subfloor/i);
+    assert.match(text, /BURROWER/i);
+    assert.match(text, /touches the plate/i);
     tap('enter');
     assert.equal(state.gameState, 'PLAYING');
     assert.equal(state.pendingBossIntro, null);
+    assert.equal(document.getElementById('dialog-overlay').classList.contains('hidden'), true);
 });
 
 check('controls list shows dash once the level unlocks it', () => {
@@ -125,7 +131,8 @@ check('controls list shows dash once the level unlocks it', () => {
     assert.match(hud, /<kbd>SHIFT<\/kbd> Dash/);
     assert.equal(document.getElementById('touch-btn-dash').classList.contains('hidden'), false);
     const hint = document.getElementById('level-hint');
-    assert.match(hint.innerText, /stun it once per loop/);
+    assert.match(hint.innerText, /crack touching a pressed core plate/);
+    assert.match(hint.innerText, /once per loop/);
     assert.match(hint.innerText, /becomes an echo/);
     assert.equal(hint.classList.contains('hidden'), false);
 });

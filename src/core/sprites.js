@@ -126,8 +126,8 @@ export function drawSprite(ctx, img, x, y, w, h, opts = {}) {
     if (!iw || !ih) return false;
 
     let dw, dh, dx, dy;
-    if (fit === 'contain') {
-        const scale = Math.min(w / iw, h / ih);
+    if (fit === 'contain' || fit === 'cover') {
+        const scale = fit === 'cover' ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
         dw = iw * scale;
         dh = ih * scale;
         dx = align === 'left' ? x : align === 'right' ? x + w - dw : x + (w - dw) / 2;

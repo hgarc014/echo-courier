@@ -17,7 +17,7 @@ import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
-import { displayedLoopNumber, finishLoopLine, plannedLoopBudget } from './core/loopDisplay.js';
+import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState } from './core/loopDisplay.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -28,7 +28,9 @@ const PROJECTED_TRAIL_SECONDS = 3;
 const RECORDED_TRAIL_FRAMES = Math.floor(RECORDED_TRAIL_SECONDS * 60);
 const PROJECTED_TRAIL_FRAMES = Math.floor(PROJECTED_TRAIL_SECONDS * 60);
 const FAIL_HOLD_FRAMES = 120;
-const FAIL_TEXT_DELAY = 28;
+// Caption on the first red frame. The loop clock freezes on death, so a late
+// caption looked like an unlabeled full-screen flash at whatever second you died.
+const FAIL_TEXT_DELAY = 0;
 const TOSS_COOLDOWN_TICKS = 24;
 
 function failKindFromReason(reason) {
@@ -321,6 +323,48 @@ function showLevelDialog(speaker, text, accentColor = '#39ff14', clipKey = null)
     speakDialog(speaker, text, clipKey);
 }
 
+// Story and boss intro share one panel so a single Enter (or tap) starts play.
+function introBeats(level, levelIndex) {
+    const beats = [];
+    if (level?.story?.text) {
+        beats.push({
+            speaker: level.story.speaker || 'Briefing',
+            text: level.story.text,
+            color: '#39ff14',
+            clipKey: level.voiceKey || (levelIndex != null ? `level-${levelIndex}-story` : null)
+        });
+    }
+    if (level?.bossIntro?.text) {
+        beats.push({
+            speaker: level.bossIntro.speaker || 'Boss',
+            text: level.bossIntro.text,
+            color: '#ff5555',
+            clipKey: level.bossVoiceKey || (levelIndex != null ? `level-${levelIndex}-boss-intro` : null)
+        });
+    }
+    return beats;
+}
+
+function showIntroDialog(level, levelIndex) {
+    const beats = introBeats(level, levelIndex);
+    if (!beats.length) return false;
+    const speaker = beats.length === 1 ? beats[0].speaker : beats.map(b => b.speaker).join(' · ');
+    const text = beats.length === 1 ? beats[0].text : beats.map(b => `${b.speaker}: ${b.text}`).join('\n\n');
+    showLevelDialog(speaker, text, beats[0].color, beats[0].clipKey);
+    state.pendingBossIntro = null;
+    state.gameState = 'DIALOG';
+    return true;
+}
+
+function confirmLevelIntro() {
+    const lv = state.currentLevelMeta;
+    hideLevelDialog();
+    state.pendingBossIntro = null;
+    if (lv?.isBoss) beginBossEncounter(lv);
+    state.gameState = 'PLAYING';
+    maybeStartDemo();
+}
+
 function hideLevelDialog() {
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
     let ds = document.getElementById('dialog-speaker'); if (ds) ds.innerText = '';
@@ -337,18 +381,22 @@ function echoBudgetLabel(maxGhosts) {
 }
 
 function syncLoopCountUI() {
+    const maxGhosts = state.currentLevelMeta?.maxGhosts;
+    const hud = loopHudState(state.loopNumber, maxGhosts);
     const el = document.getElementById('loop-count');
-    if (el) el.innerText = String(displayedLoopNumber(state.loopNumber));
+    if (el) el.innerText = String(hud.n);
     const usedEl = document.getElementById('echo-count');
     if (usedEl) usedEl.innerText = String((state.pastRuns || []).length);
-    const maxGhosts = state.currentLevelMeta?.maxGhosts;
     const maxEl = document.getElementById('max-echoes');
     if (maxEl) maxEl.innerText = echoBudgetLabel(maxGhosts);
-    const budget = plannedLoopBudget(maxGhosts);
     const budgetEl = document.getElementById('loop-budget');
-    if (budgetEl) budgetEl.innerText = budget == null ? '' : String(budget);
+    if (budgetEl) budgetEl.innerText = hud.budget == null ? '' : String(hud.budget);
     const ofEl = document.getElementById('loop-of');
-    if (ofEl) ofEl.classList.toggle('hidden', budget == null);
+    if (ofEl) ofEl.classList.toggle('hidden', hud.budget == null || hud.over);
+    const overEl = document.getElementById('loop-over');
+    if (overEl) overEl.classList.toggle('hidden', !hud.over);
+    const parEl = document.getElementById('loop-par');
+    if (parEl) parEl.innerText = hud.over ? String(hud.budget) : '';
 }
 
 function applyLevelHint(level) {
@@ -869,7 +917,7 @@ export function startGame(levelIndex) {
     hintDemoJustClosed = false;
     state.currentLevelIndex = levelIndex;
     state.currentLevelMeta = LEVELS[levelIndex];
-    state.pendingBossIntro = state.currentLevelMeta?.bossIntro || null;
+    state.pendingBossIntro = null;
     startMusic();
     let lv = LEVELS[levelIndex];
     applyLevelAbilityOverrides(lv);
@@ -898,14 +946,10 @@ export function startGame(levelIndex) {
     syncTouchUi();
     
     beginRecording({ level: levelIndex, levelName: lv.name });
-    if (lv.story) {
-        state.gameState = 'DIALOG';
-        showLevelDialog(lv.story.speaker, lv.story.text, '#39ff14', lv.voiceKey || `level-${levelIndex}-story`);
-    } else {
+    if (!showIntroDialog(lv, levelIndex)) {
         state.gameState = 'PLAYING';
         hideLevelDialog();
-        if (state.pendingBossIntro) startBossIntro(lv);
-        else maybeStartDemo();
+        maybeStartDemo();
     }
 }
 
@@ -1080,7 +1124,7 @@ export function startPlaytestFromEditor() {
     state.worldUnlockedAbilities = getPlaytestWorldUnlocks(state.currentLevelMeta);
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
-    state.pendingBossIntro = state.currentLevelMeta.bossIntro || null;
+    state.pendingBossIntro = null;
     document.getElementById('level-display').innerText = getLevelDisplayLabel(0, state.currentLevelMeta);
     document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
     applyLevelHint(state.currentLevelMeta);
@@ -1098,10 +1142,7 @@ export function startPlaytestFromEditor() {
     uiLevelComplete.classList.add('hidden');
     uiGameOver.classList.add('hidden');
     syncLoopCountUI();
-    if (state.currentLevelMeta?.story?.text) {
-        showLevelDialog(state.currentLevelMeta.story.speaker || 'Briefing', state.currentLevelMeta.story.text);
-        state.gameState = 'DIALOG';
-    } else {
+    if (!showIntroDialog(state.currentLevelMeta, null)) {
         hideLevelDialog();
         state.gameState = 'PLAYING';
         startMusic();
@@ -1133,12 +1174,7 @@ function update() {
         // SPACE is reserved for GRAB; dialog advances on Enter / overlay tap / CONTINUE.
         if (isKeyJustPressed('enter')) {
             startMusic();
-            hideLevelDialog();
-            if (state.pendingBossIntro) startBossIntro(state.currentLevelMeta);
-            else {
-                state.gameState = 'PLAYING';
-                maybeStartDemo();
-            }
+            confirmLevelIntro();
             updatePrevKeys();
             consumeDialogConfirmKeys();
             return;

@@ -132,6 +132,7 @@ export class Burrower extends Entity {
         this.phase = 'burrow'; // burrow | telegraph | stun | dormant | defeated
         this.phaseTicks = 0;
         this.cycleTicks = 0;
+        this.cycleLocked = false;
         this.lockedTile = null;
         this.teleOriginX = x;
         this.teleOriginY = y;
@@ -308,15 +309,22 @@ export class Burrower extends Entity {
         if (crack && typeof crack.showWarningRing === 'function') crack.showWarningRing();
     }
 
-    beginTelegraph(actor) {
+    // The tile (and actor) chosen when the countdown starts. Later movement does not re-aim.
+    lockCycle(actor) {
         this.noteAim(actor);
+        this.lockedTile = this.previewTile;
+        this.cycleLocked = true;
+        this.cycleTicks = 0;
+    }
+
+    beginTelegraph() {
         this.phase = 'telegraph';
         this.phaseTicks = 0;
-        this.lockedTile = this.nearestCrack(actor);
         this.previewTile = this.lockedTile;
         this.teleOriginX = this.x;
         this.teleOriginY = this.y;
         this.stunFlash = 0;
+        this.cycleLocked = false;
         this.markLockedWarning();
     }
 
@@ -357,6 +365,7 @@ export class Burrower extends Entity {
         this.phase = 'burrow';
         this.phaseTicks = 0;
         this.cycleTicks = 0;
+        this.cycleLocked = false;
         this.lockedTile = null;
         this.goHome();
     }
@@ -366,6 +375,8 @@ export class Burrower extends Entity {
     recoverFromStun() {
         this.stunsThisLoop += 1;
         this.phaseTicks = 0;
+        this.cycleTicks = 0;
+        this.cycleLocked = false;
         this.lockedTile = null;
         this.goHome();
         const cap = this.maxStunsPerLoop;
@@ -402,12 +413,25 @@ export class Burrower extends Entity {
             if (this.phaseTicks >= this.telegraphTicks()) this.strike(actors);
             return;
         }
-        const target = this.pickTarget(actors);
-        this.noteAim(target);
+        // Lock the next strike once, when a target exists. Re-picking every tick
+        // moved the marker (and never let the watched tile reach 0).
+        if (!this.cycleLocked) {
+            const target = this.pickTarget(actors);
+            if (!target) {
+                this.clearAim();
+                this.lockedTile = null;
+                this.cycleTicks = 0;
+                return;
+            }
+            this.lockCycle(target);
+        } else {
+            this.refreshAimPosition(actors);
+            this.previewTile = this.lockedTile;
+        }
         this.cycleTicks++;
         if (this.cycleTicks >= this.intervalTicks()) {
             this.cycleTicks = 0;
-            if (target) this.beginTelegraph(target);
+            this.beginTelegraph();
         }
     }
 
@@ -461,7 +485,9 @@ export class Burrower extends Entity {
         ctx.lineTo(this.aimX, this.aimY + 8);
         ctx.stroke();
         ctx.restore();
-        paintLabel(ctx, label, this.aimX, this.aimY - 26, { color, h: 15 });
+        // The echo end-badge sits above the actor (filled disc, r=11). Keep the
+        // words to the side of that disc so "ECHO 1" is not drawn underneath it.
+        paintLabel(ctx, label, this.aimX + 54, this.aimY - 6, { color, h: 15 });
     }
 
     drawSurfaceMark(ctx) {
