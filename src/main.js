@@ -401,7 +401,8 @@ function startBossIntro(level) {
     if (!level?.bossIntro) return;
     state.pendingBossIntro = null;
     state.gameState = 'BOSS_INTRO';
-    showLevelDialog(level.bossIntro.speaker, level.bossIntro.text, '#ff5555', `level-${state.currentLevelIndex}-boss-intro`);
+    const bossKey = level.bossVoiceKey || `level-${state.currentLevelIndex}-boss-intro`;
+    showLevelDialog(level.bossIntro.speaker, level.bossIntro.text, '#ff5555', bossKey);
 }
 
 function beginBossEncounter(level) {
@@ -883,7 +884,7 @@ export function startGame(levelIndex) {
     beginRecording({ level: levelIndex, levelName: lv.name });
     if (lv.story) {
         state.gameState = 'DIALOG';
-        showLevelDialog(lv.story.speaker, lv.story.text, '#39ff14', `level-${levelIndex}-story`);
+        showLevelDialog(lv.story.speaker, lv.story.text, '#39ff14', lv.voiceKey || `level-${levelIndex}-story`);
     } else {
         state.gameState = 'PLAYING';
         hideLevelDialog();

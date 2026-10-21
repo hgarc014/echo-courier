@@ -662,8 +662,9 @@ export function playMenuMusic() {
 export function startMusic() {
     let nextTrack;
     if (state.currentLevelMeta?.isBoss) nextTrack = trackBoss;
-    else if (state.currentLevelIndex <= 5) nextTrack = track1;  // Levels 1 through 6
-    else nextTrack = track2;                                    // Levels 7 through 12
+    // Track 1: Dispatch (0–4) and the shifted levels that used track 1 before W1 (now 5–8).
+    else if (state.currentLevelIndex <= 8) nextTrack = track1;
+    else nextTrack = track2;
 
     if (currentTrack === nextTrack && !currentTrack.paused) return; // Already playing correctly
     
