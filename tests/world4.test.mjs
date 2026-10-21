@@ -247,6 +247,35 @@ check('a shielded echo opens a gap in a grid laser; diagonal facing does not', (
     assert.equal(shieldSlab({ x: 94, y: 120, w: 30, h: 30, facingX: 1, facingY: -1 }), null);
 });
 
+function rgbaOf(color) {
+    const m = String(color).match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)/);
+    if (!m) return null;
+    return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: Number(m[4]) };
+}
+
+check('live prism beam reads stronger than the amber telegraph', () => {
+    resetWorld();
+    state.currentTick = 0;
+    const prism = new Prism(10, 10, {});
+    const fills = [];
+    const ctx = {
+        save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, arc() {},
+        closePath() {}, fill() {}, stroke() {}, fillRect() {}, strokeRect() {},
+        set fillStyle(v) { fills.push(String(v)); },
+        set strokeStyle(_v) {},
+        set lineWidth(_v) {},
+        set lineCap(_v) {}
+    };
+    prism.render(ctx);
+    const parsed = fills.map(rgbaOf).filter(Boolean);
+    const amber = parsed.find(c => c.r > 200 && c.g > 140 && c.b < 40);
+    const live = parsed.find(c => c.r > 200 && c.g < 80 && c.b < 80);
+    assert.ok(amber, `amber telegraph fill missing in ${fills.join(' | ')}`);
+    assert.ok(live, `live red beam fill missing in ${fills.join(' | ')}`);
+    assert.ok(Math.abs(amber.a - 0.62) < 1e-9, `telegraph alpha ${amber.a}`);
+    assert.ok(live.a > amber.a + 0.2, `live beam alpha ${live.a} is not clearly above telegraph ${amber.a}`);
+});
+
 check('prism render does not throw on a stub context', () => {
     resetWorld();
     const prism = new Prism(10, 10, {});
@@ -292,16 +321,17 @@ check('telegraph and beam stop at the first wall', () => {
 });
 
 check('level tooltips use challenge.desc without a second Par prefix', () => {
-    assert.equal(formatParTooltip('Finish in 2 loops or fewer'), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Finish in 2 loops or fewer', 2), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Finish in 2 loops or fewer'), 'Challenge: Finish in 2 loops or fewer');
     assert.equal(formatParTooltip('Par: Finish in 2 loops or fewer'), 'Par: Finish in 2 loops or fewer');
     assert.equal(formatParTooltip('Par: par already'), 'Par: par already');
     for (const lvl of LEVELS) {
         if (!lvl.challenge?.desc) continue;
-        const title = formatParTooltip(lvl.challenge.desc);
+        const title = formatParTooltip(lvl.challenge.desc, lvl.par);
         assert.equal(/^par:\s*par\b/i.test(title), false, `${lvl.name} tooltip doubled: ${title}`);
     }
     for (const { level } of w4) {
-        const title = formatParTooltip(level.challenge.desc);
+        const title = formatParTooltip(level.challenge.desc, level.par);
         assert.match(title, /^Par: Finish in \d+ loops? or fewer$/);
         assert.equal(title.includes(level.challenge.desc), true);
     }
