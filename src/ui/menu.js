@@ -1,4 +1,4 @@
-import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi, isUnlockAll, isLevelUnlocked } from '../core/state.js';
+import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi, isUnlockAll, isLevelUnlocked, purchaseAbility } from '../core/state.js';
 import { LEVELS, WORLDS, getShopUnlockedAbilities, formatParTooltip } from '../data/levels.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
@@ -217,7 +217,7 @@ export function refreshShopButtons() {
             btn.style.opacity = '1';
             btn.disabled = false;
         }
-        btn.onclick = () => { if (getCredits() >= price) { state.abilitiesPurchased[abilityId] = true; saveState(); initMenu(); } };
+        btn.onclick = () => { if (getCredits() >= price && purchaseAbility(abilityId)) initMenu(); };
     };
     configureShopButton(document.getElementById('shop-dash'), 'dash', 'DASH', 150);
     configureShopButton(document.getElementById('shop-toss'), 'toss', 'TOSS', 150);

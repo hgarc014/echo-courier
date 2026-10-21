@@ -135,4 +135,93 @@ for (const key of mod.PROGRESS_KEYS) {
     assert.equal(localStorage.getItem(key), null, `progress key touched: ${key}`);
 }
 
-console.log('ok - settings progress wipe and unlock-all');
+// QA: fresh save, clear L1, Unlock All, clear L5 + buy dash, Unlock All off.
+// Persisted progress and derived menu state must match the pre-toggle snapshot.
+mod.wipeProgress();
+mod.setUnlockAll(false);
+assert.equal(mod.isDevMode(), false);
+assert.equal(mod.state.maxUnlockedLevel, 0);
+
+mod.recordLevelClear(0, { challengePassed: true });
+const snap = {
+    maxUnlockedLevel: mod.state.maxUnlockedLevel,
+    challengesCompleted: { ...mod.state.challengesCompleted },
+    abilitiesPurchased: { ...mod.state.abilitiesPurchased },
+    tutorialProgress: { ...mod.state.tutorialProgress },
+    maxLevel: localStorage.getItem('echoCourier_maxLevel'),
+    challenges: localStorage.getItem('echoCourier_challenges'),
+    abilities: localStorage.getItem('echoCourier_abilities'),
+    tutorials: localStorage.getItem('echoCourier_tutorials'),
+    credits: mod.getCredits(),
+    unlockedAbilities: mod.getUnlockedAbilities(),
+    rank: mod.getPlayerRank(),
+    levelUnlocked: [0, 1, 4, 5].map(idx => mod.isLevelUnlocked(idx))
+};
+assert.equal(snap.maxUnlockedLevel, 1);
+assert.deepEqual(snap.challengesCompleted, { 0: true });
+assert.equal(snap.maxLevel, '1');
+assert.equal(snap.credits, 100);
+assert.deepEqual(snap.unlockedAbilities, []);
+assert.equal(snap.rank, 0);
+assert.deepEqual(snap.levelUnlocked, [true, true, false, false]);
+
+mod.setUnlockAll(true);
+assert.equal(mod.isDevMode(), true);
+mod.recordLevelClear(4, { challengePassed: true });
+assert.equal(mod.purchaseAbility('dash'), false);
+mod.markTutorialProgress(2);
+mod.markDemoSeen('echoCourier_demoSeen_9');
+mod.saveState();
+assert.equal(mod.state.maxUnlockedLevel, snap.maxUnlockedLevel);
+assert.deepEqual(mod.state.challengesCompleted, snap.challengesCompleted);
+assert.deepEqual(mod.state.abilitiesPurchased, snap.abilitiesPurchased);
+assert.deepEqual(mod.state.tutorialProgress, snap.tutorialProgress);
+assert.equal(localStorage.getItem('echoCourier_maxLevel'), snap.maxLevel);
+assert.equal(localStorage.getItem('echoCourier_challenges'), snap.challenges);
+assert.equal(localStorage.getItem('echoCourier_abilities'), snap.abilities);
+assert.equal(localStorage.getItem('echoCourier_tutorials'), snap.tutorials);
+assert.equal(localStorage.getItem('echoCourier_demoSeen_9'), null);
+assert.equal(mod.getCredits(), snap.credits);
+// A dirty in-memory field still must not be flushed while dev mode is on.
+mod.state.maxUnlockedLevel = snap.maxUnlockedLevel + 10;
+mod.saveState();
+assert.equal(localStorage.getItem('echoCourier_maxLevel'), snap.maxLevel);
+
+mod.setUnlockAll(false);
+assert.equal(mod.isDevMode(), false);
+assert.equal(localStorage.getItem('echoCourier_maxLevel'), snap.maxLevel);
+assert.equal(localStorage.getItem('echoCourier_challenges'), snap.challenges);
+assert.equal(localStorage.getItem('echoCourier_abilities'), snap.abilities);
+assert.equal(localStorage.getItem('echoCourier_tutorials'), snap.tutorials);
+assert.equal(mod.state.maxUnlockedLevel, snap.maxUnlockedLevel);
+assert.deepEqual(mod.state.challengesCompleted, snap.challengesCompleted);
+assert.deepEqual(mod.state.abilitiesPurchased, snap.abilitiesPurchased);
+assert.deepEqual(mod.state.tutorialProgress, snap.tutorialProgress);
+assert.equal(mod.getCredits(), snap.credits);
+assert.deepEqual(mod.getUnlockedAbilities(), snap.unlockedAbilities);
+assert.equal(mod.isLevelUnlocked(4), false);
+assert.deepEqual([0, 1, 4, 5].map(idx => mod.isLevelUnlocked(idx)), snap.levelUnlocked);
+assert.equal(mod.getPlayerRank(), snap.rank);
+assert.equal(localStorage.getItem('echoCourier_audio'), audioValue);
+assert.equal(localStorage.getItem('echoCourier_suit'), suitValue);
+assert.equal(localStorage.getItem(editorKey), editorValue);
+
+mod.recordLevelClear(4, { challengePassed: true });
+assert.equal(mod.purchaseAbility('dash'), true);
+assert.equal(mod.state.maxUnlockedLevel, 5);
+assert.deepEqual(mod.state.challengesCompleted, { 0: true, 4: true });
+assert.deepEqual(mod.state.abilitiesPurchased, { dash: true });
+assert.equal(localStorage.getItem('echoCourier_maxLevel'), '5');
+assert.deepEqual(JSON.parse(localStorage.getItem('echoCourier_challenges')), { 0: true, 4: true });
+assert.deepEqual(JSON.parse(localStorage.getItem('echoCourier_abilities')), { dash: true });
+assert.equal(mod.getCredits(), 200);
+assert.deepEqual(mod.getUnlockedAbilities(), ['dash']);
+assert.equal(mod.isLevelUnlocked(4), true);
+assert.equal(mod.getPlayerRank(), 1);
+mod.markTutorialProgress(2);
+mod.markDemoSeen('echoCourier_demoSeen_9');
+assert.equal(mod.state.tutorialProgress[2], true);
+assert.equal(JSON.parse(localStorage.getItem('echoCourier_tutorials'))['2'], true);
+assert.equal(localStorage.getItem('echoCourier_demoSeen_9'), '1');
+
+console.log('ok - settings progress wipe, unlock-all, and dev-mode progress guard');

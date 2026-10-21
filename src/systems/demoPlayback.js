@@ -1,4 +1,4 @@
-import { state } from '../core/state.js';
+import { state, markDemoSeen as persistDemoSeen } from '../core/state.js';
 import { stick, tapKey, consumeKey, setGameplayInputLocked, clearStick } from '../core/input.js';
 import { AABB } from '../core/physics.js';
 
@@ -61,9 +61,7 @@ export function hasSeenDemo(key) {
 }
 
 export function markDemoSeen(key) {
-    if (!key) return;
-    try { localStorage.setItem(key, '1'); }
-    catch { /* ignore quota / private mode */ }
+    persistDemoSeen(key);
 }
 
 export function initDemoPlayback() {
