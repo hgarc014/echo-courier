@@ -89,7 +89,7 @@ function setupDevSandbox() {
     winds = [new WindTunnel(450, 740, 80, 400, 0, 5)];
     statics = [new StaticZone(620, 760, 140, 200)];
     cracks = [];
-    for (let i = 0; i < 6; i++) cracks.push(new CrackedFloor(80 + i * 40, 940, 40, 80));
+    for (let i = 0; i < 6; i++) cracks.push(new CrackedFloor(80 + i * 40, 940, 40, 80, 'fast'));
     robots = [new ShooterRobot([{ x: 1320, y: 1040 }, { x: 1480, y: 1040 }])];
     robots[0].engaged = true;
     robots[0].fireCooldown = 90;
@@ -553,7 +553,7 @@ export const LEVELS = [
     { name: "Level 11: Time Dilation", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; } },
 
     { name: "Level 12: Danger Courier", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => state.pastRuns.length === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; } },
-    { name: "Dev Sandbox", isSandbox: true, mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox }
+    { name: "Dev Sandbox", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox }
 ];
 
 for (const world of WORLDS) {
@@ -601,6 +601,20 @@ function withMapSize(entities, size) {
     return { ...entities, mapWidth: size.mapWidth, mapHeight: size.mapHeight };
 }
 
+function specifiedCrackSpeed(data) {
+    if (!data || typeof data !== 'object') return null;
+    const metaHas = !!(data.meta && Object.prototype.hasOwnProperty.call(data.meta, 'crackSpeed'));
+    const topHas = Object.prototype.hasOwnProperty.call(data, 'crackSpeed');
+    if (!metaHas && !topHas) return null;
+    const raw = metaHas ? data.meta.crackSpeed : data.crackSpeed;
+    return raw === 'fast' ? 'fast' : 'normal';
+}
+
+function crackSpeedFromMeta(meta, fallback) {
+    const raw = meta && Object.prototype.hasOwnProperty.call(meta, 'crackSpeed') ? meta.crackSpeed : fallback;
+    return raw === 'fast' ? 'fast' : 'normal';
+}
+
 export function serializeLevel(src = state) {
     const size = layoutMapSize(src, src);
     const m = src.meta || src.editorLevelMeta || (typeof state !== 'undefined' ? state.editorLevelMeta : null);
@@ -642,7 +656,8 @@ export function serializeLevel(src = state) {
         winds: (src.winds || []).map(w => ({ x: w.x, y: w.y, w: w.w, h: w.h, vx: w.vx, vy: w.vy })),
         statics: (src.statics || []).map(s => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
         cracks: (src.cracks || []).map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
-        robots: (src.robots || []).map(r => ({ path: r.path || [{ x: r.x, y: r.y }] }))
+        robots: (src.robots || []).map(r => ({ path: r.path || [{ x: r.x, y: r.y }] })),
+        crackSpeed: crackSpeedFromMeta(m, src.crackSpeed)
     };
     if (demo) payload.demo = demo;
     const demosSrc = src.demos || m?.demos;
@@ -660,7 +675,8 @@ export function serializeLevel(src = state) {
             story: { speaker: m.story?.speaker || '', text: m.story?.text || '' },
             obj: m.obj || '',
             grants: [...(m.grants || [])],
-            maxGhosts: m.maxGhosts ?? 3
+            maxGhosts: m.maxGhosts ?? 3,
+            crackSpeed: payload.crackSpeed
         };
         const loopTime = normalizeLoopTime(m.loopTime);
         if (loopTime != null) payload.meta.loopTime = loopTime;
@@ -704,7 +720,8 @@ export function deserializeLevel(data) {
     });
     winds = (data.winds||[]).map(w => new WindTunnel(w.x, w.y, w.w, w.h, w.vx, w.vy));
     statics = (data.statics||[]).map(s => new StaticZone(s.x, s.y, s.w, s.h));
-    cracks = (data.cracks||[]).map(c => new CrackedFloor(c.x, c.y, c.w, c.h));
+    const crackSpeed = specifiedCrackSpeed(data);
+    cracks = (data.cracks||[]).map(c => new CrackedFloor(c.x, c.y, c.w, c.h, crackSpeed || undefined));
     robots = (data.robots||[]).map(r => {
         const path = r.path || [{ x: r.x, y: r.y }];
         return new ShooterRobot(path.length ? path : [{ x: 50, y: 50 }]);
@@ -712,28 +729,33 @@ export function deserializeLevel(data) {
     projectiles = [];
 
     const demo = cloneDemo(data.demo || data.meta?.demo);
-    if (data.meta && typeof state !== 'undefined') {
-        const loopTime = normalizeLoopTime(data.meta.loopTime);
-        state.editorLevelMeta = {
-            name: data.meta.name || 'Editor Level',
-            story: { speaker: data.meta.story?.speaker || '', text: data.meta.story?.text || '' },
-            obj: data.meta.obj || '',
-            grants: [...(data.meta.grants || [])],
-            maxGhosts: data.meta.maxGhosts ?? 3,
-            demo
-        };
-        if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
-    } else if (demo && typeof state !== 'undefined') {
-        if (!state.editorLevelMeta) {
+    if (typeof state !== 'undefined') {
+        if (data.meta) {
             state.editorLevelMeta = {
-                name: 'Editor Level',
-                story: { speaker: '', text: '' },
-                obj: '',
-                grants: [],
-                maxGhosts: 3
+                name: data.meta.name || 'Editor Level',
+                story: { speaker: data.meta.story?.speaker || '', text: data.meta.story?.text || '' },
+                obj: data.meta.obj || '',
+                grants: [...(data.meta.grants || [])],
+                maxGhosts: data.meta.maxGhosts ?? 3,
+                crackSpeed: crackSpeed || 'normal',
+                demo
             };
+            const loopTime = normalizeLoopTime(data.meta.loopTime);
+            if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+        } else if (demo || crackSpeed) {
+            if (!state.editorLevelMeta) {
+                state.editorLevelMeta = {
+                    name: 'Editor Level',
+                    story: { speaker: '', text: '' },
+                    obj: '',
+                    grants: [],
+                    maxGhosts: 3,
+                    crackSpeed: 'normal'
+                };
+            }
+            if (demo) state.editorLevelMeta.demo = demo;
+            if (crackSpeed) state.editorLevelMeta.crackSpeed = crackSpeed;
         }
-        state.editorLevelMeta.demo = demo;
     }
     
     return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, projectiles }, size);
@@ -747,13 +769,18 @@ export function getLevelSetup(index) {
     if (level.setup) {
         level.setup();
         hints = [];
+        if (level.crackSpeed === 'fast' || level.crackSpeed === 'normal') {
+            for (const c of cracks) if (c && typeof c.setCrackSpeed === 'function') c.setCrackSpeed(level.crackSpeed);
+        }
         return withMapSize({
             player, deliveryZone, walls, doors, plates, hints, packages,
             lasers, guards, cameras, drones, winds, statics, cracks,
             robots, projectiles
         }, size);
     } else if (level.layout) {
-        const data = deserializeLevel({ ...level.layout, ...size, demos: level.demos, demo: level.demo });
+        const payload = { ...level.layout, ...size, demos: level.demos, demo: level.demo };
+        if (level.crackSpeed === 'fast' || level.crackSpeed === 'normal') payload.crackSpeed = level.crackSpeed;
+        const data = deserializeLevel(payload);
         if (level.demos && typeof state !== 'undefined') {
             state.levelDemos = Object.fromEntries(Object.entries(level.demos).map(([k,v]) => [k, cloneDemo(v)]).filter(([,v]) => v));
         }

@@ -5,6 +5,8 @@ import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, normalizeLoopTime } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
+import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
+import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
@@ -195,6 +197,7 @@ function beginRewindJuice() {
 function clearLoopFx() {
     state.failFx = null;
     state.rewindFx = null;
+    state.ghostFellFx = [];
     state.shakeTimer = 0;
     state.shakeMax = 0;
     state.shakeMag = 0;
@@ -205,6 +208,7 @@ function tickLoopFx() {
     if (state.shakeTimer > 0) state.shakeTimer--;
     if (state.failFx) state.failFx = tickBurst(state.failFx);
     if (state.rewindFx) state.rewindFx = tickBurst(state.rewindFx);
+    tickEchoFellFx();
 }
 
 let uiTitleScreen = document.getElementById('title-screen');
@@ -873,11 +877,28 @@ function loopTimeExpired() {
     return state.currentTick >= cap || state.currentRun.length >= cap;
 }
 
+function warnEchoesEndingOnCracks() {
+    const meta = state.currentLevelMeta;
+    const devPlay = !!(state.playtesting || meta?.isPlaytest || meta?.isSandbox);
+    if (!devPlay) return;
+    const w = state.player?.w || 30;
+    const h = state.player?.h || 30;
+    const echoEndPositions = (state.pastRuns || []).map((run, id) => {
+        const step = run && run.length ? run[run.length - 1] : {};
+        return { id, x: step.x, y: step.y, w, h };
+    });
+    const offenders = findEchoesEndingOnCracks({
+        cracks: (state.cracks || []).map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h }))
+    }, echoEndPositions);
+    if (offenders.length) console.warn('[echo-validation] echo ends on a cracked floor', offenders);
+}
+
 export function resetRun() {
-    if (state.currentTick > 0) {
+    const recorded = state.currentTick > 0;
+    if (recorded) {
         const cap = loopRecordCap();
-        const recorded = (cap != null && state.currentRun.length > cap) ? state.currentRun.slice(0, cap) : state.currentRun;
-        state.pastRuns.push([...recorded]);
+        const run = (cap != null && state.currentRun.length > cap) ? state.currentRun.slice(0, cap) : state.currentRun;
+        state.pastRuns.push([...run]);
     }
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
@@ -887,6 +908,7 @@ export function resetRun() {
     applyLoadedLevel(loadCurrentEntities());
     if (state.currentLevelMeta?.isBoss) engageBossEncounter(state.currentLevelMeta);
     state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
+    if (recorded) warnEchoesEndingOnCracks();
     document.getElementById('loop-count').innerText = state.pastRuns.length;
     updateDeliveryProgressUI();
     beginRewindJuice();
@@ -969,6 +991,7 @@ export function startPlaytestFromEditor() {
         challenge: { desc: 'Playtest', check: () => false },
         maxGhosts: em.maxGhosts ?? 3,
         grants: Array.isArray(em.grants) && em.grants.length ? [...em.grants] : ['dash', 'toss', 'cloak', 'ghostShield'],
+        crackSpeed: em.crackSpeed === 'fast' ? 'fast' : 'normal',
         isPlaytest: true,
         demo: cloneDemo(em.demo)
     };
@@ -1190,6 +1213,7 @@ function update() {
 
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
     for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
+    for (const g of state.activeGhosts) if (g.isActive) g._crackFell = false;
     
     let envVx = 0, envVy = 0;
     for(let w of state.winds) if (AABB(state.player.x, state.player.y, state.player.w, state.player.h, w.x, w.y, w.w, w.h)) { envVx += w.vx; envVy += w.vy; }
@@ -1631,6 +1655,7 @@ function draw() {
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     if (state.failFx) drawBurst(ctx, state.failFx);
     if (state.rewindFx) drawBurst(ctx, state.rewindFx);
+    renderEchoFellFx(ctx);
     if (state.gameState === 'EDITOR') drawEditorOverlay(ctx);
 
     ctx.restore();
@@ -1753,7 +1778,8 @@ window.onload = () => {
                     story: { speaker: '', text: '' },
                     obj: '',
                     grants: [],
-                    maxGhosts: 3
+                    maxGhosts: 3,
+                    crackSpeed: 'normal'
                 };
             }
         }
