@@ -1398,19 +1398,45 @@ function drawEchoEndMarkers(target) {
             target.fillRect(end.x, end.y, w, h);
             target.restore();
         }
+    }
+}
+
+function drawEchoEndMarkerBadges(target) {
+    if (state.gameState === 'EDITOR') return;
+    const ghosts = state.activeGhosts;
+    if (!ghosts || !ghosts.length) return;
+    const placed = [];
+    for (const ghost of ghosts) {
+        const run = ghost.runData;
+        if (!run || !run.length) continue;
+        const end = run[run.length - 1];
+        if (!end || !Number.isFinite(end.x) || !Number.isFinite(end.y)) continue;
+        const w = ghost.w || state.player?.w || 30;
+        const h = ghost.h || state.player?.h || 30;
         const label = String((ghost.id ?? 0) + 1);
-        const tx = end.x + w / 2;
-        const ty = end.y + h / 2;
+        const cx = end.x + w / 2;
+        let cy = end.y - 14;
+        while (placed.some((badge) => Math.abs(badge.x - cx) < 26 && Math.abs(badge.y - cy) < 26)) {
+            cy -= 24;
+        }
+        placed.push({ x: cx, y: cy });
         target.save();
         target.globalAlpha = 1;
-        target.font = 'bold 16px "Space Grotesk", sans-serif';
+        target.beginPath();
+        target.arc(cx, cy, 11, 0, Math.PI * 2);
+        target.fillStyle = state.playerColor || '#ff7b00';
+        target.fill();
+        target.lineWidth = 3;
+        target.strokeStyle = '#041018';
+        target.stroke();
+        target.font = 'bold 15px "Space Grotesk", sans-serif';
         target.textAlign = 'center';
         target.textBaseline = 'middle';
         target.lineWidth = 3;
         target.strokeStyle = '#041018';
         target.fillStyle = '#ffffff';
-        target.strokeText(label, tx, ty);
-        target.fillText(label, tx, ty);
+        target.strokeText(label, cx, cy);
+        target.fillText(label, cx, cy);
         target.restore();
     }
 }
@@ -1506,6 +1532,7 @@ function draw() {
     }
     
     state.player.render(ctx);
+    drawEchoEndMarkerBadges(ctx);
     
     state.dashTrails.forEach(t => {
         ctx.save(); ctx.globalAlpha = t.life; ctx.strokeStyle = state.playerColor; ctx.lineWidth = state.player.w * 0.8;
