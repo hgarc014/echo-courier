@@ -8,7 +8,7 @@ import { installDomStubs } from './harness/domStub.mjs';
 installDomStubs();
 const { main, state } = await import('./harness/replay.mjs');
 const { LEVELS, WORLDS } = await import('../src/data/levels.js');
-const { getUnlockedAbilities } = await import('../src/core/state.js');
+const { getUnlockedAbilities, setUnlockAll } = await import('../src/core/state.js');
 
 const elements = new Map();
 function makeEl(id) {
@@ -236,6 +236,44 @@ check('playtest uses world and name, not the LEVELS object', () => {
     };
     main.startPlaytestFromEditor();
     assert.equal(getUnlockedAbilities().includes('dash'), true, 'later world playtest');
+    assert.equal(controlsShowDash().touchHidden, false);
+});
+
+// #51: Unlock All is dev mode (every ability), not a level-select flag. It bypasses Heavy Going.
+check('Unlock All grants dash before Heavy Going, and turning it off restores the rule', () => {
+    freshShop();
+    const early = [
+        LEVELS.findIndex(l => l.name === 'First Shift'),
+        LEVELS.findIndex(l => String(l.name).includes('Thin Ice')),
+        LEVELS.findIndex(l => String(l.name).includes('Footprints'))
+    ];
+    const heavy = LEVELS.findIndex(l => String(l.name).includes('Heavy Going'));
+    try {
+        setUnlockAll(true);
+        for (const i of early) {
+            main.startGame(i);
+            const got = getUnlockedAbilities();
+            assert.equal(got.includes('dash'), true, LEVELS[i].name);
+            assert.equal(got.includes('toss'), true, LEVELS[i].name);
+            assert.equal(got.includes('cloak'), true, LEVELS[i].name);
+            assert.equal(got.includes('ghostShield'), true, LEVELS[i].name);
+            assert.equal(controlsShowDash().listed, true, LEVELS[i].name);
+            assert.equal(controlsShowDash().touchHidden, false, LEVELS[i].name);
+            assert.deepEqual(state.abilitiesPurchased, {}, LEVELS[i].name);
+        }
+    } finally {
+        setUnlockAll(false);
+        freshShop();
+    }
+    for (const i of early) {
+        main.startGame(i);
+        assert.equal(getUnlockedAbilities().includes('dash'), false, `${LEVELS[i].name} after Unlock All off`);
+        assert.equal(controlsShowDash().listed, false, LEVELS[i].name);
+        assert.equal(controlsShowDash().touchHidden, true, LEVELS[i].name);
+    }
+    main.startGame(heavy);
+    assert.equal(getUnlockedAbilities().includes('dash'), true, 'Heavy Going still has dash');
+    assert.equal(controlsShowDash().listed, true);
     assert.equal(controlsShowDash().touchHidden, false);
 });
 

@@ -1,4 +1,4 @@
-import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides } from './core/state.js';
+import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
@@ -1451,30 +1451,26 @@ function update() {
             nextBtn.innerText = "RETURN TO MENU";
             if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         } else if (state.currentLevelMeta?.isTutorial) {
-            state.tutorialProgress[state.currentLevelIndex] = true;
-            saveState();
+            markTutorialProgress(state.currentLevelIndex);
             if (chalMsg) { chalMsg.innerHTML = `Tutorial complete. You can replay this module any time from TRAINING.<br>${loopLine}`; chalMsg.style.color = '#00f3ff'; }
             let nextIndex = getNextLevelIndex(state.currentLevelIndex);
             nextBtn.innerText = nextIndex !== null ? "NEXT LEVEL" : "RETURN TO MENU";
             if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         } else {
-            let isFirstTimeLevel = (state.currentLevelIndex == parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'));
-            if (state.currentLevelIndex >= state.maxUnlockedLevel && state.currentLevelIndex < CAMPAIGN_LEVEL_COUNT - 1) {
-                state.maxUnlockedLevel = state.currentLevelIndex + 1; localStorage.setItem('echoCourier_maxLevel', state.maxUnlockedLevel);
-            }
+            const levelIndex = state.currentLevelIndex;
+            let isFirstTimeLevel = levelIndex == state.maxUnlockedLevel;
             let earnedMsg = isFirstTimeLevel ? "Level Clear: +$50<br><br>" : "";
-            let chalSuccess = !state.challengesCompleted[state.currentLevelIndex] && LEVELS[state.currentLevelIndex].challenge.check();
+            let chalSuccess = !state.challengesCompleted[levelIndex] && LEVELS[levelIndex].challenge.check();
             const resultPrefix = `${loopLine}<br>` + earnedMsg;
             if (chalSuccess) {
-                state.challengesCompleted[state.currentLevelIndex] = true;
-                localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
-                applyChallengeHud(LEVELS[state.currentLevelIndex], state.currentLevelIndex);
                 if (chalMsg) { chalMsg.innerHTML = resultPrefix + "⭐ Challenge Passed! (+$50) ⭐"; chalMsg.style.color = 'gold'; }
             } else {
-                let previouslyDone = state.challengesCompleted[state.currentLevelIndex];
+                let previouslyDone = state.challengesCompleted[levelIndex];
                 if (chalMsg) { chalMsg.innerHTML = resultPrefix + (previouslyDone ? "⭐ Challenge Already Claimed ⭐" : "Challenge Failed (Try again!)"); chalMsg.style.color = previouslyDone ? 'gold' : '#888'; }
             }
-            let nextIndex = getNextLevelIndex(state.currentLevelIndex);
+            recordLevelClear(levelIndex, { challengePassed: chalSuccess, campaignLevelCount: CAMPAIGN_LEVEL_COUNT });
+            if (chalSuccess) applyChallengeHud(LEVELS[levelIndex], levelIndex);
+            let nextIndex = getNextLevelIndex(levelIndex);
             nextBtn.innerText = nextIndex !== null ? "NEXT LEVEL" : "FINISH SHIFT";
             if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         }
@@ -2101,7 +2097,20 @@ window.onload = () => {
         startGame(typeof SANDBOX_LEVEL_INDEX === 'number' ? SANDBOX_LEVEL_INDEX : LEVELS.findIndex(l => l.isSandbox));
     });
     document.getElementById('playtest-return-btn')?.addEventListener('click', () => returnToEditor());
-    document.getElementById('dev-mode-checkbox').onchange = () => { refreshLevelSelectGrid(); refreshShopButtons(); };
+    const devModeCheckbox = document.getElementById('dev-mode-checkbox');
+    devModeCheckbox.onchange = () => {
+        if (!devModeCheckbox.checked) reloadProgressFromStorage();
+        refreshLevelSelectGrid();
+        refreshShopButtons();
+    };
+    const unlockAllBox = document.getElementById('unlock-all-checkbox');
+    if (unlockAllBox) {
+        unlockAllBox.onchange = () => {
+            setUnlockAll(unlockAllBox.checked);
+            initMenu();
+            showSubMenu('settings');
+        };
+    }
     
     document.getElementById('next-level-btn').onclick = () => window.nextLevel();
     document.getElementById('menu-btn')?.addEventListener('click', (e) => {
@@ -2111,7 +2120,11 @@ window.onload = () => {
             returnToEditor();
         }
     });
-    document.getElementById('reset-save-btn').onclick = () => { localStorage.clear(); location.reload(); };
+    document.getElementById('reset-save-btn').onclick = () => {
+        if (!confirm('Wipe all campaign progress? Level editor saves and settings are kept.')) return;
+        wipeProgress();
+        initMenu();
+    };
     
     document.body.addEventListener('click', () => {
         unlockAudio();
