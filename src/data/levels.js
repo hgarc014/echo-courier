@@ -7,6 +7,7 @@ import { finishedWithinLoops } from '../core/loopDisplay.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
+import { PIT_KILL_FRACTION, clampKillFraction } from '../core/hitZones.js';
 
 // ==== PROVISIONAL WORLD MAPPING (PR2) — replace when world content PRs land ====
 export const WORLDS = [
@@ -699,6 +700,23 @@ function crackSpeedFromMeta(meta, fallback) {
     return raw === 'fast' ? 'fast' : 'normal';
 }
 
+// HUD hint. Empty / whitespace is omitted so levels without one stay identical in JSON.
+export function normalizeHintLine(value) {
+    if (value == null) return '';
+    return String(value).trim();
+}
+
+// null means "use PIT_KILL_FRACTION and do not write the key".
+// A finite number is clamped to 0.60–0.70; the default 0.65 is omitted.
+export function normalizePitKillFraction(value) {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const clamped = clampKillFraction(n);
+    if (Math.abs(clamped - PIT_KILL_FRACTION) < 1e-9) return null;
+    return clamped;
+}
+
 export function serializeLevel(src = state) {
     const size = layoutMapSize(src, src);
     const m = src.meta || src.editorLevelMeta || (typeof state !== 'undefined' ? state.editorLevelMeta : null);
@@ -768,6 +786,10 @@ export function serializeLevel(src = state) {
         const worldId = normalizeWorldId(m.world);
         if (worldId != null) payload.meta.world = worldId;
         if (Array.isArray(m.unlocks)) payload.meta.unlocks = [...m.unlocks];
+        const hintLine = normalizeHintLine(m.hintLine);
+        if (hintLine) payload.meta.hintLine = hintLine;
+        const pitKillFraction = normalizePitKillFraction(m.pitKillFraction);
+        if (pitKillFraction != null) payload.meta.pitKillFraction = pitKillFraction;
         copyBossMeta(m, payload.meta);
         if (demo) payload.meta.demo = demo;
     }
@@ -832,6 +854,10 @@ export function deserializeLevel(data) {
             const worldId = normalizeWorldId(data.meta.world);
             if (worldId != null) state.editorLevelMeta.world = worldId;
             if (Array.isArray(data.meta.unlocks)) state.editorLevelMeta.unlocks = [...data.meta.unlocks];
+            const hintLine = normalizeHintLine(data.meta.hintLine);
+            if (hintLine) state.editorLevelMeta.hintLine = hintLine;
+            const pitKillFraction = normalizePitKillFraction(data.meta.pitKillFraction);
+            if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
             copyBossMeta(data.meta, state.editorLevelMeta);
         } else if (demo || crackSpeed) {
             if (!state.editorLevelMeta) {

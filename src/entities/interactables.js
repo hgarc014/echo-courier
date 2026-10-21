@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB } from '../core/physics.js';
+import { PLATE_PRESS_FRACTION, actorPressesPlate } from '../core/hitZones.js';
 import { SFX } from '../core/audio.js';
 import { drawSprite, drawTiled } from '../core/sprites.js';
 import { resolveSprite } from '../core/atlas.js';
@@ -303,8 +304,8 @@ export class PressurePlate extends Entity {
     constructor(id, x, y, linkedIds) { super(x, y, 40, 40, 'plate'); this.id=id; this.linkedIds=Array.isArray(linkedIds)?linkedIds:[linkedIds]; this.isPressed=false; }
     update(actors, pkgs) {
         this.isPressed = false;
-        for (let a of actors) if (AABB(this.x, this.y, this.w, this.h, a.x, a.y, a.w, a.h)) { this.isPressed=true; break; }
-        if (!this.isPressed) for (let p of pkgs) if (!p.isDestroyed && !p.carriedBy && AABB(this.x, this.y, this.w, this.h, p.x, p.y, p.w, p.h)) { this.isPressed=true; break; }
+        for (let a of actors) if (actorPressesPlate(a, this, PLATE_PRESS_FRACTION)) { this.isPressed = true; break; }
+        if (!this.isPressed) for (let p of pkgs) if (!p.isDestroyed && !p.carriedBy && actorPressesPlate(p, this, PLATE_PRESS_FRACTION)) { this.isPressed = true; break; }
     }
     render(ctx) {
         const pulse = this.isPressed ? 1 : 0.88 + 0.08 * Math.sin(state.currentTick * 0.12);
@@ -325,7 +326,7 @@ export class TemporalPlate extends PressurePlate {
         // `last` resolves to the newest surviving echo id after maxGhosts pruning.
         const validActor = pickTemporalActor(this.requiredTimeline, actors, state.activeGhosts);
         
-        if (validActor && AABB(this.x, this.y, this.w, this.h, validActor.x, validActor.y, validActor.w, validActor.h)) this.isPressed = true;
+        if (validActor && actorPressesPlate(validActor, this, PLATE_PRESS_FRACTION)) this.isPressed = true;
     }
     render(ctx) {
         const tintKey = this.requiredTimeline === 'present' ? 'platePresent'

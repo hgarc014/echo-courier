@@ -1,9 +1,9 @@
-import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled } from './core/state.js';
+import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, copyBossMeta, getChallengeByRef } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, copyBossMeta, getChallengeByRef, normalizePitKillFraction } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
@@ -17,7 +17,7 @@ import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
-import { displayedLoopNumber, finishLoopLine } from './core/loopDisplay.js';
+import { displayedLoopNumber, finishLoopLine, plannedLoopBudget } from './core/loopDisplay.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -341,8 +341,22 @@ function syncLoopCountUI() {
     if (el) el.innerText = String(displayedLoopNumber(state.loopNumber));
     const usedEl = document.getElementById('echo-count');
     if (usedEl) usedEl.innerText = String((state.pastRuns || []).length);
+    const maxGhosts = state.currentLevelMeta?.maxGhosts;
     const maxEl = document.getElementById('max-echoes');
-    if (maxEl) maxEl.innerText = echoBudgetLabel(state.currentLevelMeta?.maxGhosts);
+    if (maxEl) maxEl.innerText = echoBudgetLabel(maxGhosts);
+    const budget = plannedLoopBudget(maxGhosts);
+    const budgetEl = document.getElementById('loop-budget');
+    if (budgetEl) budgetEl.innerText = budget == null ? '' : String(budget);
+    const ofEl = document.getElementById('loop-of');
+    if (ofEl) ofEl.classList.toggle('hidden', budget == null);
+}
+
+function applyLevelHint(level) {
+    const el = document.getElementById('level-hint');
+    if (!el) return;
+    const text = (level?.hintLine || '').trim();
+    el.innerText = text;
+    el.classList.toggle('hidden', !text);
 }
 
 function applyChallengeHud(level, levelIndex) {
@@ -854,7 +868,7 @@ export function startGame(levelIndex) {
     state.pendingBossIntro = state.currentLevelMeta?.bossIntro || null;
     startMusic();
     let lv = LEVELS[levelIndex];
-    state.levelAbilityOverrides = [...(lv.grants || [])];
+    applyLevelAbilityOverrides(lv);
     state.worldUnlockedAbilities = getWorldUnlockedAbilities(levelIndex);
     state.robots = []; state.burrowers = []; state.projectiles = [];
     state.bossCheckpoint = null;
@@ -863,7 +877,9 @@ export function startGame(levelIndex) {
     state.customLayout = null;
     state.editorReturnLayout = null;
     document.getElementById('playtest-return-btn')?.classList.add('hidden');
-    document.getElementById('level-display').innerText = getLevelDisplayLabel(levelIndex, lv); document.getElementById('objective-text').innerText = localizeControlHints(lv.obj); 
+    document.getElementById('level-display').innerText = getLevelDisplayLabel(levelIndex, lv);
+    document.getElementById('objective-text').innerText = localizeControlHints(lv.obj);
+    applyLevelHint(lv); 
     
     applyLoadedLevel(getLevelSetup(levelIndex));
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
@@ -952,7 +968,7 @@ export function restartLevel() {
     let lv = state.playtesting ? state.currentLevelMeta : LEVELS[state.currentLevelIndex];
     if (!lv) return;
     state.currentLevelMeta = lv;
-    state.levelAbilityOverrides = [...(lv.grants || [])];
+    applyLevelAbilityOverrides(lv);
     state.worldUnlockedAbilities = state.playtesting ? getPlaytestWorldUnlocks(lv) : getWorldUnlockedAbilities(state.currentLevelIndex);
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
@@ -964,14 +980,15 @@ export function restartLevel() {
     updateDeliveryProgressUI();
     applyChallengeHud(lv, state.currentLevelIndex);
     document.getElementById('objective-text').innerText = localizeControlHints(lv.obj);
-    let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
-    stopDialogSpeech();
-    state.pendingBossIntro = lv.bossIntro || null;
+    applyLevelHint(lv);
+    hideLevelDialog();
+    // Q restarts straight into the fight. Story and boss intro stay on the first entry only.
+    state.pendingBossIntro = null;
     beginRecording(state.playtesting
         ? { level: null, levelName: lv.name, layout: state.editorReturnLayout, meta: editorMetaForRecording() }
         : { level: state.currentLevelIndex, levelName: lv.name });
-    if (lv.isBoss && state.pendingBossIntro) startBossIntro(lv);
-    else state.gameState = 'PLAYING';
+    if (lv.isBoss) beginBossEncounter(lv);
+    state.gameState = 'PLAYING';
     updateHUD();
     Object.assign(prevKeys, keys);
 }
@@ -1041,13 +1058,18 @@ export function startPlaytestFromEditor() {
     };
     const playtestLoopTime = normalizeLoopTime(em.loopTime);
     if (playtestLoopTime != null) state.currentLevelMeta.loopTime = playtestLoopTime;
-    state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
+    const playtestHint = (em.hintLine || '').trim();
+    if (playtestHint) state.currentLevelMeta.hintLine = playtestHint;
+    const playtestPit = normalizePitKillFraction(em.pitKillFraction);
+    if (playtestPit != null) state.currentLevelMeta.pitKillFraction = playtestPit;
+    applyLevelAbilityOverrides(state.currentLevelMeta);
     state.worldUnlockedAbilities = getPlaytestWorldUnlocks(state.currentLevelMeta);
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
     state.pendingBossIntro = state.currentLevelMeta.bossIntro || null;
     document.getElementById('level-display').innerText = getLevelDisplayLabel(0, state.currentLevelMeta);
     document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
+    applyLevelHint(state.currentLevelMeta);
 
     applyLoadedLevel(deserializeLevel(layout));
     beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
@@ -1092,6 +1114,7 @@ function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
         if (isKeyJustPressed('esc')) { handleEscape(); updatePrevKeys(); return; }
+        if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
         // SPACE is reserved for GRAB; dialog advances on Enter / overlay tap / CONTINUE.
         if (isKeyJustPressed('enter')) {
             startMusic();
@@ -1109,6 +1132,7 @@ function update() {
     }
     if (state.gameState === 'BOSS_INTRO') {
         if (isKeyJustPressed('esc')) { handleEscape(); updatePrevKeys(); return; }
+        if (isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
         if (isKeyJustPressed('enter')) {
             hideLevelDialog();
             beginBossEncounter(state.currentLevelMeta);

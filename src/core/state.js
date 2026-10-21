@@ -182,7 +182,8 @@ export function getPlayerRank() {
 }
 
 export function applyLevelAbilityOverrides(level) {
-    const granted = [...(level?.grants || [])];
+    // unlocks is a synonym of grants (GAME_REFERENCE): both turn the ability on for this level.
+    const granted = [...(level?.grants || []), ...(level?.unlocks || [])];
     state.levelAbilityOverrides = [...new Set(granted)];
 }
 
@@ -199,6 +200,7 @@ export function getUnlockedAbilities() {
     const meta = state.currentLevelMeta;
     if (meta) {
         for (let ability of (meta.grants || [])) unlocks.add(ability);
+        for (let ability of (meta.unlocks || [])) unlocks.add(ability);
     }
     return Array.from(unlocks);
 }

@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizeWorldId, WORLDS, copyBossMeta } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizeWorldId, WORLDS, copyBossMeta, normalizeHintLine, normalizePitKillFraction } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
@@ -93,6 +93,10 @@ export function setEditorLevelMetaFromLevel(level) {
     const worldId = normalizeWorldId(level.world);
     if (worldId != null) state.editorLevelMeta.world = worldId;
     if (Array.isArray(level.unlocks)) state.editorLevelMeta.unlocks = [...level.unlocks];
+    const hintLine = normalizeHintLine(level.hintLine);
+    if (hintLine) state.editorLevelMeta.hintLine = hintLine;
+    const pitKillFraction = normalizePitKillFraction(level.pitKillFraction);
+    if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
     copyBossMeta(level, state.editorLevelMeta);
     if (level.challenge && !level.isPlaytest) state.editorLevelMeta.challengeRef = level.name;
     return state.editorLevelMeta;
@@ -115,6 +119,10 @@ function syncLevelConfigForm() {
     if (speaker) speaker.value = meta.story?.speaker || '';
     if (text) text.value = meta.story?.text || '';
     if (obj) obj.value = meta.obj || '';
+    const hintEl = document.getElementById('editor-meta-hint');
+    if (hintEl) hintEl.value = meta.hintLine || '';
+    const pitEl = document.getElementById('editor-meta-pitfraction');
+    if (pitEl) pitEl.value = meta.pitKillFraction != null ? String(meta.pitKillFraction) : '';
     if (maxG) maxG.value = meta.maxGhosts ?? 3;
     if (loopEl) loopEl.value = meta.loopTime != null ? String(meta.loopTime) : '';
     const speedEl = document.getElementById('editor-meta-crackspeed');
@@ -192,6 +200,10 @@ function applyLevelConfigForm() {
         demo
     };
     if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+    const hintLine = normalizeHintLine(document.getElementById('editor-meta-hint')?.value);
+    if (hintLine) state.editorLevelMeta.hintLine = hintLine;
+    const pitKillFraction = normalizePitKillFraction(document.getElementById('editor-meta-pitfraction')?.value);
+    if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
     const worldId = normalizeWorldId(document.getElementById('editor-meta-world')?.value);
     if (worldId != null) state.editorLevelMeta.world = worldId;
     const unlocks = ['dash', 'toss', 'cloak', 'ghostShield']
