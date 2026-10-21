@@ -152,6 +152,10 @@ try {
     assert.equal(formatParTooltip(fresh.challenge.desc), 'Par: Finish in 2 loops or fewer');
     assert.equal(formatParTooltip('Par: Finish in 2 loops or fewer'), 'Par: Finish in 2 loops or fewer');
     assert.equal(formatParTooltip('Par: par already'), 'Par: par already');
+    assert.equal(formatParTooltip('Do NOT use Dash'), 'Challenge: Do NOT use Dash');
+    assert.equal(/^par:/i.test(formatParTooltip('Do NOT use Dash')), false);
+    assert.equal(formatParTooltip('No Alarms Triggered'), 'Challenge: No Alarms Triggered');
+    assert.equal(formatParTooltip('Challenge: already'), 'Challenge: already');
     const prevLoop = state.loopNumber;
     state.loopNumber = 1;
     assert.equal(fresh.challenge.check(), true);
@@ -169,6 +173,12 @@ try {
         if (!lvl.challenge?.desc) continue;
         const title = formatParTooltip(lvl.challenge.desc);
         assert.equal(/^par:\s*par\b/i.test(title), false, `${lvl.name} tooltip doubled: ${title}`);
+        const parLine = /^finish in \d+ loops? or fewer$/i.test(lvl.challenge.desc);
+        if (parLine) assert.equal(title, `Par: ${lvl.challenge.desc}`, lvl.name);
+        else {
+            assert.equal(/^par:/i.test(title), false, `${lvl.name} non-par labeled as par: ${title}`);
+            assert.equal(title, `Challenge: ${lvl.challenge.desc}`, lvl.name);
+        }
     }
     for (const bad of [{ par: 0 }, { par: 2.5 }, { par: '' }, {}]) {
         installParChallenge(bad);

@@ -22,3 +22,27 @@ export function finishLoopLine(loopNumber, par) {
     if (Number.isFinite(p) && p >= 1) return `Finished in ${n} ${noun} (par ${p}).`;
     return `Finished in ${n} ${noun}.`;
 }
+
+export const DEV_PROGRESS_NOTE = 'Dev mode: progress not saved';
+
+// Campaign results panel. Dev mode keeps the loop line and drops the credit.
+export function formatCampaignClearMessage({ loopLine, firstClear, challengePassed, previouslyDone, devMode }) {
+    const line = String(loopLine ?? '');
+    if (devMode) {
+        let html = `${line}<br>${DEV_PROGRESS_NOTE}`;
+        if (!challengePassed) {
+            html += previouslyDone ? '<br>⭐ Challenge Already Claimed ⭐' : '<br>Challenge Failed (Try again!)';
+        }
+        const color = !challengePassed && previouslyDone ? 'gold' : (challengePassed ? '#9fb0bd' : '#888');
+        return { html, color };
+    }
+    const earnedMsg = firstClear ? 'Level Clear: +$50<br><br>' : '';
+    const prefix = `${line}<br>` + earnedMsg;
+    if (challengePassed) {
+        return { html: prefix + '⭐ Challenge Passed! (+$50) ⭐', color: 'gold' };
+    }
+    return {
+        html: prefix + (previouslyDone ? '⭐ Challenge Already Claimed ⭐' : 'Challenge Failed (Try again!)'),
+        color: previouslyDone ? 'gold' : '#888'
+    };
+}

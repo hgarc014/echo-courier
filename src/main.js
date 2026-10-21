@@ -17,7 +17,7 @@ import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
-import { displayedLoopNumber, finishLoopLine } from './core/loopDisplay.js';
+import { displayedLoopNumber, finishLoopLine, formatCampaignClearMessage } from './core/loopDisplay.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -1434,15 +1434,19 @@ function update() {
             if (menuBtn) menuBtn.innerText = "LEVEL SELECT";
         } else {
             const levelIndex = state.currentLevelIndex;
-            let isFirstTimeLevel = levelIndex == state.maxUnlockedLevel;
-            let earnedMsg = isFirstTimeLevel ? "Level Clear: +$50<br><br>" : "";
-            let chalSuccess = !state.challengesCompleted[levelIndex] && LEVELS[levelIndex].challenge.check();
-            const resultPrefix = `${loopLine}<br>` + earnedMsg;
-            if (chalSuccess) {
-                if (chalMsg) { chalMsg.innerHTML = resultPrefix + "⭐ Challenge Passed! (+$50) ⭐"; chalMsg.style.color = 'gold'; }
-            } else {
-                let previouslyDone = state.challengesCompleted[levelIndex];
-                if (chalMsg) { chalMsg.innerHTML = resultPrefix + (previouslyDone ? "⭐ Challenge Already Claimed ⭐" : "Challenge Failed (Try again!)"); chalMsg.style.color = previouslyDone ? 'gold' : '#888'; }
+            const isFirstTimeLevel = levelIndex == state.maxUnlockedLevel;
+            const chalSuccess = !state.challengesCompleted[levelIndex] && LEVELS[levelIndex].challenge.check();
+            const previouslyDone = !!state.challengesCompleted[levelIndex];
+            const message = formatCampaignClearMessage({
+                loopLine,
+                firstClear: isFirstTimeLevel,
+                challengePassed: chalSuccess,
+                previouslyDone,
+                devMode: isDevMode()
+            });
+            if (chalMsg) {
+                chalMsg.innerHTML = message.html;
+                chalMsg.style.color = message.color;
             }
             recordLevelClear(levelIndex, { challengePassed: chalSuccess, campaignLevelCount: CAMPAIGN_LEVEL_COUNT });
             if (chalSuccess) applyChallengeHud(LEVELS[levelIndex], levelIndex);
