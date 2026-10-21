@@ -104,6 +104,35 @@ test('gatekeeper audit helpers edit the schedule and round-trip', () => {
     assert.equal(again.y, 20);
 });
 
+test('gatekeeper freshTicks 0 and blank round-trip through the inspector', () => {
+    const world = deserializeLevel({
+        gatekeepers: [{ id: 'gk', x: 10, y: 20, audits: [{ plateId: 'p', tick: 60 }], vaultDoorId: 'v' }]
+    });
+    const ent = world.gatekeepers[0];
+    assert.equal(ent.freshTicks, null);
+    applyGatekeeperEdits(ent, { freshTicks: 0 });
+    assert.equal(ent.freshTicks, 0);
+    let json = JSON.parse(JSON.stringify(serializeLevel(world)));
+    assert.equal(json.gatekeepers[0].freshTicks, 0);
+    let again = deserializeLevel(json).gatekeepers[0];
+    assert.equal(again.freshTicks, 0);
+
+    const world90 = deserializeLevel(json);
+    applyGatekeeperEdits(world90.gatekeepers[0], { freshTicks: 90 });
+    json = JSON.parse(JSON.stringify(serializeLevel(world90)));
+    assert.equal(json.gatekeepers[0].freshTicks, 90);
+    again = deserializeLevel(json).gatekeepers[0];
+    assert.equal(again.freshTicks, 90);
+
+    const worldOff = deserializeLevel(json);
+    applyGatekeeperEdits(worldOff.gatekeepers[0], { freshTicks: '' });
+    assert.equal(worldOff.gatekeepers[0].freshTicks, null);
+    json = JSON.parse(JSON.stringify(serializeLevel(worldOff)));
+    assert.equal(json.gatekeepers[0].freshTicks, undefined);
+    applyGatekeeperEdits(worldOff.gatekeepers[0], { freshTicks: -3 });
+    assert.equal(worldOff.gatekeepers[0].freshTicks, null);
+});
+
 test('camera angle + sweep apply live and round-trip', () => {
     const s = base(); const c = s.cameras[0];
     applyInspectorEdits(c, { baseAngle: degToRad(180), sweepRange: degToRad(30) });

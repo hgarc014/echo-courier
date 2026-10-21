@@ -1,4 +1,5 @@
-// Pure inspector helpers (no DOM, no imports) so path/camera/gatekeeper edits are testable in Node.
+// Pure inspector helpers (no DOM) so path/camera/gatekeeper edits are testable in Node.
+import { normalizeFreshTicks } from '../entities/bosses/gatekeeper.js';
 
 export const MIN_WAYPOINTS = 2;
 
@@ -108,7 +109,7 @@ export function removeAudit(ent, index) {
     return setAudits(ent, ent.audits.filter((_, n) => n !== i));
 }
 
-/** edits: { id?, vaultDoorId?, shields?, audits?: [{plateId, tick}] } */
+/** edits: { id?, vaultDoorId?, shields?, freshTicks?, audits?: [{plateId, tick}] } */
 export function applyGatekeeperEdits(ent, edits = {}) {
     if (!ent || !edits) return;
     if (edits.id !== undefined) ent.id = edits.id == null ? '' : String(edits.id);
@@ -118,6 +119,9 @@ export function applyGatekeeperEdits(ent, edits = {}) {
         const n = Math.max(0, Math.floor(Number(edits.shields)));
         ent.maxShields = n;
         ent.shields = n;
+    }
+    if (Object.prototype.hasOwnProperty.call(edits, 'freshTicks')) {
+        ent.freshTicks = normalizeFreshTicks(edits.freshTicks);
     }
 }
 

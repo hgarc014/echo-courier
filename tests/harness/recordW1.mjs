@@ -177,27 +177,52 @@ function solveL4() {
     dropInZone();
 }
 
+function waitTick(t) {
+    while (state.currentTick < t) {
+        if (state.gameState !== 'PLAYING') {
+            throw new Error(`waitTick left ${state.gameState} at tick ${state.currentTick}`);
+        }
+        const loops = state.pastRuns.length;
+        tick();
+        if (state.pastRuns.length !== loops) {
+            throw new Error(`waitTick rewind at tick ${state.currentTick}`);
+        }
+    }
+}
+
+// Step on only after the fresh window opens. The plate is below the corridor,
+// so `before` must already be through the doors at y=270.
+function stepOnFresh(id, index, before) {
+    if (before) before();
+    const g = state.gatekeepers[0];
+    const audit = g.audits[index];
+    const plate = state.plates.find(p => p.id === id);
+    const windowStart = audit.tick - (g.freshTicks ?? 0);
+    moveTo(plate.x + 8, plate.y - 46, 4, 900);
+    waitTick(Math.max(state.currentTick, windowStart + 8));
+    standOn(id, plate.x + 8, plate.y + 8);
+    waitUntil(() => g.passed.includes(index), 500, `${id} audit`);
+}
+
 function solveMB() {
-    standOn('g1', 80, 470);
-    wait(12);
+    stepOnFresh('g1', 0);
     pressR();
-    waitUntil(() => doorOpen('d1'), 500, 'MB d1');
-    moveTo(270, 270, 2, 400);
-    moveTo(320, 270, 2, 300);
-    standOn('g2', 310, 470);
-    wait(12);
+    stepOnFresh('g2', 1, () => {
+        waitUntil(() => doorOpen('d1'), 500, 'MB d1');
+        moveTo(300, 270, 4, 500);
+    });
     pressR();
-    waitUntil(() => doorOpen('d1'), 500, 'MB d1 again');
-    moveTo(300, 270, 2, 500);
-    waitUntil(() => doorOpen('d2'), 800, 'MB d2');
-    moveTo(520, 270, 2, 400);
-    standOn('g3', 530, 470);
-    waitUntil(() => doorOpen('vault'), 1400, 'MB vault');
-    moveTo(530, 270, 2, 400);
-    moveTo(700, 270, 2, 400);
-    moveTo(700, 180, 2, 400);
+    stepOnFresh('g3', 2, () => {
+        waitUntil(() => doorOpen('d1'), 500, 'MB d1 again');
+        moveTo(300, 270, 4, 500);
+        waitUntil(() => doorOpen('d2'), 800, 'MB d2');
+        moveTo(520, 270, 4, 500);
+    });
+    waitUntil(() => doorOpen('vault'), 200, 'MB vault');
+    moveTo(520, 270, 4, 400);
+    moveTo(700, 270, 4, 400);
     grab();
-    moveTo(710, 450, 2, 500);
+    moveTo(710, 420, 4, 400);
     dropInZone();
 }
 
@@ -312,9 +337,40 @@ export function runNaive(which) {
             moveTo(450, 170, 4, 400, { allowBlocked: true });
             for (let i = 0; i < 700 && state.gameState === 'PLAYING'; i++) tick();
         },
+        'mb-park-early': () => {
+            // Stand on each plate as soon as it is reachable and hold through the audit.
+            // An arrival before the fresh window fails the beat and locks the door.
+            loadLevel({ level: 4 });
+            const gkEnt = state.gatekeepers[0];
+            const ids = ['g1', 'g2', 'g3'];
+            const corridorX = [null, 300, 520];
+            for (let i = 0; i < ids.length; i++) {
+                const plate = state.plates.find(p => p.id === ids[i]);
+                const audit = gkEnt.audits.find(a => a.plateId === ids[i]);
+                const walk = { stopOnRewind: true, allowBlocked: true };
+                if (corridorX[i] != null) moveTo(corridorX[i], 270, 4, 800, walk);
+                moveTo(plate.x + 8, plate.y + 8, 4, 800, walk);
+                const parked = state.pastRuns.length;
+                const limit = (audit?.tick ?? 0) + 5;
+                while (state.currentTick <= limit && state.gameState === 'PLAYING' && state.pastRuns.length === parked) {
+                    tick();
+                }
+                if (state.pastRuns.length === parked && state.gameState === 'PLAYING') pressR();
+            }
+            const pkg = state.packages.find(p => p.requiredForDelivery !== false);
+            const zone = state.deliveryZone;
+            if (doorOpen('vault') && state.gameState === 'PLAYING') {
+                moveTo(pkg.x, pkg.y, 4, 600, { allowBlocked: true, stopOnRewind: true });
+                try { grab(); } catch { /* vault path did not actually open */ }
+                moveTo(zone.x + 8, zone.y + 8, 4, 600, { allowBlocked: true, stopOnRewind: true });
+                if (state.packages.some(p => p.carriedBy === 'player')) tick({}, ['space']);
+            }
+            for (let i = 0; i < 200 && state.gameState === 'PLAYING'; i++) tick();
+        },
         'mb-rush-vault': () => {
             loadLevel({ level: 4 });
-            moveTo(200, 270, 4, 200);
+            const door = state.doors.find(d => d.id === 'd1');
+            moveTo((door?.x ?? 220) - 40, 270, 4, 300, { allowBlocked: true });
             for (let i = 0; i < 1500 && state.gameState === 'PLAYING'; i++) tick();
         }
     };

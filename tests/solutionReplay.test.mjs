@@ -55,7 +55,7 @@ check('truncated w2-l1 solution fails', () => {
     assert.equal(r.completed, false);
 });
 
-for (const plan of ['l2-fetch-first', 'l3-leave-plate', 'l3-first-window', 'l4-two-loops', 'mb-rush-vault']) {
+for (const plan of ['l2-fetch-first', 'l3-leave-plate', 'l3-first-window', 'l4-two-loops', 'mb-park-early', 'mb-rush-vault']) {
     check(`naive ${plan} fails`, () => {
         const r = runNaive(plan);
         if (plan === 'l2-fetch-first') {

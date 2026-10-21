@@ -6,8 +6,18 @@ import { state } from '../../core/state.js';
 import { Entity } from '../base.js';
 import { SFX } from '../../core/audio.js';
 
-const WINDUP_TICKS = 60;
+// 1.5–2s at 60 Hz. The beam is the cue to step on; an earlier hold is not fresh.
+export const GATEKEEPER_WINDUP_TICKS = 105;
 const FLASH_TICKS = 12;
+
+/** Blank, non-finite, or negative → off (null). 0 is a real window of the audit tick only. */
+export function normalizeFreshTicks(raw) {
+    if (raw == null) return null;
+    if (typeof raw === 'string' && raw.trim() === '') return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.floor(n);
+}
 
 function normalizeAudits(list) {
     if (!Array.isArray(list)) return [];
@@ -19,6 +29,45 @@ function normalizeAudits(list) {
         out.push({ plateId: a.plateId == null ? '' : String(a.plateId), tick });
     }
     return out;
+}
+
+function rayRectDistance(ox, oy, dx, dy, rx, ry, rw, rh) {
+    const minX = rx;
+    const maxX = rx + rw;
+    const minY = ry;
+    const maxY = ry + rh;
+    let tmin = 0;
+    let tmax = Infinity;
+    const axes = [[dx, ox, minX, maxX], [dy, oy, minY, maxY]];
+    for (const [d, o, mn, mx] of axes) {
+        if (Math.abs(d) < 1e-12) {
+            if (o < mn || o > mx) return null;
+            continue;
+        }
+        let t1 = (mn - o) / d;
+        let t2 = (mx - o) / d;
+        if (t1 > t2) { const swap = t1; t1 = t2; t2 = swap; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return null;
+    }
+    if (tmax < 0) return null;
+    return tmin < 0 ? 0 : tmin;
+}
+
+/** Distance along a ray until the first wall rect. Doors are not walls. */
+export function wallRayDistance(x, y, angle, maxDist, walls) {
+    const max = Number(maxDist);
+    if (!Number.isFinite(max) || max <= 0) return 0;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    let best = max;
+    for (const w of walls || []) {
+        if (!w || !Number.isFinite(w.w) || !Number.isFinite(w.h)) continue;
+        const hit = rayRectDistance(x, y, dx, dy, w.x || 0, w.y || 0, w.w, w.h);
+        if (hit != null && hit < best) best = hit;
+    }
+    return best;
 }
 
 function linkedDoorIds(plate) {
@@ -42,6 +91,7 @@ export class Gatekeeper extends Entity {
         if (!Number.isFinite(shields)) shields = fallback;
         this.maxShields = Math.max(0, Math.floor(shields));
         this.shields = this.maxShields;
+        this.freshTicks = normalizeFreshTicks(o.freshTicks);
         this.passed = [];
         this.flashTicks = 0;
         if (state.gameState !== 'EDITOR') this._restoreCheckpoint();
@@ -91,6 +141,21 @@ export class Gatekeeper extends Entity {
         return prev;
     }
 
+    // null freshTicks: any press passes (legacy). Otherwise the occupant must have
+    // arrived after the previous audit and within freshTicks of this beat.
+    _freshHold(plate, auditTick) {
+        if (!plate) return false;
+        if (this.freshTicks == null) return !!plate.isPressed;
+        const prev = this._prevAuditTick({ tick: auditTick });
+        const earliest = auditTick - this.freshTicks;
+        const ticks = plate.arrivalTicks;
+        if (!Array.isArray(ticks)) return false;
+        return ticks.some(t => {
+            const n = Number(t);
+            return Number.isFinite(n) && n > prev && n >= earliest && n <= auditTick;
+        });
+    }
+
     // tick is the current loop tick (state.currentTick). Already-passed audits are skipped.
     update(tick, plates, doors) {
         if (this.flashTicks > 0) this.flashTicks--;
@@ -105,7 +170,7 @@ export class Gatekeeper extends Entity {
             if (Number(audit.tick) !== now) continue;
             audited = true;
             const plate = plateList.find(p => p && p.id === audit.plateId);
-            if (plate && plate.isPressed) {
+            if (this._freshHold(plate, now)) {
                 this.passed.push(i);
                 this.shields = Math.max(0, this.shields - 1);
                 broke = true;
@@ -153,27 +218,35 @@ export class Gatekeeper extends Entity {
 
         if (next) {
             const delta = next.tick - now;
-            if (delta > 0 && delta <= WINDUP_TICKS) {
+            if (delta > 0 && delta <= GATEKEEPER_WINDUP_TICKS) {
                 const plate = (state.plates || []).find(p => p && p.id === next.plateId);
                 if (plate) {
                     const tx = plate.x + (plate.w || 40) / 2;
                     const ty = plate.y + (plate.h || 40) / 2;
                     const ang = Math.atan2(ty - cy, tx - cx);
                     const dist = Math.hypot(tx - cx, ty - cy);
-                    const charge = 1 - delta / WINDUP_TICKS;
+                    const charge = 1 - delta / GATEKEEPER_WINDUP_TICKS;
+                    const walls = state.walls || [];
+                    const samples = 16;
+                    const spread = 0.22;
                     ctx.beginPath();
                     ctx.moveTo(cx, cy);
-                    ctx.arc(cx, cy, Math.max(1, dist), ang - 0.22, ang + 0.22);
+                    for (let i = 0; i <= samples; i++) {
+                        const a = ang - spread + (2 * spread * i) / samples;
+                        const reach = wallRayDistance(cx, cy, a, dist, walls);
+                        ctx.lineTo(cx + Math.cos(a) * reach, cy + Math.sin(a) * reach);
+                    }
                     ctx.closePath();
                     ctx.fillStyle = `rgba(255, 60, 40, ${0.08 + 0.22 * charge})`;
                     ctx.fill();
+                    const centerReach = wallRayDistance(cx, cy, ang, dist, walls);
                     ctx.beginPath();
                     ctx.setLineDash([8, 6]);
                     ctx.lineDashOffset = -now;
                     ctx.strokeStyle = `rgba(255, 220, 160, ${0.35 + 0.6 * charge})`;
                     ctx.lineWidth = 2;
                     ctx.moveTo(cx, cy);
-                    ctx.lineTo(tx, ty);
+                    ctx.lineTo(cx + Math.cos(ang) * centerReach, cy + Math.sin(ang) * centerReach);
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }
@@ -244,6 +317,25 @@ export class Gatekeeper extends Entity {
             ctx.fillRect(px, py, pipW, 5);
             ctx.strokeRect(px, py, pipW, 5);
             px += pipW + pipGap;
+        }
+
+        const labeled = new Set();
+        ctx.font = 'bold 14px Space Grotesk, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.lineWidth = 3;
+        for (const audit of this.audits) {
+            const plateId = audit && audit.plateId;
+            if (!plateId || labeled.has(plateId)) continue;
+            labeled.add(plateId);
+            const plate = (state.plates || []).find(p => p && p.id === plateId);
+            if (!plate) continue;
+            const lx = plate.x + (plate.w || 40) / 2;
+            const ly = plate.y - 4;
+            ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+            ctx.strokeText(plateId, lx, ly);
+            ctx.fillStyle = '#ffe14a';
+            ctx.fillText(plateId, lx, ly);
         }
 
         ctx.restore();

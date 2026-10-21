@@ -4,7 +4,7 @@ import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall
 import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
 import { Burrower, normalizeMaxStunsPerLoop } from '../entities/bosses/Burrower.js';
 import { finishedWithinLoops } from '../core/loopDisplay.js';
-import { Gatekeeper } from '../entities/bosses/gatekeeper.js';
+import { Gatekeeper, normalizeFreshTicks } from '../entities/bosses/gatekeeper.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
@@ -240,45 +240,47 @@ const W1_L4_LAYOUT = {
     ...emptyActors()
 };
 
-// g1 opens the door to g2, g2 opens the door to g3. Vault opens only after all three audits.
+// Plates sit off the corridor. An audit counts only if that plate's occupant
+// arrived inside freshTicks of the beat, so parking at the start fails.
 const W1_MB_LAYOUT = {
     width: 800, height: 600, mapWidth: 800, mapHeight: 600,
-    player: { x: 60, y: 250 },
-    deliveryZone: { x: 690, y: 420, w: 80, h: 120 },
+    player: { x: 50, y: 270 },
+    deliveryZone: { x: 690, y: 400, w: 80, h: 100 },
     walls: [
         { x: 0, y: 0, w: 800, h: 20 },
         { x: 0, y: 580, w: 800, h: 20 },
         { x: 0, y: 0, w: 20, h: 600 },
         { x: 780, y: 0, w: 20, h: 600 },
-        { x: 230, y: 20, w: 20, h: 210 },
-        { x: 230, y: 350, w: 20, h: 230 },
-        { x: 460, y: 20, w: 20, h: 210 },
-        { x: 460, y: 350, w: 20, h: 230 },
-        { x: 650, y: 20, w: 20, h: 210 },
-        { x: 650, y: 350, w: 20, h: 230 }
+        { x: 220, y: 20, w: 20, h: 210 },
+        { x: 220, y: 360, w: 20, h: 220 },
+        { x: 450, y: 20, w: 20, h: 210 },
+        { x: 450, y: 360, w: 20, h: 220 },
+        { x: 640, y: 20, w: 20, h: 210 },
+        { x: 640, y: 360, w: 20, h: 220 }
     ],
     doors: [
-        { x: 230, y: 230, w: 20, h: 120, id: 'd1', type: 'standard' },
-        { x: 460, y: 230, w: 20, h: 120, id: 'd2', type: 'standard' },
-        { x: 650, y: 230, w: 20, h: 120, id: 'vault', type: 'standard' }
+        { x: 220, y: 230, w: 20, h: 130, id: 'd1', type: 'standard' },
+        { x: 450, y: 230, w: 20, h: 130, id: 'd2', type: 'standard' },
+        { x: 640, y: 230, w: 20, h: 130, id: 'vault', type: 'standard' }
     ],
     plates: [
-        { x: 70, y: 460, linkedIds: ['d1'], id: 'g1', type: 'standard' },
-        { x: 300, y: 460, linkedIds: ['d2'], id: 'g2', type: 'standard' },
-        { x: 520, y: 460, linkedIds: [], id: 'g3', type: 'standard' }
+        { x: 60, y: 470, linkedIds: ['d1'], id: 'g1', type: 'standard' },
+        { x: 290, y: 470, linkedIds: ['d2'], id: 'g2', type: 'standard' },
+        { x: 510, y: 470, linkedIds: [], id: 'g3', type: 'standard' }
     ],
-    packages: [{ x: 700, y: 180, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    packages: [{ x: 700, y: 270, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
     hints: [],
-    lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [],
+    ...emptyActors(),
     gatekeepers: [{
         id: 'gk',
-        x: 340,
-        y: 70,
+        x: 300,
+        y: 40,
         vaultDoorId: 'vault',
+        freshTicks: 110,
         audits: [
-            { plateId: 'g1', tick: 360 },
-            { plateId: 'g2', tick: 720 },
-            { plateId: 'g3', tick: 1080 }
+            { plateId: 'g1', tick: 220 },
+            { plateId: 'g2', tick: 420 },
+            { plateId: 'g3', tick: 560 }
         ]
     }]
 };
@@ -669,7 +671,7 @@ export const LEVELS = [
     { name: "Return Trip", story: { speaker: "ChronoHaul Dispatch", text: "The drop bay is behind the door. The plate is down the left shaft. Record that plate first. Haul the parcel over to the shaft and the loop clock runs out before anyone is left holding the door." }, obj: "Loop on the shaft plate first, then carry the package through. Fetching the box first does not fit in the loop.", maxGhosts: 1, loopTime: 5, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L2_LAYOUT },
     { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T's first opening is gone before you can reach it. The parcel is down in the pocket. Hold the plate with an echo and take the second window. Walk off the plate early and that window opens onto a shut door." }, obj: "Keep the echo on the plate. The timer's first opening is too early — cross on the second.", maxGhosts: 1, loopTime: 14, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
     { name: "Airlock Relay", story: { speaker: "ChronoHaul Dispatch", text: "Two airlocks, one timer, two echoes. Door A shuts the moment its plate is empty, so one recording cannot hold A and reach plate B. Park an echo on A, park the next on B, and carry the parcel through. Three loops." }, obj: "Park an echo on plate A, then one on plate B. Carry the package through both doors and the timer.", maxGhosts: 2, loopTime: 12, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_L4_LAYOUT },
-    { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. An empty plate locks its door. Fill them in order or the vault stays shut." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper audits three plates on a fixed beat. Be on the right plate at the right beat or that door locks for the loop. Break all three shields and the vault opens." }, obj: "Echo on g1 by the first audit, echo on g2 by the second, you on g3 at the third. Deliver from the vault.", maxGhosts: 2, loopTime: 24, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },
+    { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. Step on when the beam flares — a plate held from the start fails. An empty plate locks its door." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper audits g1, then g2, then g3. An early hold does not count. Put an echo on g1 and g2 as each warning flares, stand on g3 yourself for the last beat, and the vault opens." }, obj: "Time echoes onto g1 and g2 during their warnings. Step onto g3 in its window, then deliver from the vault.", maxGhosts: 2, loopTime: 14, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },
     ...W2_LEVELS,
     { name: "Level 3: Sweep Coverage", voiceKey: "level-2-story", story: { speaker: "Sector Surveillance", text: "Camera grid online in Transit Spur C. Cloak is still locked behind procurement. Time the cone, use cover, and remember: discarded timelines trip the same sensors you do." }, obj: "One camera. Cross on the gap in the sweep. Echoes trigger cameras too.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL3_LAYOUT, demos: { intro: LEVEL3_DEMO } },
     { name: "Level 4: Overlapping Watch", voiceKey: "level-3-story", story: { speaker: "Local Hub Manager", text: "They stacked a patrol and a camera on the same corridor. Budget says that is your problem. Coordinate echoes and keep the parcel moving." }, obj: "Guard and camera together. Hold the door, avoid both sensors, deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT, demos: { intro: LEVEL4_DEMO } },
@@ -816,6 +818,8 @@ function serializeGatekeeper(g) {
     };
     const shields = Number.isFinite(Number(g.maxShields)) ? Math.max(0, Math.floor(Number(g.maxShields))) : g.shields;
     if (shields !== audits.length) out.shields = shields;
+    const fresh = normalizeFreshTicks(g.freshTicks);
+    if (fresh != null) out.freshTicks = fresh;
     return out;
 }
 
@@ -823,6 +827,7 @@ function deserializeGatekeeper(raw) {
     const g = raw || {};
     const opts = { audits: g.audits || [], vaultDoorId: g.vaultDoorId || '' };
     if (Object.prototype.hasOwnProperty.call(g, 'shields')) opts.shields = g.shields;
+    if (Object.prototype.hasOwnProperty.call(g, 'freshTicks')) opts.freshTicks = g.freshTicks;
     return new Gatekeeper(g.id, g.x, g.y, opts);
 }
 

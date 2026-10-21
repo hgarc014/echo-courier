@@ -817,6 +817,7 @@ function updatePropertiesPanel() {
         html += `</select></label><br>`;
         const shieldVal = selectedEntity.maxShields ?? selectedEntity.shields ?? 0;
         html += `<label>Shields: <input type="number" min="0" step="1" id="prop-gk-shields" value="${shieldVal}" style="width:60px"></label><br>`;
+        html += `<label title="Blank = any hold counts. An audit passes only if the occupant arrived after the previous audit and within this many ticks.">Fresh ticks: <input type="number" min="0" step="1" id="prop-gk-fresh" placeholder="off" value="${selectedEntity.freshTicks ?? ''}" style="width:70px"></label><br>`;
         html += `<div style="margin-top:8px;">Audits (plate + tick)</div>`;
         const plateIds = (state.plates || []).map(p => p.id).filter(id => id != null && id !== '');
         (selectedEntity.audits || []).forEach((a, i) => {
@@ -863,6 +864,7 @@ function updatePropertiesPanel() {
         id: document.getElementById('prop-id')?.value,
         vaultDoorId: document.getElementById('prop-gk-vault')?.value ?? '',
         shields: document.getElementById('prop-gk-shields')?.value,
+        freshTicks: document.getElementById('prop-gk-fresh')?.value ?? '',
         audits: readGkAudits()
     });
     const syncShieldsToAudits = (before) => {

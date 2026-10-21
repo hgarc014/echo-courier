@@ -36,4 +36,4 @@ for that many 60 Hz simulation ticks. Dialog/briefing screens are skipped automa
 Drop the file here and run `npm test`. World 1 replays also drop the last loop (must fail) and
 run a wrong plan for Return Trip (fetch the package, walk it to the plate, press R), Shift Change
 (leave the plate, and sprint the timer's first window), Airlock Relay (two loops, no relay),
-and Gatekeeper. Fetch-first must not finish within par.
+and Gatekeeper (park on the plates from the start, and rush the vault). Fetch-first must not finish within par.
