@@ -1097,7 +1097,9 @@ export class CrackedFloor extends Entity {
                     a.isActive = false;
                 }
             }
+            const carriedFragile = playerFell && playerCarriedFragileInto(this, actors);
             const cargoFail = swallowPackages(this);
+            if (carriedFragile) return 'Fragile Package Destroyed!';
             if (playerFell) return 'Fell into pit!';
             return cargoFail;
         }

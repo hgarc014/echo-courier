@@ -88,7 +88,7 @@ check('carried fragile shatters when the carrier is over a pit or broken crack',
     const fragile = cargo('fragile', 400, 400, 'player');
     state.packages = [fragile];
     const fail = crack.update([player]);
-    assert.equal(fail, 'Fell into pit!');
+    assert.equal(fail, 'Fragile Package Destroyed!');
     assert.equal(fragile.isDestroyed, true);
     assert.ok(fragile.breakFx, 'carried fragile should shatter with the courier');
 
@@ -101,6 +101,31 @@ check('carried fragile shatters when the carrier is over a pit or broken crack',
     assert.equal(pit.update([ghost]), 'Fragile Package Destroyed!');
     assert.equal(carried.isDestroyed, true);
     assert.ok(carried.breakFx);
+});
+
+check('player carrying fragile onto a broken crack reports fragile destruction', () => {
+    resetActors();
+    const player = box(80, 80);
+    state.player = player;
+    const crack = brokenCrack(80, 80);
+    const fragile = cargo('fragile', 500, 500, 'player');
+    state.packages = [fragile];
+    assert.equal(crack.update([player]), 'Fragile Package Destroyed!');
+    assert.equal(fragile.isDestroyed, true);
+    assert.ok(fragile.breakFx, 'carried fragile should shatter on the broken crack');
+
+    const bare = box(80, 80);
+    state.player = bare;
+    state.packages = [];
+    assert.equal(brokenCrack(80, 80).update([bare]), 'Fell into pit!');
+
+    const again = box(80, 80);
+    state.player = again;
+    const plain = cargo('standard', 500, 500, 'player');
+    state.packages = [plain];
+    assert.equal(brokenCrack(80, 80).update([again]), 'Fell into pit!');
+    assert.equal(plain.isDestroyed, true);
+    assert.equal(plain.breakFx, null);
 });
 
 check('player carrying fragile into a pit reports fragile destruction', () => {

@@ -135,6 +135,13 @@ function visualBlockers() {
     return slabs.length ? walls.concat(slabs) : walls;
 }
 
+// Pure red sits under the amber warning: green carries most of the luminance.
+// The live wedge is a wide orange glow with a white core so the beam reads hotter.
+const PRISM_TELEGRAPH = 'rgba(255, 176, 0, 0.48)';
+const PRISM_TELEGRAPH_EDGE = 'rgba(255, 206, 70, 0.5)';
+const PRISM_BEAM_GLOW = 'rgba(255, 132, 24, 0.94)';
+const PRISM_BEAM_CORE = '#ffffff';
+
 export class Prism extends Entity {
     constructor(x, y, opts = {}) {
         const params = normalizePrismParams(opts);
@@ -336,26 +343,32 @@ export class Prism extends Entity {
             const reach = lead + this.sweepSpeed * this.telegraphTime;
             const a0 = angle + this.spin * lead;
             const a1 = angle + this.spin * reach;
-            ctx.fillStyle = 'rgba(255, 176, 0, 0.62)';
+            ctx.fillStyle = PRISM_TELEGRAPH;
             traceSector(ctx, origin.x, origin.y, a0, a1, this.range, blockers);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 214, 60, 0.95)';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = PRISM_TELEGRAPH_EDGE;
+            ctx.lineWidth = 1.5;
             ctx.stroke();
-            ctx.fillStyle = 'rgba(255, 18, 24, 0.95)';
-            traceSector(ctx, origin.x, origin.y, angle - this.arc / 2, angle + this.arc / 2, this.range, blockers);
+            // Bloom behind the sweep so the glow is wider than the hurt wedge
+            // without painting over the warning ahead of the beam.
+            const bloom = Math.max(0.07, this.arc * 0.55);
+            const trail = this.spin > 0 ? -bloom : bloom;
+            ctx.fillStyle = PRISM_BEAM_GLOW;
+            traceSector(ctx, origin.x, origin.y, angle - lead + Math.min(trail, 0), angle + lead + Math.max(trail, 0), this.range, blockers);
+            ctx.fill();
+            traceSector(ctx, origin.x, origin.y, angle - lead, angle + lead, this.range, blockers);
             ctx.fill();
             const beamReach = blockerRayDistance(origin.x, origin.y, angle, this.range, blockers);
             ctx.save();
             ctx.lineCap = 'round';
-            ctx.strokeStyle = 'rgba(255, 40, 32, 1)';
-            ctx.lineWidth = 6;
+            ctx.strokeStyle = PRISM_BEAM_GLOW;
+            ctx.lineWidth = 22;
             ctx.beginPath();
             ctx.moveTo(origin.x, origin.y);
             ctx.lineTo(origin.x + Math.cos(angle) * beamReach, origin.y + Math.sin(angle) * beamReach);
             ctx.stroke();
-            ctx.strokeStyle = 'rgba(255, 248, 240, 0.98)';
-            ctx.lineWidth = 2.25;
+            ctx.strokeStyle = PRISM_BEAM_CORE;
+            ctx.lineWidth = 5;
             ctx.beginPath();
             ctx.moveTo(origin.x, origin.y);
             ctx.lineTo(origin.x + Math.cos(angle) * beamReach, origin.y + Math.sin(angle) * beamReach);

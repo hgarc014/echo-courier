@@ -247,33 +247,81 @@ check('a shielded echo opens a gap in a grid laser; diagonal facing does not', (
     assert.equal(shieldSlab({ x: 94, y: 120, w: 30, h: 30, facingX: 1, facingY: -1 }), null);
 });
 
-function rgbaOf(color) {
-    const m = String(color).match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)/);
+function parseCssColor(color) {
+    const s = String(color).trim();
+    const hex = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hex) {
+        let h = hex[1];
+        if (h.length === 3) h = h.split('').map(ch => ch + ch).join('');
+        return {
+            r: parseInt(h.slice(0, 2), 16),
+            g: parseInt(h.slice(2, 4), 16),
+            b: parseInt(h.slice(4, 6), 16),
+            a: 1
+        };
+    }
+    const m = s.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/i);
     if (!m) return null;
-    return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: Number(m[4]) };
+    return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: m[4] == null ? 1 : Number(m[4]) };
 }
 
-check('live prism beam reads stronger than the amber telegraph', () => {
+// https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+function channelLinear(channel) {
+    const s = channel / 255;
+    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance(rgb) {
+    return 0.2126 * channelLinear(rgb.r) + 0.7152 * channelLinear(rgb.g) + 0.0722 * channelLinear(rgb.b);
+}
+
+function compositeOver(dst, src) {
+    const a = src.a;
+    return {
+        r: src.r * a + dst.r * (1 - a),
+        g: src.g * a + dst.g * (1 - a),
+        b: src.b * a + dst.b * (1 - a),
+        a: 1
+    };
+}
+
+check('live prism beam luminance exceeds the amber telegraph', () => {
     resetWorld();
     state.currentTick = 0;
     const prism = new Prism(10, 10, {});
     const fills = [];
+    const strokes = [];
     const ctx = {
         save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, arc() {},
         closePath() {}, fill() {}, stroke() {}, fillRect() {}, strokeRect() {},
         set fillStyle(v) { fills.push(String(v)); },
-        set strokeStyle(_v) {},
+        set strokeStyle(v) { strokes.push(String(v)); },
         set lineWidth(_v) {},
         set lineCap(_v) {}
     };
     prism.render(ctx);
-    const parsed = fills.map(rgbaOf).filter(Boolean);
-    const amber = parsed.find(c => c.r > 200 && c.g > 140 && c.b < 40);
-    const live = parsed.find(c => c.r > 200 && c.g < 80 && c.b < 80);
+    const fillColors = fills.map(parseCssColor).filter(Boolean);
+    const strokeColors = strokes.map(parseCssColor).filter(Boolean);
+    const amber = fillColors.find(c => c.r > 200 && c.g > 150 && c.b < 40);
+    const glow = fillColors.find(c => c.r > 220 && c.g >= 80 && c.g <= 160 && c.b < 80 && c.a >= 0.85);
+    const core = [...strokeColors, ...fillColors].find(c => c.r >= 250 && c.g >= 250 && c.b >= 250 && c.a >= 0.9);
     assert.ok(amber, `amber telegraph fill missing in ${fills.join(' | ')}`);
-    assert.ok(live, `live red beam fill missing in ${fills.join(' | ')}`);
-    assert.ok(Math.abs(amber.a - 0.62) < 1e-9, `telegraph alpha ${amber.a}`);
-    assert.ok(live.a > amber.a + 0.2, `live beam alpha ${live.a} is not clearly above telegraph ${amber.a}`);
+    assert.ok(glow, `red/orange beam glow missing in ${fills.join(' | ')}`);
+    assert.ok(core, `white beam core missing in strokes ${strokes.join(' | ')}`);
+    // Level floor painted by draw() before entities: src/main.js '#10151c'.
+    const floor = { r: 0x10, g: 0x15, b: 0x1c, a: 1 };
+    const coreLum = relativeLuminance(core);
+    const glowComposite = compositeOver(floor, glow);
+    const beamComposite = compositeOver(glowComposite, core);
+    const telegraphComposite = compositeOver(floor, amber);
+    const glowLum = relativeLuminance(glowComposite);
+    const beamLum = relativeLuminance(beamComposite);
+    const telLum = relativeLuminance(telegraphComposite);
+    const fmt = (n) => n.toFixed(4);
+    console.log(`       WCAG relative luminance  core ${fmt(coreLum)}  glowComposite ${fmt(glowLum)}  beamComposite ${fmt(beamLum)}  telegraphComposite ${fmt(telLum)}`);
+    assert.ok(coreLum > telLum, `core ${fmt(coreLum)} is not above telegraph composite ${fmt(telLum)}`);
+    assert.ok(beamLum > telLum, `beam composite ${fmt(beamLum)} is not above telegraph composite ${fmt(telLum)}`);
+    assert.ok(glowLum > telLum, `wide glow composite ${fmt(glowLum)} is not above telegraph composite ${fmt(telLum)}`);
 });
 
 check('prism render does not throw on a stub context', () => {

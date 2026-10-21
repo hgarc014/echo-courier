@@ -212,7 +212,7 @@ export const W4_LEVELS = [
     level(
         'W4-L4: Prism Freight',
         'The wide beam has no plate. Cracked floor collapses under anyone who stays. Glass, a camera, and a timed gate are all live.',
-        'Nothing switches the wide beam off. Standing in it is not the same as passing through, and the cracked span gives way if anyone stays. A lens covers the northeast, the north gate keeps its own clock, and the glass still dies in a live beam. Another beam in the hall still listens for a plate.',
+        'Nothing switches the wide beam off. Standing in it is not the same as passing through, and the cracked span gives way if anyone stays.',
         3, 2, 36, W4_L4_LAYOUT,
         { ...SHIELD, flags: { crackSpeed: 'fast' } }
     ),
