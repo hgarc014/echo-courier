@@ -386,15 +386,67 @@ export class TimerDoor extends Entity {
         this.closedT = closedT;
         this.isOpen = (openT || 0) > 0;
     }
-    _occupied(actors, crates) {
-        const hit = (o) => o && AABB(this.x, this.y, this.w, this.h, o.x, o.y, o.w || 30, o.h || 30);
+    _hit(o) {
+        if (!o || o.isDestroyed) return false;
+        return AABB(this.x, this.y, this.w, this.h, o.x, o.y, o.w || 30, o.h || 30);
+    }
+    _actorsBlock(actors) {
         for (const a of actors || []) {
             if (a.isActive === false) continue;
-            if (hit(a)) return true;
+            if (this._hit(a)) return true;
         }
-        for (const p of crates || []) {
-            if (p.isDestroyed) continue;
-            if (hit(p)) return true;
+        return false;
+    }
+    _hitsWall(x, y, w, h) {
+        for (const wall of state.walls || []) {
+            if (AABB(x, y, w, h, wall.x, wall.y, wall.w, wall.h)) return true;
+        }
+        return false;
+    }
+    _spotClear(x, y, w, h) {
+        const mw = state.mapWidth || 800;
+        const mh = state.mapHeight || 600;
+        if (x < 0 || y < 0 || x + w > mw || y + h > mh) return false;
+        if (AABB(x, y, w, h, this.x, this.y, this.w, this.h)) return false;
+        if (this._hitsWall(x, y, w, h)) return false;
+        return true;
+    }
+    // Push a dropped crate to the nearer side of the doorway, clear of the door and walls.
+    _ejectCrate(crate) {
+        const GAP = 1;
+        const w = crate.w || 30;
+        const h = crate.h || 30;
+        const candidates = [
+            { x: this.x - w - GAP, y: crate.y, axis: 'y' },
+            { x: this.x + this.w + GAP, y: crate.y, axis: 'y' },
+            { x: crate.x, y: this.y - h - GAP, axis: 'x' },
+            { x: crate.x, y: this.y + this.h + GAP, axis: 'x' }
+        ];
+        candidates.sort((a, b) => {
+            const da = Math.hypot(a.x - crate.x, a.y - crate.y);
+            const db = Math.hypot(b.x - crate.x, b.y - crate.y);
+            return da - db;
+        });
+        const limit = Math.ceil(Math.max(this.w, this.h, w, h) + 240);
+        for (const cand of candidates) {
+            let placed = null;
+            if (this._spotClear(cand.x, cand.y, w, h)) placed = { x: cand.x, y: cand.y };
+            else {
+                for (let step = 1; step <= limit && !placed; step++) {
+                    if (cand.axis === 'y') {
+                        if (this._spotClear(cand.x, cand.y - step, w, h)) placed = { x: cand.x, y: cand.y - step };
+                        else if (this._spotClear(cand.x, cand.y + step, w, h)) placed = { x: cand.x, y: cand.y + step };
+                    } else if (this._spotClear(cand.x - step, cand.y, w, h)) placed = { x: cand.x - step, y: cand.y };
+                    else if (this._spotClear(cand.x + step, cand.y, w, h)) placed = { x: cand.x + step, y: cand.y };
+                }
+            }
+            if (!placed) continue;
+            crate.x = placed.x;
+            crate.y = placed.y;
+            crate.vx = 0;
+            crate.vy = 0;
+            crate.tossTicks = 0;
+            return true;
         }
         return false;
     }
@@ -403,7 +455,24 @@ export class TimerDoor extends Entity {
         const tick = state.currentTick || 0;
         const cycle = period > 0 ? tick % period : 0;
         const wantOpen = period > 0 ? cycle < this.openT : this.isOpen;
-        const nextOpen = wantOpen || this._occupied(actors, crates);
+        const actorBlocking = this._actorsBlock(actors);
+        // A dropped crate must not pin a timer door open. Shove it clear, then shut.
+        // Player and echo still hold the door; never close while either overlaps it.
+        if (!wantOpen && !actorBlocking) {
+            for (const p of crates || []) {
+                if (!p || p.isDestroyed) continue;
+                if (!this._hit(p)) continue;
+                this._ejectCrate(p);
+            }
+        }
+        let crateBlocking = false;
+        if (!wantOpen && !actorBlocking) {
+            for (const p of crates || []) {
+                if (!p || p.isDestroyed) continue;
+                if (this._hit(p)) { crateBlocking = true; break; }
+            }
+        }
+        const nextOpen = wantOpen || actorBlocking || crateBlocking;
         if (this.isOpen && !nextOpen) SFX.door();
         this.isOpen = nextOpen;
     }

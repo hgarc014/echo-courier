@@ -474,6 +474,11 @@ function clearHintPopupChrome() {
     if (panel) {
         panel.style.left = '';
         panel.style.top = '';
+        panel.style.width = '';
+        panel.style.minWidth = '';
+        panel.style.maxWidth = '';
+        panel.style.transform = '';
+        panel.style.transformOrigin = '';
         panel.classList.remove('tail-above', 'tail-below');
     }
     const mini = document.getElementById('demo-mini-canvas');
@@ -605,45 +610,108 @@ function applyHintPinnedScreen(panel) {
     if (!panel || !hintPinnedScreen) return;
     panel.style.left = `${hintPinnedScreen.left}px`;
     panel.style.top = `${hintPinnedScreen.top}px`;
+    if (hintPinnedScreen.width) {
+        panel.style.minWidth = '0px';
+        panel.style.maxWidth = 'none';
+        panel.style.width = `${hintPinnedScreen.width}px`;
+    }
+    const scale = hintPinnedScreen.scale;
+    panel.style.transformOrigin = 'top left';
+    panel.style.transform = (scale && scale !== 1) ? `scale(${scale})` : 'none';
     panel.classList.toggle('tail-below', !!hintPinnedScreen.placeAbove);
     panel.classList.toggle('tail-above', !hintPinnedScreen.placeAbove);
 }
 
+// L1 corridor walls sit at world y=180 and y=340. The hint bubble is pinned in
+// the empty band above y=180 (top of the canvas), scaled so the tail stays clear.
+const HINT_CORRIDOR_TOP = 180;
+const HINT_WORLD_GAP = 4;
+const HINT_TAIL_PX = 10;
+const HINT_BUBBLE_W = 236;
+let hintFontPinned = false;
+
+function scheduleHintFontPin() {
+    if (hintFontPinned || !document.fonts?.ready) return;
+    hintFontPinned = true;
+    document.fonts.ready.then(() => {
+        if (hintAnchor && isPopupDemo()) positionHintPopup();
+    });
+}
+
+function canvasContentScreenRect() {
+    const rect = canvas.getBoundingClientRect();
+    const ox = canvas.offsetWidth || rect.width || 1;
+    const oy = canvas.offsetHeight || rect.height || 1;
+    const sx = rect.width / ox;
+    const sy = rect.height / oy;
+    const clientW = canvas.clientWidth || ox;
+    const clientH = canvas.clientHeight || oy;
+    return {
+        left: rect.left + (canvas.clientLeft || 0) * sx,
+        top: rect.top + (canvas.clientTop || 0) * sy,
+        width: clientW * sx,
+        height: clientH * sy,
+        cssW: clientW,
+        cssH: clientH
+    };
+}
+
+function worldPointToScreen(wx, wy, content) {
+    const camX = hintAnchor?.camX || 0;
+    const camY = hintAnchor?.camY || 0;
+    return {
+        x: content.left + ((wx - camX) / VIEW_WIDTH) * content.width,
+        y: content.top + ((wy - camY) / VIEW_HEIGHT) * content.height
+    };
+}
+
 function positionHintPopup() {
     const panel = document.getElementById('demo-popup-panel');
-    const area = document.querySelector('.game-area');
-    if (!panel || !area || !hintAnchor) return;
-    const canvasRect = canvas.getBoundingClientRect();
-    const areaRect = area.getBoundingClientRect();
-    const worldCx = hintAnchor.x + hintAnchor.w / 2;
-    const worldCy = hintAnchor.y + hintAnchor.h / 2;
-    const sx = ((worldCx - (hintAnchor.camX || 0)) / VIEW_WIDTH) * canvasRect.width + (canvasRect.left - areaRect.left);
-    const sy = ((worldCy - (hintAnchor.camY || 0)) / VIEW_HEIGHT) * canvasRect.height + (canvasRect.top - areaRect.top);
-    const pw = panel.offsetWidth || 300;
-    const ph = panel.offsetHeight || 240;
-    const scaleY = canvasRect.height / VIEW_HEIGHT;
-    const plateBottom = sy + (hintAnchor.h || 36) * scaleY;
-    const plateTop = sy;
-    // Prefer below the plate so the L1 corridor and delivery zone stay visible.
-    let left = sx - pw / 2;
-    let top = plateBottom + 12;
-    let placeAbove = false;
-    if (top + ph > area.clientHeight - 4) {
-        const above = plateTop - ph - 16;
-        if (above >= 8) {
-            top = above;
-            placeAbove = true;
-        }
-    }
-    // Keep the left path + delivery zone (world x ≲ 180) clear of the bubble.
-    const keepClearRight = 180 * (canvasRect.width / VIEW_WIDTH);
-    if (left < keepClearRight) left = keepClearRight;
-    const maxLeft = Math.max(4, area.clientWidth - pw - 4);
-    const maxTop = Math.max(4, area.clientHeight - ph - 4);
-    left = Math.max(4, Math.min(left, maxLeft));
-    top = Math.max(4, Math.min(top, maxTop));
-    hintPinnedScreen = { left, top, placeAbove };
+    const overlay = document.getElementById('demo-overlay');
+    if (!panel || !overlay || !hintAnchor) return;
+
+    panel.style.transform = 'none';
+    panel.style.transformOrigin = 'top left';
+    panel.style.minWidth = '0px';
+    panel.style.maxWidth = 'none';
+    panel.style.width = `${HINT_BUBBLE_W}px`;
+    panel.style.height = 'auto';
+    panel.style.maxHeight = 'none';
+    const layoutW = panel.offsetWidth || HINT_BUBBLE_W;
+    const layoutH = panel.offsetHeight || 1;
+
+    const content = canvasContentScreenRect();
+    const overlayRect = overlay.getBoundingClientRect();
+    const ow = overlay.offsetWidth || overlayRect.width || 1;
+    const oh = overlay.offsetHeight || overlayRect.height || 1;
+    const localScaleX = overlayRect.width / ow;
+    const localScaleY = overlayRect.height / oh;
+    const worldPerCssX = VIEW_WIDTH / (content.cssW || 1);
+    const worldPerCssY = VIEW_HEIGHT / (content.cssH || 1);
+
+    const camX = hintAnchor.camX || 0;
+    const camY = hintAnchor.camY || 0;
+    const topWorld = camY + HINT_WORLD_GAP;
+    const roomWorld = Math.max(0, HINT_CORRIDOR_TOP - HINT_WORLD_GAP - topWorld);
+    // +1 CSS px absorbs subpixel rounding so the scaled tail stays above y=180.
+    const layoutWorldH = (layoutH + HINT_TAIL_PX + 1) * worldPerCssY;
+    const layoutWorldW = layoutW * worldPerCssX;
+    let scale = 1;
+    if (layoutWorldH > roomWorld && layoutWorldH > 0) scale = roomWorld / layoutWorldH;
+    const maxWorldW = Math.max(1, VIEW_WIDTH - HINT_WORLD_GAP * 2);
+    if (layoutWorldW * scale > maxWorldW) scale = Math.min(scale, maxWorldW / layoutWorldW);
+    if (!(scale > 0)) scale = 1;
+    scale = Math.min(1, scale);
+
+    const worldW = layoutWorldW * scale;
+    const worldX = camX + (VIEW_WIDTH - worldW) / 2;
+    const screenTopLeft = worldPointToScreen(worldX, topWorld, content);
+    const left = (screenTopLeft.x - overlayRect.left) / (localScaleX || 1);
+    const top = (screenTopLeft.y - overlayRect.top) / (localScaleY || 1);
+
+    hintPinnedScreen = { left, top, placeAbove: true, scale, width: HINT_BUBBLE_W };
     applyHintPinnedScreen(panel);
+    scheduleHintFontPin();
 }
 
 window.addEventListener('resize', () => {
