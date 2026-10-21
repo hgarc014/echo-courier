@@ -653,7 +653,7 @@ function updatePropertiesPanel() {
         html += `<label>Title: <input type="text" id="prop-hint-title" value="${escapeAttr(selectedEntity.title||'')}" style="width:100%"></label><br>`;
         html += `<label>Demo ID: <input type="text" id="prop-hint-demoId" value="${escapeAttr(selectedEntity.demoId||'')}" style="width:100%"></label><br>`;
         html += `<label><input type="checkbox" id="prop-hint-autoOpen" ${selectedEntity.autoOpen?'checked':''}> Auto-open on step</label><br>`;
-        html += `<label>Inline demo JSON<textarea id="prop-hint-demo" rows="6" style="width:100%; font-family:monospace; font-size:0.75rem;">${escapeAttr(selectedEntity.demo?.steps ? JSON.stringify(selectedEntity.demo, null, 2) : '')}</textarea></label><br>`;
+        html += `<label>Inline demo JSON<textarea id="prop-hint-demo" rows="6" style="box-sizing:border-box; max-width:100%; width:100%; resize:vertical; overflow:auto; font-family:monospace; font-size:0.75rem;">${escapeAttr(selectedEntity.demo?.steps ? JSON.stringify(selectedEntity.demo, null, 2) : '')}</textarea></label><br>`;
     }
 
     if (selectedEntity instanceof PressurePlate) {

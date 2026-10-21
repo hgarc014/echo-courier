@@ -88,6 +88,11 @@ body {
     font-size: 0.95rem;
     line-height: 1.35;
 }
+.stat-box .loop-stat {
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+    word-spacing: 0.12em;
+}
 .hud-audio-btn {
     width: 46px;
     height: 46px;
@@ -385,9 +390,11 @@ h2 { color: var(--accent-safe); font-size: 2.5rem; margin-bottom: 16px; letter-s
 .level-btn .level-lock {
     display: block;
     margin: 0 0 2px;
-    font-size: 0.7rem;
+    font-size: 1.25rem;
+    line-height: 1;
     font-weight: 700;
-    letter-spacing: 1px;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--text-dim);
 }
 .level-btn.gold-star {
@@ -404,9 +411,26 @@ h2 { color: var(--accent-safe); font-size: 2.5rem; margin-bottom: 16px; letter-s
     background: rgba(0, 243, 255, 0.1); border-color: var(--accent-ghost);
     box-shadow: 0 0 15px rgba(0, 243, 255, 0.2); transform: translateY(-2px);
 }
-.level-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.level-btn.locked,
+.level-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(0.35);
+    color: var(--text-dim);
+    pointer-events: none;
+}
 
 .dev-mode-toggle { margin-top: 40px; color: var(--text-dim); font-size: 0.9rem; }
+#dev-mode-controls[hidden] { display: none !important; }
+
+#editor-overlay textarea,
+#editor-properties textarea {
+    box-sizing: border-box;
+    max-width: 100%;
+    width: 100%;
+    resize: vertical;
+    overflow: auto;
+}
 
 @media (max-width: 860px) {
     .top-hud {
@@ -1037,7 +1061,7 @@ body.touch-ui .demo-skip-btn {
 
 
 
-/* Hint demo: small bubble anchored to the ? plate. No full-screen dim. */
+/* Hint demo: small bubble pinned above the L1 corridor. No full-screen dim. */
 .demo-overlay.demo-overlay-popup {
     background: transparent;
     pointer-events: none;
@@ -1050,16 +1074,48 @@ body.touch-ui .demo-skip-btn {
     position: absolute;
     left: 12px;
     top: 12px;
-    width: 300px;
-    min-width: 280px;
-    max-width: 320px;
+    width: 236px;
+    min-width: 0;
+    max-width: none;
     z-index: 60;
     pointer-events: auto;
-    gap: 8px;
-    padding: 10px 12px 14px;
+    gap: 4px;
+    padding: 6px 8px 8px;
     background: rgba(8, 12, 18, 0.96);
     border-color: rgba(0, 243, 255, 0.55);
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), 0 0 18px rgba(0, 243, 255, 0.18);
+    transform-origin: top left;
+}
+.demo-overlay.demo-overlay-popup .demo-popup-header {
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+.demo-overlay.demo-overlay-popup .demo-title {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.demo-overlay.demo-overlay-popup .demo-popup-actions .demo-skip-btn,
+.demo-overlay.demo-overlay-popup .demo-popup-actions .demo-close-btn {
+    padding: 3px 6px;
+    font-size: 0.65rem;
+}
+.demo-overlay.demo-overlay-popup .demo-mini-canvas {
+    height: 68px;
+    flex: 0 0 auto;
+}
+.demo-overlay.demo-overlay-popup .demo-caption {
+    font-size: 0.72rem;
+    line-height: 1.25;
+    padding: 4px 6px;
+    min-height: 36px;
+    max-height: 36px;
+    overflow: hidden;
+}
+.demo-overlay.demo-overlay-popup #demo-caption.hidden {
+    display: block !important;
+    visibility: hidden;
 }
 .demo-mini-canvas {
     display: block;

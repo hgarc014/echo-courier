@@ -144,9 +144,32 @@ export function getCredits() {
     return earned - spent;
 }
 
+export function isDevUrlEnabled() {
+    try {
+        return new URLSearchParams(location.search).get('dev') === '1';
+    } catch {
+        return false;
+    }
+}
+
+export function isDevMode() {
+    if (!isDevUrlEnabled()) return false;
+    const el = document.getElementById('dev-mode-checkbox');
+    return !!(el && el.checked);
+}
+
+export function applyDevModeUi() {
+    const allowed = isDevUrlEnabled();
+    const box = document.getElementById('dev-mode-controls');
+    if (box) box.hidden = !allowed;
+    if (!allowed) {
+        const cb = document.getElementById('dev-mode-checkbox');
+        if (cb) cb.checked = false;
+    }
+}
+
 export function getPlayerRank() {
-    const devMode = document.getElementById('dev-mode-checkbox');
-    if (devMode && devMode.checked) return 4;
+    if (isDevMode()) return 4;
     if (state.maxUnlockedLevel >= 11) return 4;
     if (state.maxUnlockedLevel >= 9) return 3;
     if (state.maxUnlockedLevel >= 6) return 2;
@@ -160,8 +183,7 @@ export function applyLevelAbilityOverrides(level) {
 }
 
 export function getUnlockedAbilities() {
-    const devMode = document.getElementById('dev-mode-checkbox');
-    if (devMode && devMode.checked) return ['dash', 'toss', 'cloak', 'ghostShield'];
+    if (isDevMode()) return ['dash', 'toss', 'cloak', 'ghostShield'];
     let unlocks = new Set();
     const gate = state.worldUnlockedAbilities;
     const allowPurchased = (ability) => gate == null || gate.includes(ability);

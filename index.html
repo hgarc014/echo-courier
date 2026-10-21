@@ -87,14 +87,16 @@
                 <button id="voice-test-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0;">TEST VOICE</button>
                 <br><br>
                 <button id="global-audio-toggle-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0;">MUTE ALL AUDIO</button>
-                <br><br><br>
-                <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-mode-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Developer Mode (Unlock All)</label>
-                <br><br><br>
-                <button id="open-editor-btn" class="primary-btn" style="padding: 10px 20px; border-color: #39ff14; color: #39ff14;">LAUNCH LEVEL EDITOR</button>
-                <br><br>
-                <button id="open-sandbox-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0; border-color: #ffdd00; color: #ffdd00;">OPEN DEV SANDBOX</button>
-                <br><br><br>
-                <button id="reset-save-btn" class="secondary-btn" style="padding: 10px 20px; border-color: red; color: red;">WIPE ALL SAVE DATA</button>
+                <div id="dev-mode-controls" hidden>
+                    <br><br><br>
+                    <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-mode-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Developer Mode (Unlock All)</label>
+                    <br><br><br>
+                    <button id="open-editor-btn" class="primary-btn" style="padding: 10px 20px; border-color: #39ff14; color: #39ff14;">LAUNCH LEVEL EDITOR</button>
+                    <br><br>
+                    <button id="open-sandbox-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0; border-color: #ffdd00; color: #ffdd00;">OPEN DEV SANDBOX</button>
+                    <br><br><br>
+                    <button id="reset-save-btn" class="secondary-btn" style="padding: 10px 20px; border-color: red; color: red;">WIPE ALL SAVE DATA</button>
+                </div>
             </div>
             <button class="secondary-btn" style="margin-top: 40px;" onclick="showSubMenu('main')">BACK</button>
         </div>
@@ -107,7 +109,7 @@
                 <h1 class="logo">ECHO COURIER</h1>
             </div>
             <div class="hud-center">
-                <div class="stat-box">Loop <span id="loop-count">0</span> / Maximum <span id="max-loops">∞</span></div>
+                <div class="stat-box"><span class="loop-stat">Loop&nbsp;<span id="loop-count">0</span>&nbsp;/&nbsp;Max&nbsp;<span id="max-loops">∞</span></span></div>
                 <div class="stat-box hidden" id="delivery-progress-box">Delivery <span id="delivery-progress">0 / 0</span></div>
                 <div class="objective" id="objective-text">Deliver the package safely to the green zone.</div>
                 <span id="level-display" style="display:none;">1</span>
@@ -274,7 +276,7 @@
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-autoplay" checked> Auto-play on first enter</label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-skippable" checked> Skippable</label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Demo steps (JSON array)
-          <textarea id="editor-meta-demo-steps" rows="8" placeholder='[{ "type": "caption", "text": "..." }]' style="width:100%; padding:6px; background:#000; color:var(--accent-safe); border:1px solid #444; font-family:monospace; font-size:0.75rem;"></textarea>
+          <textarea id="editor-meta-demo-steps" rows="8" placeholder='[{ "type": "caption", "text": "..." }]' style="box-sizing:border-box; max-width:100%; width:100%; resize:vertical; overflow:auto; padding:6px; background:#000; color:var(--accent-safe); border:1px solid #444; font-family:monospace; font-size:0.75rem;"></textarea>
         </label>
         <p style="font-size:0.7rem; color:#7d8590; margin:0 0 8px;">Leave empty for no demo. Apply, then save/load and playtest round-trip the script.</p>
         <button class="secondary-btn" id="editor-meta-apply" style="width:100%; margin-top:0; border-color:#0ff; color:#0ff;">Apply Level Config</button>
