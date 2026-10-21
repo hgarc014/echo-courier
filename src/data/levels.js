@@ -2,8 +2,10 @@ import { state } from '../core/state.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
+import { Burrower } from '../entities/bosses/Burrower.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
+import { W2_LEVELS } from './world2Levels.js';
 
 // ==== PROVISIONAL WORLD MAPPING (PR2) — replace when world content PRs land ====
 export const WORLDS = [
@@ -14,7 +16,7 @@ export const WORLDS = [
   { id: 5, name: 'Overclock',  unlocks: [],                 levels: [10, 11] },
 ];
 
-let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, projectiles;
+let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, projectiles;
 
 export function createBoundWalls(w, h, t = 20) {
     return [
@@ -553,7 +555,8 @@ export const LEVELS = [
     { name: "Level 11: Time Dilation", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; } },
 
     { name: "Level 12: Danger Courier", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => state.pastRuns.length === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; } },
-    { name: "Dev Sandbox", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox }
+    { name: "Dev Sandbox", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox },
+    ...W2_LEVELS
 ];
 
 for (const world of WORLDS) {
@@ -610,7 +613,7 @@ export function getShopUnlockedAbilities(maxUnlockedLevel) {
     return unlocked;
 }
 
-export const CAMPAIGN_LEVEL_COUNT = LEVELS.filter(level => !level.isSandbox && !level.isPlaytest).length;
+export const CAMPAIGN_LEVEL_COUNT = LEVELS.filter(level => !level.isSandbox && !level.isPlaytest && !level.isPendingCampaign).length;
 export const SANDBOX_LEVEL_INDEX = LEVELS.findIndex(level => level.isSandbox);
 
 // Robot config that differs from ShooterRobot defaults (only written when non-default).
@@ -629,6 +632,32 @@ function deserializeRobot(r) {
         if (r[k] !== undefined) robot[k] = r[k];
     }
     return robot;
+}
+
+function serializeBurrower(b) {
+    return {
+        x: b.startX ?? b.x,
+        y: b.startY ?? b.y,
+        w: b.w,
+        h: b.h,
+        id: b.id,
+        hp: b.maxHp ?? b.hp ?? 3,
+        surfaceInterval: b.surfaceInterval,
+        telegraphTime: b.telegraphTime,
+        stunTime: b.stunTime,
+        corePlateIds: [...(b.corePlateIds || [])],
+        defeatDoorId: b.defeatDoorId || 'boss_door'
+    };
+}
+function deserializeBurrower(b) {
+    return new Burrower(b.x || 0, b.y || 0, {
+        w: b.w, h: b.h, id: b.id, hp: b.hp,
+        surfaceInterval: b.surfaceInterval,
+        telegraphTime: b.telegraphTime,
+        stunTime: b.stunTime,
+        corePlateIds: b.corePlateIds,
+        defeatDoorId: b.defeatDoorId
+    });
 }
 
 // Boss/challenge level config shared by serialize, deserialize and the editor.
@@ -707,6 +736,7 @@ export function serializeLevel(src = state) {
         statics: (src.statics || []).map(s => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
         cracks: (src.cracks || []).map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
         robots: (src.robots || []).map(serializeRobot),
+        burrowers: (src.burrowers || []).map(serializeBurrower),
         crackSpeed: crackSpeedFromMeta(m, src.crackSpeed)
     };
     if (demo) payload.demo = demo;
@@ -777,6 +807,7 @@ export function deserializeLevel(data) {
     const crackSpeed = specifiedCrackSpeed(data);
     cracks = (data.cracks||[]).map(c => new CrackedFloor(c.x, c.y, c.w, c.h, crackSpeed || undefined));
     robots = (data.robots||[]).map(deserializeRobot);
+    burrowers = (data.burrowers||[]).map(deserializeBurrower);
     projectiles = [];
 
     const demo = cloneDemo(data.demo || data.meta?.demo);
@@ -813,7 +844,7 @@ export function deserializeLevel(data) {
         }
     }
     
-    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, projectiles }, size);
+    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, projectiles }, size);
 }
 
 export function getLevelSetup(index) {
@@ -824,13 +855,14 @@ export function getLevelSetup(index) {
     if (level.setup) {
         level.setup();
         hints = [];
+        burrowers = [];
         if (level.crackSpeed === 'fast' || level.crackSpeed === 'normal') {
             for (const c of cracks) if (c && typeof c.setCrackSpeed === 'function') c.setCrackSpeed(level.crackSpeed);
         }
         return withMapSize({
             player, deliveryZone, walls, doors, plates, hints, packages,
             lasers, guards, cameras, drones, winds, statics, cracks,
-            robots, projectiles
+            robots, burrowers, projectiles
         }, size);
     } else if (level.layout) {
         const payload = { ...level.layout, ...size, demos: level.demos, demo: level.demo };

@@ -1,0 +1,26 @@
+{
+ "format": "echo-courier-solution/v1",
+ "level": 14,
+ "levelName": "W2-L2: Footprints",
+ "loops": [
+  [
+   ["", 1],
+   ["w", 54],
+   ["d", 162],
+   ["w", 53],
+   ["a", 156],
+   ["s", 11],
+   ["", 8],
+   ["r", 1]
+  ],
+  [
+   ["", 445],
+   ["d", 111],
+   ["space", 1],
+   ["s+d", 2],
+   ["d", 44],
+   ["space", 1]
+  ]
+ ],
+ "completedLoops": 2
+}

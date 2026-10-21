@@ -47,7 +47,7 @@ export function refreshLevelSelectGrid() {
 
     const placed = new Set();
     const appendLevelButton = (lvl, idx) => {
-        let unlocked = isDevMode() || idx <= state.maxUnlockedLevel;
+        let unlocked = isDevMode() || idx <= state.maxUnlockedLevel || !!lvl.isPendingCampaign;
         let btn = document.createElement('button');
         btn.className = unlocked ? 'level-btn unlocked' : 'level-btn locked';
         btn.type = 'button';
@@ -55,10 +55,11 @@ export function refreshLevelSelectGrid() {
 
         let hasGold = state.challengesCompleted[idx] === true;
         if (hasGold) btn.classList.add('gold-star');
-        btn.innerHTML = `${levelSelectIconHtml(unlocked, hasGold)}<span class="level-num">Level ${idx + 1}</span>`;
+        const label = lvl.isPendingCampaign ? lvl.name : `Level ${idx + 1}`;
+        btn.innerHTML = `${levelSelectIconHtml(unlocked, hasGold)}<span class="level-num">${label}</span>`;
         btn.setAttribute('aria-label', hasGold
-            ? `Level ${idx + 1}, gold star challenge complete`
-            : unlocked ? `Level ${idx + 1}` : `Level ${idx + 1}, locked`);
+            ? `${label}, gold star challenge complete`
+            : unlocked ? label : `${label}, locked`);
         if (hasGold) btn.title = 'Gold star challenge complete';
         else if (!unlocked) btn.title = 'Locked';
         else if (lvl.challenge?.desc) btn.title = `Par: ${lvl.challenge.desc}`;
@@ -79,8 +80,16 @@ export function refreshLevelSelectGrid() {
         }
     }
 
+    let pendingHeader = false;
     LEVELS.forEach((lvl, idx) => {
         if (lvl.isTutorial || lvl.isSandbox || placed.has(idx)) return;
+        if (lvl.isPendingCampaign && !pendingHeader) {
+            pendingHeader = true;
+            const header = document.createElement('div');
+            header.className = 'world-header';
+            header.textContent = 'Subfloor routes (pending campaign order)';
+            uiLevelGrid.appendChild(header);
+        }
         appendLevelButton(lvl, idx);
     });
 }

@@ -80,3 +80,30 @@ export function applyInspectorEdits(ent, edits = {}) {
     if (hasX || hasY) moveEntityTo(ent, hasX ? edits.x : ent.x, hasY ? edits.y : ent.y);
     if (edits.baseAngle !== undefined || edits.sweepRange !== undefined) applyCameraConfig(ent, edits);
 }
+
+/** Inspector fields for a Burrower. Times are seconds. hp sets both hp and maxHp. */
+export function applyBurrowerConfig(ent, cfg = {}) {
+    if (!ent || !cfg) return ent;
+    if (cfg.hp != null && cfg.hp !== '') {
+        const hp = Math.max(1, Math.round(Number(cfg.hp)) || 1);
+        ent.hp = hp;
+        ent.maxHp = hp;
+    }
+    const applySeconds = (key, min) => {
+        if (cfg[key] == null || cfg[key] === '') return;
+        const n = Number(cfg[key]);
+        if (!Number.isFinite(n)) return;
+        ent[key] = Math.max(min, n);
+    };
+    applySeconds('surfaceInterval', 0.05);
+    applySeconds('telegraphTime', 0.05);
+    applySeconds('stunTime', 0);
+    if (cfg.corePlateIds != null) {
+        const raw = Array.isArray(cfg.corePlateIds) ? cfg.corePlateIds : String(cfg.corePlateIds).split(',');
+        ent.corePlateIds = raw.map(s => String(s).trim()).filter(Boolean);
+    }
+    if (cfg.defeatDoorId != null && String(cfg.defeatDoorId).trim()) {
+        ent.defeatDoorId = String(cfg.defeatDoorId).trim();
+    }
+    return ent;
+}

@@ -1,0 +1,27 @@
+{
+ "format": "echo-courier-solution/v1",
+ "level": 15,
+ "levelName": "W2-L3: Heavy Going",
+ "loops": [
+  [
+   ["", 1],
+   ["w+d", 17],
+   ["w", 65],
+   ["d", 33],
+   ["d+shift", 1],
+   ["w+d", 10],
+   ["d", 45],
+   ["", 10],
+   ["r", 1]
+  ],
+  [
+   ["", 180],
+   ["d", 22],
+   ["space", 1],
+   ["s+d", 9],
+   ["d", 221],
+   ["space", 1]
+  ]
+ ],
+ "completedLoops": 2
+}
