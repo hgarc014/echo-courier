@@ -4,10 +4,11 @@ import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
+import { Burrower } from '../entities/bosses/Burrower.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { normalizeTimeline } from '../systems/temporalPlate.js';
-import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, degToRad, radToDeg } from './editorInspector.js';
+import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, degToRad, radToDeg } from './editorInspector.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -39,7 +40,8 @@ const ENTITY_LISTS = [
     ['winds', 'wind'],
     ['statics', 'static'],
     ['cracks', 'crack'],
-    ['robots', 'robot']
+    ['robots', 'robot'],
+    ['burrowers', 'burrower']
 ];
 
 const DEFAULT_EDITOR_META = () => ({
@@ -357,6 +359,7 @@ function pasteClipboard() {
     else if (clipboard.list === 'plates') data.id = 'p_' + Date.now();
     else if (clipboard.list === 'packages') data.id = 'pkg_' + Date.now();
     else if (clipboard.list === 'lasers') data.id = 'l_' + Date.now();
+    else if (clipboard.list === 'burrowers') data.id = 'burrower_' + Date.now();
     const spawned = (deserializeLevel({ [clipboard.list]: [data] })[clipboard.list] || [])[0];
     if (!spawned) return;
     if (clipboard.list === 'cracks' && typeof spawned.setCrackSpeed === 'function') {
@@ -516,6 +519,11 @@ export function initEditor(canvas, ctx) {
         else if (type === 'static') { spawned = new StaticZone(cx, cy, 80, 80); state.statics.push(spawned); }
         else if (type === 'crack') { spawned = new CrackedFloor(cx, cy, 40, 40, ensureEditorLevelMeta().crackSpeed); state.cracks.push(spawned); }
         else if (type === 'robot') { spawned = new ShooterRobot([{x:cx,y:cy}, {x:cx+40,y:cy}]); state.robots.push(spawned); }
+        else if (type === 'burrower') {
+            if (!state.burrowers) state.burrowers = [];
+            spawned = new Burrower(cx, cy, { id: 'burrower_' + id, hp: 3, surfaceInterval: 3, telegraphTime: 1, stunTime: 2, corePlateIds: [], defeatDoorId: 'boss_door' });
+            state.burrowers.push(spawned);
+        }
         else if (type === 'player') {
             if (!state.player) state.player = new PlayerEntity(cx, cy, 30, 30, 'player');
             else { state.player.x = cx; state.player.y = cy; }
@@ -534,7 +542,7 @@ export function initEditor(canvas, ctx) {
     function deleteSelectedEntity() {
         if (!selectedEntity) return;
         pushUndo();
-        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','drones'].forEach(list => {
+        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','burrowers','drones'].forEach(list => {
             state[list] = state[list].filter(e => e !== selectedEntity);
         });
         selectedEntity = null; updatePropertiesPanel();
@@ -598,7 +606,7 @@ export function initEditor(canvas, ctx) {
         const world = screenToWorld(sx, sy);
         selectedEntity = null;
         
-        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...state.drones];
+        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...(state.burrowers||[]), ...state.drones];
         
         for (let i = allEntities.length - 1; i >= 0; i--) {
             let ent = allEntities[i];
@@ -747,6 +755,15 @@ function updatePropertiesPanel() {
         html += `<label>Fire cooldown: <input type="number" min="0" id="prop-robot-cooldown" value="${selectedEntity.fireCooldown||0}" style="width:60px"></label><br>`;
     }
 
+    if (selectedEntity instanceof Burrower) {
+        html += `<label>HP: <input type="number" min="1" id="prop-burrower-hp" value="${selectedEntity.maxHp ?? selectedEntity.hp ?? 3}" style="width:60px"></label><br>`;
+        html += `<label>Surface interval (sec): <input type="number" min="0.05" step="0.05" id="prop-burrower-surface" value="${selectedEntity.surfaceInterval ?? 3}" style="width:70px"></label><br>`;
+        html += `<label>Telegraph (sec): <input type="number" min="0.05" step="0.05" id="prop-burrower-telegraph" value="${selectedEntity.telegraphTime ?? 1}" style="width:70px"></label><br>`;
+        html += `<label>Stun (sec): <input type="number" min="0" step="0.05" id="prop-burrower-stun" value="${selectedEntity.stunTime ?? 2}" style="width:70px"></label><br>`;
+        html += `<label>Core plate ids: <input type="text" id="prop-burrower-cores" value="${escapeAttr((selectedEntity.corePlateIds || []).join(', '))}" style="width:100%"></label><br>`;
+        html += `<label>Defeat door id: <input type="text" id="prop-burrower-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
+    }
+
     if (selectedEntity instanceof HintPlate) {
         html += `<label>Title: <input type="text" id="prop-hint-title" value="${escapeAttr(selectedEntity.title||'')}" style="width:100%"></label><br>`;
         html += `<label>Demo ID: <input type="text" id="prop-hint-demoId" value="${escapeAttr(selectedEntity.demoId||'')}" style="width:100%"></label><br>`;
@@ -847,6 +864,16 @@ function updatePropertiesPanel() {
             selectedEntity.emergeUntilPathIndex = Math.max(0, parseInt(document.getElementById('prop-robot-emerge-idx').value, 10) || 0);
             selectedEntity.hp = Math.max(1, parseInt(document.getElementById('prop-robot-hp').value, 10) || 3);
             selectedEntity.fireCooldown = Math.max(0, parseInt(document.getElementById('prop-robot-cooldown').value, 10) || 0);
+        }
+        if (document.getElementById('prop-burrower-hp')) {
+            applyBurrowerConfig(selectedEntity, {
+                hp: document.getElementById('prop-burrower-hp').value,
+                surfaceInterval: document.getElementById('prop-burrower-surface').value,
+                telegraphTime: document.getElementById('prop-burrower-telegraph').value,
+                stunTime: document.getElementById('prop-burrower-stun').value,
+                corePlateIds: document.getElementById('prop-burrower-cores').value,
+                defeatDoorId: document.getElementById('prop-burrower-door').value
+            });
         }
         if (document.getElementById('prop-hint-title')) selectedEntity.title = document.getElementById('prop-hint-title').value || 'Hint Demo';
         if (document.getElementById('prop-hint-demoId')) selectedEntity.demoId = document.getElementById('prop-hint-demoId').value || null;

@@ -73,8 +73,10 @@ export const state = {
     currentLevelMeta: null,
     pendingBossIntro: null,
     
-    walls: [], doors: [], plates: [], hints: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], projectiles: [], dashTrails: [],
+    walls: [], doors: [], plates: [], hints: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], projectiles: [], dashTrails: [],
     deliveryZone: null, player: null,
+    bossCheckpoint: null,
+    bossCheckpointLive: false,
     mapWidth: 800, mapHeight: 600,
     camX: 0, camY: 0,
     playtesting: false,
@@ -82,7 +84,7 @@ export const state = {
     editorReturnLayout: null,
     
     resetRunData: function() {
-        this.walls=[]; this.doors=[]; this.plates=[]; this.hints=[]; this.packages=[]; this.lasers=[]; this.guards=[]; this.cameras=[]; this.drones=[]; this.winds=[]; this.statics=[]; this.cracks=[]; this.robots=[]; this.projectiles=[]; this.dashTrails=[]; this.deliveryZone=null; this.player=null;
+        this.walls=[]; this.doors=[]; this.plates=[]; this.hints=[]; this.packages=[]; this.lasers=[]; this.guards=[]; this.cameras=[]; this.drones=[]; this.winds=[]; this.statics=[]; this.cracks=[]; this.robots=[]; this.burrowers=[]; this.projectiles=[]; this.dashTrails=[]; this.deliveryZone=null; this.player=null;
         this.failTimer=0; this.failMessage=""; this.failFx=null; this.rewindFx=null; this.ghostFellFx=[]; this.shakeTimer=0; this.shakeMax=0; this.shakeMag=0; this.rewindFreeze=0;
         this.camX=0; this.camY=0;
     }

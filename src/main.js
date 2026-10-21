@@ -365,6 +365,7 @@ function applyLoadedLevel(setupData) {
     if (!setupData) return;
     Object.assign(state, setupData);
     if (!Array.isArray(state.hints)) state.hints = [];
+    if (!Array.isArray(state.burrowers)) state.burrowers = [];
     setMapSize(setupData.mapWidth || DEFAULT_MAP_WIDTH, setupData.mapHeight || DEFAULT_MAP_HEIGHT);
     resetPlayerLoopState();
     if (state.gameState !== 'EDITOR' && state.player) {
@@ -839,7 +840,9 @@ export function startGame(levelIndex) {
     let lv = LEVELS[levelIndex];
     state.levelAbilityOverrides = [...(lv.grants || [])];
     state.worldUnlockedAbilities = getWorldUnlockedAbilities(levelIndex);
-    state.robots = []; state.projectiles = [];
+    state.robots = []; state.burrowers = []; state.projectiles = [];
+    state.bossCheckpoint = null;
+    state.bossCheckpointLive = false;
     state.playtesting = false;
     state.customLayout = null;
     state.editorReturnLayout = null;
@@ -910,9 +913,11 @@ export function resetRun() {
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
     const loopLevel = state.currentLevelMeta || LEVELS[state.currentLevelIndex];
-    if (loopLevel?.maxGhosts && state.pastRuns.length > loopLevel.maxGhosts) state.pastRuns.shift();
-    
+    if (loopLevel && loopLevel.maxGhosts != null && state.pastRuns.length > loopLevel.maxGhosts) state.pastRuns.shift();
+
+    state.bossCheckpointLive = true;
     applyLoadedLevel(loadCurrentEntities());
+    state.bossCheckpointLive = false;
     if (state.currentLevelMeta?.isBoss) engageBossEncounter(state.currentLevelMeta);
     state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
     if (recorded) warnEchoesEndingOnCracks();
@@ -932,6 +937,8 @@ export function restartLevel() {
     state.currentLevelMeta = lv;
     state.levelAbilityOverrides = [...(lv.grants || [])];
     state.worldUnlockedAbilities = state.playtesting ? getPlaytestWorldUnlocks(lv) : getWorldUnlockedAbilities(state.currentLevelIndex);
+    state.bossCheckpoint = null;
+    state.bossCheckpointLive = false;
     applyLoadedLevel(loadCurrentEntities());
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
@@ -1019,6 +1026,8 @@ export function startPlaytestFromEditor() {
     if (playtestLoopTime != null) state.currentLevelMeta.loopTime = playtestLoopTime;
     state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
     state.worldUnlockedAbilities = getPlaytestWorldUnlocks(state.currentLevelMeta);
+    state.bossCheckpoint = null;
+    state.bossCheckpointLive = false;
     state.pendingBossIntro = state.currentLevelMeta.bossIntro || null;
     document.getElementById('max-loops').innerText = state.currentLevelMeta.maxGhosts + 1;
     document.getElementById('level-display').innerText = getLevelDisplayLabel(0, state.currentLevelMeta);
@@ -1234,6 +1243,7 @@ function update() {
     }
 
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
+    for (const burrower of state.burrowers || []) burrower.update(allActors);
     for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
     for (const g of state.activeGhosts) if (g.isActive) g._crackFell = false;
     
@@ -1821,7 +1831,7 @@ function draw() {
         ctx.stroke(); ctx.restore();
     });
     
-    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
+    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
     drawEchoHazardFlashes(ctx);

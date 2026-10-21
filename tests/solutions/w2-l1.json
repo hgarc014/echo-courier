@@ -1,0 +1,18 @@
+{
+ "format": "echo-courier-solution/v1",
+ "level": 13,
+ "levelName": "W2-L1: Thin Ice",
+ "loops": [
+  [
+   ["", 1],
+   ["d", 149],
+   ["space", 1],
+   ["s+d", 7],
+   ["s", 84],
+   ["a+s", 3],
+   ["a", 143],
+   ["space", 1]
+  ]
+ ],
+ "completedLoops": 1
+}

@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { replaySolution } from './harness/replay.mjs';
+import { replaySolution, state } from './harness/replay.mjs';
 import { getLevelSetup, serializeLevel } from '../src/data/levels.js';
+import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'solutions');
 const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort();
@@ -25,6 +26,14 @@ for (const f of files) {
         assert.ok(r.completed, `level not completed after ${r.ticks} ticks, ${r.loopsUsed} loops; fails: ${r.failMessages.join(' | ') || 'none'}`);
         if (r.par != null) assert.ok(r.loopsUsed <= r.par, `over par: ${r.loopsUsed} loops > par ${r.par}`);
         if (sol.completedLoops != null) assert.equal(r.loopsUsed, sol.completedLoops, 'loop count drifted from recording');
+        if (String(sol.levelName || '').startsWith('W2-')) {
+            const ends = (state.pastRuns || []).map((run, id) => {
+                const step = run && run.length ? run[run.length - 1] : {};
+                return { id, x: step.x, y: step.y, w: 30, h: 30 };
+            });
+            const offenders = findEchoesEndingOnCracks({ cracks: state.cracks }, ends);
+            assert.equal(offenders.length, 0, `echo ends on a crack: ${JSON.stringify(offenders)}`);
+        }
         console.log(`       completed in ${r.loopsUsed} loop(s), ${r.ticks} ticks${r.par != null ? `, par ${r.par}` : ''}`);
     });
 }
@@ -33,6 +42,13 @@ for (const f of files) {
 check('truncated level01 solution fails', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'level01.json'), 'utf8'));
     const r = replaySolution({ ...sol, loops: sol.loops.slice(0, 1) }, { extraTicks: 60 });
+    assert.equal(r.completed, false);
+});
+
+check('truncated w2-l1 solution fails', () => {
+    const sol = JSON.parse(readFileSync(join(dir, 'w2-l1.json'), 'utf8'));
+    const cut = [sol.loops[0].slice(0, 1).map(([k, n]) => [k, Math.min(n, 5)])];
+    const r = replaySolution({ ...sol, loops: cut }, { extraTicks: 30 });
     assert.equal(r.completed, false);
 });
 
