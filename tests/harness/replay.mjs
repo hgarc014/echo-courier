@@ -1,0 +1,70 @@
+// Headless solution replay: loads a level in Node (DOM stubbed, no rendering),
+// feeds recorded per-tick key frames into the real update() loop, reports the outcome.
+import { installDomStubs } from './domStub.mjs';
+
+installDomStubs();
+const main = await import('../../src/main.js');
+const { state } = await import('../../src/core/state.js');
+const { keys, updatePrevKeys } = await import('../../src/core/input.js');
+const { LEVELS, deserializeLevel } = await import('../../src/data/levels.js');
+const { RECORDED_KEYS } = await import('../../src/systems/inputRecorder.js');
+
+export { main, state, keys, LEVELS };
+
+function setKeys(frameKey) {
+    const on = new Set(frameKey ? frameKey.split('+') : []);
+    for (const k of RECORDED_KEYS) keys[k] = on.has(k);
+}
+
+/** Load the solution's level and advance through story / boss-intro dialogs. */
+export function loadLevel(solution) {
+    for (const k of Object.keys(keys)) keys[k] = false;
+    if (solution.layout) {
+        state.editorLevelMeta = { ...(solution.meta || {}) };
+        state.gameState = 'EDITOR';
+        Object.assign(state, deserializeLevel(solution.layout));
+        main.startPlaytestFromEditor();
+    } else {
+        main.startGame(solution.level);
+    }
+    for (let guard = 0; guard < 10 && state.gameState !== 'PLAYING'; guard++) {
+        if (state.gameState !== 'DIALOG' && state.gameState !== 'BOSS_INTRO') break;
+        keys.enter = true; main.stepSimulation();
+        keys.enter = false; main.stepSimulation();
+    }
+    if (state.gameState !== 'PLAYING') throw new Error(`level did not reach PLAYING (state=${state.gameState})`);
+}
+
+/**
+ * Replay a solution. Returns { completed, loopsUsed, ticks, failMessages, par }.
+ * loopsUsed counts the live run, so a 1-echo solution uses 2 loops.
+ */
+export function replaySolution(solution, { extraTicks = 600 } = {}) {
+    loadLevel(solution);
+    const failMessages = [];
+    let ticks = 0;
+    const observe = () => {
+        if (state.failMessage && failMessages[failMessages.length - 1] !== state.failMessage) failMessages.push(state.failMessage);
+    };
+    outer: for (const loop of solution.loops) {
+        for (const [frameKey, count] of loop) {
+            for (let i = 0; i < count; i++) {
+                if (state.gameState === 'LEVEL_COMPLETE') break outer;
+                setKeys(frameKey);
+                main.stepSimulation(); ticks++; observe();
+            }
+        }
+    }
+    setKeys('');
+    for (let i = 0; i < extraTicks && state.gameState === 'PLAYING'; i++) { main.stepSimulation(); ticks++; observe(); }
+    const level = solution.layout ? null : LEVELS[solution.level];
+    return {
+        completed: state.gameState === 'LEVEL_COMPLETE',
+        loopsUsed: state.pastRuns.length + 1,
+        ticks,
+        failMessages,
+        par: level?.par ?? solution.par ?? null,
+    };
+}
+
+export { updatePrevKeys };
