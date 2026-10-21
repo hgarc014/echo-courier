@@ -11,7 +11,7 @@ globalThis.Audio = class { play() { return Promise.resolve(); } };
 globalThis.AudioContext = globalThis.webkitAudioContext = class { constructor() { return noopEl(); } };
 
 const { serializeLevel, deserializeLevel } = await import('../src/data/levels.js');
-const { applyInspectorEdits, addWaypoint, removeWaypoint, degToRad } = await import('../src/ui/editorInspector.js');
+const { applyInspectorEdits, addWaypoint, removeWaypoint, degToRad, setAudits, addAudit, removeAudit, applyGatekeeperEdits } = await import('../src/ui/editorInspector.js');
 
 const roundTrip = (setup) => deserializeLevel(JSON.parse(JSON.stringify(serializeLevel(setup))));
 let passed = 0;
@@ -64,6 +64,44 @@ test('waypoint edit then X/Y move applies both in order', () => {
     const s = base(); const g = s.guards[0];
     applyInspectorEdits(g, { waypoints: [{ x: 0, y: 0 }, { x: 10, y: 0 }], x: 100, y: 100 });
     assert.deepEqual(g.points, [{ x: 100, y: 100 }, { x: 110, y: 100 }]);
+});
+
+test('gatekeeper audit helpers edit the schedule and round-trip', () => {
+    const gk = { id: 'g', audits: [], vaultDoorId: '', shields: 0, maxShields: 0 };
+    assert.equal(setAudits(gk, [{ plateId: 'p1', tick: 30 }, { plateId: 'p2', tick: 'nope' }]), true);
+    assert.deepEqual(gk.audits, [{ plateId: 'p1', tick: 30 }]);
+    assert.equal(addAudit(gk, { plateId: 'p2', tick: 90 }), true);
+    assert.equal(removeAudit(gk, 0), true);
+    assert.deepEqual(gk.audits, [{ plateId: 'p2', tick: 90 }]);
+    assert.equal(removeAudit(gk, 3), false);
+    assert.equal(setAudits(null, []), false);
+    applyGatekeeperEdits(gk, {
+        id: 'gk',
+        vaultDoorId: 'vault',
+        shields: 5,
+        audits: [{ plateId: 'a', tick: 10 }, { plateId: 'b', tick: 20 }]
+    });
+    assert.equal(gk.id, 'gk');
+    assert.equal(gk.vaultDoorId, 'vault');
+    assert.equal(gk.maxShields, 5);
+    assert.equal(gk.shields, 5);
+    assert.deepEqual(gk.audits, [{ plateId: 'a', tick: 10 }, { plateId: 'b', tick: 20 }]);
+    applyGatekeeperEdits(gk, { shields: -2 });
+    assert.equal(gk.shields, 0);
+    assert.equal(gk.maxShields, 0);
+
+    const world = deserializeLevel({
+        gatekeepers: [{ id: 'gk', x: 10, y: 20, audits: [], vaultDoorId: '' }]
+    });
+    const ent = world.gatekeepers[0];
+    applyGatekeeperEdits(ent, { vaultDoorId: 'v', shields: 1, audits: [{ plateId: 'p', tick: 60 }] });
+    const again = roundTrip(world).gatekeepers[0];
+    assert.equal(again.vaultDoorId, 'v');
+    assert.equal(again.maxShields, 1);
+    assert.equal(again.shields, 1);
+    assert.deepEqual(again.audits, [{ plateId: 'p', tick: 60 }]);
+    assert.equal(again.x, 10);
+    assert.equal(again.y, 20);
 });
 
 test('camera angle + sweep apply live and round-trip', () => {

@@ -5,10 +5,11 @@ import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
 import { Burrower } from '../entities/bosses/Burrower.js';
+import { Gatekeeper } from '../entities/bosses/gatekeeper.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { normalizeTimeline } from '../systems/temporalPlate.js';
-import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, degToRad, radToDeg } from './editorInspector.js';
+import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -41,7 +42,8 @@ const ENTITY_LISTS = [
     ['statics', 'static'],
     ['cracks', 'crack'],
     ['robots', 'robot'],
-    ['burrowers', 'burrower']
+    ['burrowers', 'burrower'],
+    ['gatekeepers', 'gatekeeper']
 ];
 
 const DEFAULT_EDITOR_META = () => ({
@@ -360,6 +362,7 @@ function pasteClipboard() {
     else if (clipboard.list === 'packages') data.id = 'pkg_' + Date.now();
     else if (clipboard.list === 'lasers') data.id = 'l_' + Date.now();
     else if (clipboard.list === 'burrowers') data.id = 'burrower_' + Date.now();
+    else if (clipboard.list === 'gatekeepers') data.id = 'gk_' + Date.now();
     const spawned = (deserializeLevel({ [clipboard.list]: [data] })[clipboard.list] || [])[0];
     if (!spawned) return;
     if (clipboard.list === 'cracks' && typeof spawned.setCrackSpeed === 'function') {
@@ -524,6 +527,11 @@ export function initEditor(canvas, ctx) {
             spawned = new Burrower(cx, cy, { id: 'burrower_' + id, hp: 3, surfaceInterval: 3, telegraphTime: 1, stunTime: 2, corePlateIds: [], defeatDoorId: 'boss_door' });
             state.burrowers.push(spawned);
         }
+        else if (type === 'gatekeeper') {
+            spawned = new Gatekeeper('gk_'+id, cx, cy, { audits: [], vaultDoorId: '' });
+            if (!state.gatekeepers) state.gatekeepers = [];
+            state.gatekeepers.push(spawned);
+        }
         else if (type === 'player') {
             if (!state.player) state.player = new PlayerEntity(cx, cy, 30, 30, 'player');
             else { state.player.x = cx; state.player.y = cy; }
@@ -542,7 +550,7 @@ export function initEditor(canvas, ctx) {
     function deleteSelectedEntity() {
         if (!selectedEntity) return;
         pushUndo();
-        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','burrowers','drones'].forEach(list => {
+        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','burrowers','drones','gatekeepers'].forEach(list => {
             state[list] = state[list].filter(e => e !== selectedEntity);
         });
         selectedEntity = null; updatePropertiesPanel();
@@ -606,7 +614,7 @@ export function initEditor(canvas, ctx) {
         const world = screenToWorld(sx, sy);
         selectedEntity = null;
         
-        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...(state.burrowers||[]), ...state.drones];
+        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...(state.burrowers||[]), ...(state.gatekeepers||[]), ...state.drones];
         
         for (let i = allEntities.length - 1; i >= 0; i--) {
             let ent = allEntities[i];
@@ -688,8 +696,9 @@ function updatePropertiesPanel() {
     let html = `<label>X: <input type="number" id="prop-x" value="${selectedEntity.x}" style="width:60px"></label> `;
     html += `<label>Y: <input type="number" id="prop-y" value="${selectedEntity.y}" style="width:60px"></label><br>`;
     
-    if (selectedEntity.w !== undefined) html += `<label>W: <input type="number" id="prop-w" value="${selectedEntity.w}" style="width:60px"></label> `;
-    if (selectedEntity.h !== undefined) html += `<label>H: <input type="number" id="prop-h" value="${selectedEntity.h}" style="width:60px"></label><br>`;
+    const fixedSize = selectedEntity instanceof Gatekeeper;
+    if (!fixedSize && selectedEntity.w !== undefined) html += `<label>W: <input type="number" id="prop-w" value="${selectedEntity.w}" style="width:60px"></label> `;
+    if (!fixedSize && selectedEntity.h !== undefined) html += `<label>H: <input type="number" id="prop-h" value="${selectedEntity.h}" style="width:60px"></label><br>`;
     
     if (selectedEntity.id !== undefined && selectedEntity.assetName !== 'player') {
         html += `<label>ID: <input type="text" id="prop-id" value="${escapeAttr(selectedEntity.id)}" style="width:100%"></label><br>`;
@@ -788,6 +797,33 @@ function updatePropertiesPanel() {
         }
     }
 
+    if (selectedEntity instanceof Gatekeeper) {
+        const vault = selectedEntity.vaultDoorId || '';
+        const doorIds = (state.doors || []).map(d => d.id).filter(id => id != null && id !== '');
+        if (vault && !doorIds.includes(vault)) doorIds.unshift(vault);
+        html += `<label>Vault door <select id="prop-gk-vault" style="width:100%; background:#000; color:var(--text-main); border:1px solid #444;">`;
+        html += `<option value="" ${vault === '' ? 'selected' : ''}>(none)</option>`;
+        for (const id of doorIds) {
+            html += `<option value="${escapeAttr(id)}" ${id === vault ? 'selected' : ''}>${escapeAttr(id)}</option>`;
+        }
+        html += `</select></label><br>`;
+        const shieldVal = selectedEntity.maxShields ?? selectedEntity.shields ?? 0;
+        html += `<label>Shields: <input type="number" min="0" step="1" id="prop-gk-shields" value="${shieldVal}" style="width:60px"></label><br>`;
+        html += `<div style="margin-top:8px;">Audits (plate + tick)</div>`;
+        const plateIds = (state.plates || []).map(p => p.id).filter(id => id != null && id !== '');
+        (selectedEntity.audits || []).forEach((a, i) => {
+            const options = plateIds.slice();
+            if (a.plateId && !options.includes(a.plateId)) options.unshift(a.plateId);
+            html += `<div class="prop-gk-row">${i}: <select class="prop-gk-plate" data-i="${i}" style="max-width:46%; background:#000; color:var(--text-main); border:1px solid #444;">`;
+            html += `<option value="" ${!a.plateId ? 'selected' : ''}>(plate)</option>`;
+            for (const id of options) {
+                html += `<option value="${escapeAttr(id)}" ${id === a.plateId ? 'selected' : ''}>${escapeAttr(id)}</option>`;
+            }
+            html += `</select> <input type="number" class="prop-gk-tick" data-i="${i}" value="${Number(a.tick)}" style="width:72px"> <button class="prop-gk-del secondary-btn" data-i="${i}" title="Remove audit">✕</button></div>`;
+        });
+        html += `<button id="prop-gk-add" class="secondary-btn" style="width:100%; margin-top:4px;">+ Add audit</button><br>`;
+    }
+
     const wps = getWaypoints(selectedEntity);
     if (wps) {
         html += `<div style="margin-top:8px;">Waypoints (X/Y moves the whole route)</div>`;
@@ -810,6 +846,43 @@ function updatePropertiesPanel() {
             selectedEntity.linkedIds = readLinkedIdsFromSelect(linkSelect);
         };
     }
+
+    const readGkAudits = () => [...panel.querySelectorAll('.prop-gk-plate')].map(el => {
+        const tick = Number(panel.querySelector(`.prop-gk-tick[data-i="${el.dataset.i}"]`)?.value);
+        return { plateId: el.value, tick: Number.isFinite(tick) ? tick : 0 };
+    });
+    const readGkEdits = () => ({
+        id: document.getElementById('prop-id')?.value,
+        vaultDoorId: document.getElementById('prop-gk-vault')?.value ?? '',
+        shields: document.getElementById('prop-gk-shields')?.value,
+        audits: readGkAudits()
+    });
+    const syncShieldsToAudits = (before) => {
+        if (selectedEntity.maxShields !== before) return;
+        selectedEntity.maxShields = selectedEntity.audits.length;
+        selectedEntity.shields = selectedEntity.maxShields;
+    };
+    const gkAdd = document.getElementById('prop-gk-add');
+    if (gkAdd) gkAdd.onclick = () => {
+        pushUndo();
+        applyGatekeeperEdits(selectedEntity, readGkEdits());
+        const before = selectedEntity.audits.length;
+        const last = before ? selectedEntity.audits[before - 1].tick : 0;
+        const plateId = (state.plates && state.plates[0] && state.plates[0].id) || '';
+        addAudit(selectedEntity, { plateId, tick: last + 60 });
+        syncShieldsToAudits(before);
+        updatePropertiesPanel();
+    };
+    panel.querySelectorAll('.prop-gk-del').forEach(btn => {
+        btn.onclick = () => {
+            pushUndo();
+            applyGatekeeperEdits(selectedEntity, readGkEdits());
+            const before = selectedEntity.audits.length;
+            removeAudit(selectedEntity, parseInt(btn.dataset.i, 10));
+            syncShieldsToAudits(before);
+            updatePropertiesPanel();
+        };
+    });
 
     const origX = selectedEntity.x; const origY = selectedEntity.y;
     const readWaypointInputs = () => [...panel.querySelectorAll('.prop-wp-x')].map(el => ({
@@ -852,7 +925,8 @@ function updatePropertiesPanel() {
         }
         if (document.getElementById('prop-w')) selectedEntity.w = parseFloat(document.getElementById('prop-w').value);
         if (document.getElementById('prop-h')) selectedEntity.h = parseFloat(document.getElementById('prop-h').value);
-        if (document.getElementById('prop-id')) selectedEntity.id = document.getElementById('prop-id').value;
+        if (document.getElementById('prop-id') && !(selectedEntity instanceof Gatekeeper)) selectedEntity.id = document.getElementById('prop-id').value;
+        if (selectedEntity instanceof Gatekeeper) applyGatekeeperEdits(selectedEntity, readGkEdits());
         if (linkSelect) selectedEntity.linkedIds = readLinkedIdsFromSelect(linkSelect);
         if (document.getElementById('prop-pkg-type')) selectedEntity.type = document.getElementById('prop-pkg-type').value;
         if (document.getElementById('prop-openT')) selectedEntity.openT = parseInt(document.getElementById('prop-openT').value, 10) || 60;
