@@ -25,10 +25,10 @@ globalThis.speechSynthesis = { getVoices: () => [], speak() {}, cancel() {} };
 globalThis.fetch = async () => ({ ok: false, json: async () => ({}) });
 
 const { state } = await import('../src/core/state.js');
-const { LEVELS, getLevelSetup, serializeLevel, deserializeLevel, normalizeLoopTime } = await import('../src/data/levels.js');
-const { setEditorLevelMetaFromLevel } = await import('../src/ui/editor.js');
+const { LEVELS, getLevelSetup, serializeLevel, deserializeLevel, normalizeLoopTime, normalizePar, installParChallenge, formatParTooltip } = await import('../src/data/levels.js');
+const { setEditorLevelMetaFromLevel, refreshEditorLevelConfigForm } = await import('../src/ui/editor.js');
 
-const ENTITY_KEYS = ['walls', 'doors', 'plates', 'hints', 'packages', 'lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots'];
+const ENTITY_KEYS = ['walls', 'doors', 'plates', 'hints', 'packages', 'lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'burrowers', 'gatekeepers'];
 // Runtime-only props reset every run; anything else must survive the editor round-trip.
 const IGNORE = new Set(['projectiles']);
 
@@ -46,13 +46,14 @@ function snapLayout(setup) {
     for (const k of ENTITY_KEYS) out[k] = (setup[k] || []).map(snapEntity);
     return out;
 }
-const META_FIELDS = ['name', 'obj', 'maxGhosts', 'world', 'unlocks', 'grants', 'loopTime', 'isBoss', 'bossIntro', 'bossIntroDoorId'];
+const META_FIELDS = ['name', 'obj', 'maxGhosts', 'world', 'unlocks', 'grants', 'loopTime', 'par', 'isBoss', 'bossIntro', 'bossIntroDoorId'];
 function expectedMeta(level) {
     return {
         name: level.name, obj: level.obj || '', maxGhosts: level.maxGhosts ?? 3,
         story: { speaker: level.story?.speaker || '', text: level.story?.text || '' },
         world: level.world, unlocks: level.unlocks, grants: level.grants || [],
         loopTime: normalizeLoopTime(level.loopTime) ?? undefined,
+        par: normalizePar(level.par) ?? undefined,
         isBoss: level.isBoss || undefined, bossIntro: level.bossIntro, bossIntroDoorId: level.bossIntroDoorId
     };
 }
@@ -100,5 +101,84 @@ for (let i = 0; i < LEVELS.length; i++) {
         console.log(`FAIL ${i} ${level.name}: ${err.message.split('\n').slice(0, 12).join('\n')}`);
     }
 }
+try {
+    assert.equal(normalizePar(''), null);
+    assert.equal(normalizePar(null), null);
+    assert.equal(normalizePar(0), null);
+    assert.equal(normalizePar(-3), null);
+    assert.equal(normalizePar(2.5), null);
+    assert.equal(normalizePar('4'), 4);
+    assert.equal(normalizePar(' 2 '), 2);
+
+    const copied = setEditorLevelMetaFromLevel({ name: 'Par Probe', par: '4', obj: 'go' });
+    assert.equal(copied.par, 4);
+    const unset = setEditorLevelMetaFromLevel({ name: 'No Par', obj: '' });
+    assert.equal(unset.par, undefined);
+
+    const parInput = { value: 'stale' };
+    const prevGet = document.getElementById;
+    document.getElementById = (id) => (id === 'editor-meta-par' ? parInput : null);
+    state.editorLevelMeta = setEditorLevelMetaFromLevel({ name: 'Form', par: 3, obj: '' });
+    refreshEditorLevelConfigForm();
+    assert.equal(parInput.value, '3');
+    delete state.editorLevelMeta.par;
+    refreshEditorLevelConfigForm();
+    assert.equal(parInput.value, '');
+    document.getElementById = prevGet;
+
+    const setup = getLevelSetup(0);
+    state.editorLevelMeta = { ...copied, story: copied.story };
+    const exported = serializeLevel({ ...setup, meta: state.editorLevelMeta });
+    assert.equal(exported.meta.par, 4);
+    state.editorLevelMeta = null;
+    deserializeLevel(JSON.parse(JSON.stringify(exported)));
+    assert.equal(state.editorLevelMeta.par, 4);
+    const again = serializeLevel({ ...setup, meta: state.editorLevelMeta });
+    assert.equal(again.meta.par, 4);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(again.meta)), JSON.parse(JSON.stringify(exported.meta)));
+
+    state.editorLevelMeta.par = '';
+    assert.equal(serializeLevel({ ...setup, meta: state.editorLevelMeta }).meta.par, undefined);
+    state.editorLevelMeta.par = 2.5;
+    assert.equal(serializeLevel({ ...setup, meta: state.editorLevelMeta }).meta.par, undefined);
+
+    const kept = { name: 'Has Challenge', par: 2, challenge: { desc: 'keep', check: () => false } };
+    installParChallenge(kept);
+    assert.equal(kept.challenge.desc, 'keep');
+
+    const fresh = { name: 'Par Only', par: 2 };
+    installParChallenge(fresh);
+    assert.equal(fresh.challenge.desc, 'Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip(fresh.challenge.desc), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Par: Finish in 2 loops or fewer'), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Par: par already'), 'Par: par already');
+    const prevLoop = state.loopNumber;
+    state.loopNumber = 1;
+    assert.equal(fresh.challenge.check(), true);
+    state.loopNumber = 2;
+    assert.equal(fresh.challenge.check(), true);
+    state.loopNumber = 3;
+    assert.equal(fresh.challenge.check(), false);
+    state.loopNumber = prevLoop;
+
+    const one = { par: 1 };
+    installParChallenge(one);
+    assert.equal(one.challenge.desc, 'Finish in 1 loop or fewer');
+    assert.equal(formatParTooltip(one.challenge.desc), 'Par: Finish in 1 loop or fewer');
+    for (const lvl of LEVELS) {
+        if (!lvl.challenge?.desc) continue;
+        const title = formatParTooltip(lvl.challenge.desc);
+        assert.equal(/^par:\s*par\b/i.test(title), false, `${lvl.name} tooltip doubled: ${title}`);
+    }
+    for (const bad of [{ par: 0 }, { par: 2.5 }, { par: '' }, {}]) {
+        installParChallenge(bad);
+        assert.equal(bad.challenge, undefined);
+    }
+    console.log('ok   par field');
+} catch (err) {
+    failures++;
+    console.log(`FAIL par field: ${err.message.split('\n').slice(0, 12).join('\n')}`);
+}
+
 console.log(`\n${LEVELS.length - failures}/${LEVELS.length} levels round-trip`);
 process.exit(failures ? 1 : 0);

@@ -1,4 +1,5 @@
-// Pure inspector helpers (no DOM, no imports) so path/camera edits are testable in Node.
+// Pure inspector helpers (no DOM) so path/camera/gatekeeper edits are testable in Node.
+import { normalizeFreshTicks } from '../entities/bosses/gatekeeper.js';
 
 export const MIN_WAYPOINTS = 2;
 
@@ -63,7 +64,8 @@ export const radToDeg = r => Math.round(((Number(r) || 0) * 180 / Math.PI) * 100
 export function applyCameraConfig(cam, { baseAngle, sweepRange } = {}) {
     if (!cam) return;
     if (Number.isFinite(baseAngle)) cam.baseAngle = baseAngle;
-    if (Number.isFinite(sweepRange) && sweepRange > 0) cam.sweepRange = sweepRange;
+    // 0 is a fixed beam. Only non-finite and negative sweeps are ignored.
+    if (Number.isFinite(sweepRange) && sweepRange >= 0) cam.sweepRange = sweepRange;
     cam.currentAngle = cam.baseAngle;
     cam.sweepProgress = 0;
 }
@@ -73,6 +75,56 @@ export function applyCameraConfig(cam, { baseAngle, sweepRange } = {}) {
  * position change translates the (possibly just-edited) route.
  * edits: { x?, y?, waypoints?: [{x,y}], baseAngle?, sweepRange? }  (angles in radians)
  */
+function cleanAudits(list) {
+    const clean = [];
+    for (const a of (Array.isArray(list) ? list : [])) {
+        if (!a || typeof a !== 'object') continue;
+        const tick = Number(a.tick);
+        if (!Number.isFinite(tick)) continue;
+        clean.push({ plateId: a.plateId == null ? '' : String(a.plateId), tick });
+    }
+    return clean;
+}
+
+/** Replace a gatekeeper's audit schedule. Drops rows whose tick is not a finite number. */
+export function setAudits(ent, list) {
+    if (!ent) return false;
+    ent.audits = cleanAudits(list);
+    return true;
+}
+
+export function addAudit(ent, audit = {}) {
+    if (!ent) return false;
+    const tick = Number(audit.tick);
+    return setAudits(ent, [...(ent.audits || []), {
+        plateId: audit.plateId == null ? '' : String(audit.plateId),
+        tick: Number.isFinite(tick) ? tick : 0
+    }]);
+}
+
+export function removeAudit(ent, index) {
+    if (!ent || !Array.isArray(ent.audits)) return false;
+    const i = Number(index);
+    if (!Number.isInteger(i) || i < 0 || i >= ent.audits.length) return false;
+    return setAudits(ent, ent.audits.filter((_, n) => n !== i));
+}
+
+/** edits: { id?, vaultDoorId?, shields?, freshTicks?, audits?: [{plateId, tick}] } */
+export function applyGatekeeperEdits(ent, edits = {}) {
+    if (!ent || !edits) return;
+    if (edits.id !== undefined) ent.id = edits.id == null ? '' : String(edits.id);
+    if (edits.vaultDoorId !== undefined) ent.vaultDoorId = edits.vaultDoorId == null ? '' : String(edits.vaultDoorId);
+    if (edits.audits) setAudits(ent, edits.audits);
+    if (edits.shields !== undefined && edits.shields !== '' && Number.isFinite(Number(edits.shields))) {
+        const n = Math.max(0, Math.floor(Number(edits.shields)));
+        ent.maxShields = n;
+        ent.shields = n;
+    }
+    if (Object.prototype.hasOwnProperty.call(edits, 'freshTicks')) {
+        ent.freshTicks = normalizeFreshTicks(edits.freshTicks);
+    }
+}
+
 export function applyInspectorEdits(ent, edits = {}) {
     if (!ent) return;
     if (edits.waypoints) setWaypoints(ent, edits.waypoints);
