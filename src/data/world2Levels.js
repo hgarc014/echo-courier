@@ -1,6 +1,7 @@
 // World 2 "Subfloor" layouts. Plain data: levels.js deserializes them.
 // Appended after the sandbox so existing campaign indices stay put.
 import { state } from '../core/state.js';
+import { finishedWithinLoops } from '../core/loopDisplay.js';
 
 const W = 800;
 const H = 600;
@@ -45,7 +46,7 @@ function parChallenge(loops) {
     const n = loops;
     return {
         desc: `Finish in ${n} loop${n === 1 ? '' : 's'} or fewer`,
-        check: () => state.pastRuns.length <= n - 1
+        check: () => finishedWithinLoops(state.loopNumber, n)
     };
 }
 

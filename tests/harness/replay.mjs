@@ -7,6 +7,7 @@ const main = await import('../../src/main.js');
 const { state } = await import('../../src/core/state.js');
 const { keys, updatePrevKeys } = await import('../../src/core/input.js');
 const { LEVELS, deserializeLevel } = await import('../../src/data/levels.js');
+const { displayedLoopNumber } = await import('../../src/core/loopDisplay.js');
 const { RECORDED_KEYS } = await import('../../src/systems/inputRecorder.js');
 
 export { main, state, keys, LEVELS };
@@ -37,7 +38,7 @@ export function loadLevel(solution) {
 
 /**
  * Replay a solution. Returns { completed, loopsUsed, ticks, failMessages, par }.
- * loopsUsed counts the live run, so a 1-echo solution uses 2 loops.
+ * loopsUsed is the 1-based live loop (Nth loop is N), same number the HUD shows.
  */
 export function replaySolution(solution, { extraTicks = 600 } = {}) {
     loadLevel(solution);
@@ -60,7 +61,7 @@ export function replaySolution(solution, { extraTicks = 600 } = {}) {
     const level = solution.layout ? null : LEVELS[solution.level];
     return {
         completed: state.gameState === 'LEVEL_COMPLETE',
-        loopsUsed: state.pastRuns.length + 1,
+        loopsUsed: displayedLoopNumber(state.loopNumber),
         ticks,
         failMessages,
         par: level?.par ?? solution.par ?? null,

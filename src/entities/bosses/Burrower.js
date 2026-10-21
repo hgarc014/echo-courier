@@ -16,6 +16,16 @@ export function burrowerTicks(seconds) {
     return Math.max(1, Math.round(n * tps));
 }
 
+// null = unlimited. Non-positive / blank values are unlimited so an empty inspector field
+// does not freeze the boss. A positive integer is how many stuns end the surfacing cycle
+// until the next rewind (a fresh instance starts the count over).
+export function normalizeMaxStunsPerLoop(value) {
+    if (value == null || value === '') return null;
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n) || n < 1) return null;
+    return n;
+}
+
 function center(a) {
     return {
         x: a.x + (a.w || 30) / 2,
@@ -51,6 +61,8 @@ export class Burrower extends Entity {
         this.surfaceInterval = opts.surfaceInterval ?? 3;
         this.telegraphTime = opts.telegraphTime ?? 1;
         this.stunTime = opts.stunTime ?? 2;
+        this.maxStunsPerLoop = normalizeMaxStunsPerLoop(opts.maxStunsPerLoop);
+        this.stunsThisLoop = 0;
         this.corePlateIds = Array.isArray(opts.corePlateIds) ? [...opts.corePlateIds] : [];
         this.defeatDoorId = opts.defeatDoorId || 'boss_door';
         this.startX = x;
@@ -212,6 +224,22 @@ export class Burrower extends Entity {
         this.goHome();
     }
 
+    // Stun is a pause, then the surface cycle starts over from home.
+    // A positive maxStunsPerLoop leaves the boss dormant until rewind instead.
+    recoverFromStun() {
+        this.stunsThisLoop += 1;
+        this.phaseTicks = 0;
+        this.lockedTile = null;
+        this.goHome();
+        const cap = this.maxStunsPerLoop;
+        if (cap != null && this.stunsThisLoop >= cap) {
+            this.phase = 'dormant';
+            return;
+        }
+        this.phase = 'burrow';
+        this.cycleTicks = 0;
+    }
+
     update(actors) {
         if (this.stunFlash > 0) this.stunFlash--;
         if (this.defeated || this.hp <= 0) {
@@ -222,11 +250,7 @@ export class Burrower extends Entity {
         }
         if (this.phase === 'stun') {
             this.phaseTicks++;
-            if (this.phaseTicks >= this.stunTicks()) {
-                this.phase = 'dormant';
-                this.phaseTicks = 0;
-                this.goHome();
-            }
+            if (this.phaseTicks >= this.stunTicks()) this.recoverFromStun();
             return;
         }
         if (this.phase === 'dormant') return;

@@ -67,8 +67,10 @@ for (const { level, index } of w2) {
             assert.equal(boss.stunTime, 2);
             assert.deepStrictEqual(boss.corePlateIds, ['c1', 'c2', 'c3']);
             assert.equal(boss.defeatDoorId, 'boss_door');
+            assert.equal(boss.maxStunsPerLoop, undefined);
             assert.equal(loaded.burrowers[0].maxHp, 3);
             assert.equal(loaded.burrowers[0].hp, 3);
+            assert.equal(loaded.burrowers[0].maxStunsPerLoop, null);
             assert.equal(json.meta.isBoss, true);
         } else {
             assert.deepStrictEqual(json.burrowers, []);
@@ -84,6 +86,7 @@ check('inspector params survive serialize → deserialize', () => {
         surfaceInterval: 4.5,
         telegraphTime: 1.5,
         stunTime: 0.5,
+        maxStunsPerLoop: 2,
         corePlateIds: 'core-a, core-b',
         defeatDoorId: 'gate'
     });
@@ -96,10 +99,34 @@ check('inspector params survive serialize → deserialize', () => {
     assert.equal(boss.surfaceInterval, 4.5);
     assert.equal(boss.telegraphTime, 1.5);
     assert.equal(boss.stunTime, 0.5);
+    assert.equal(boss.maxStunsPerLoop, 2);
     assert.deepStrictEqual(boss.corePlateIds, ['core-a', 'core-b']);
     assert.equal(boss.defeatDoorId, 'gate');
     const again = JSON.parse(JSON.stringify(serializeLevel({ ...back, meta: state.editorLevelMeta })));
     assert.deepStrictEqual(again.burrowers, json.burrowers);
+    assert.equal(again.burrowers[0].maxStunsPerLoop, 2);
+});
+
+check('blank or non-positive maxStunsPerLoop is unlimited and omitted from JSON', () => {
+    const mb = w2.find(({ level }) => level.name.startsWith('W2-MB'));
+    const setup = getLevelSetup(mb.index);
+    const ent = setup.burrowers[0];
+    applyBurrowerConfig(ent, { maxStunsPerLoop: 4 });
+    assert.equal(ent.maxStunsPerLoop, 4);
+    for (const raw of ['', null, 0, -2, 'nope']) {
+        applyBurrowerConfig(ent, { maxStunsPerLoop: raw });
+        assert.equal(ent.maxStunsPerLoop, null);
+    }
+    setEditorLevelMetaFromLevel(mb.level);
+    const json = JSON.parse(JSON.stringify(serializeLevel({ ...setup, meta: state.editorLevelMeta })));
+    assert.equal(json.burrowers[0].maxStunsPerLoop, undefined);
+    const back = deserializeLevel(json);
+    assert.equal(back.burrowers[0].maxStunsPerLoop, null);
+    applyBurrowerConfig(back.burrowers[0], { maxStunsPerLoop: '3' });
+    const again = JSON.parse(JSON.stringify(serializeLevel({ ...back, meta: state.editorLevelMeta })));
+    assert.equal(again.burrowers[0].maxStunsPerLoop, 3);
+    const restored = deserializeLevel(again).burrowers[0];
+    assert.equal(restored.maxStunsPerLoop, 3);
 });
 
 function fastBoss(x, y, opts = {}) {
@@ -184,6 +211,74 @@ check('surfacing beside a pressed core plate stuns for 1 HP', () => {
     assert.equal(boss.phase, 'stun');
     assert.equal(state.cracks[0].collapsing, true);
     assert.equal(state.bossCheckpoint.burrower.hp, 2);
+});
+
+check('after stunTime the burrower goes home and surfaces again', () => {
+    resetWorld();
+    const plate = new PressurePlate('c1', 80, 80, []);
+    plate.isPressed = true;
+    state.plates = [plate];
+    state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast')];
+    state.doors = [new Door('boss_door', 0, 0, 40, 80)];
+    const actor = { x: 85, y: 125, w: 30, h: 30 };
+    const boss = fastBoss(10, 10, {
+        corePlateIds: ['c1'],
+        stunTime: 0.05,
+        surfaceInterval: 0.05,
+        telegraphTime: 0.05
+    });
+    assert.equal(boss.maxStunsPerLoop, null);
+    runUntil(boss, [actor], () => boss.phase === 'stun');
+    assert.equal(boss.hp, 2);
+    const stunLen = boss.stunTicks();
+    for (let i = 0; i < stunLen - 1; i++) boss.update([actor]);
+    assert.equal(boss.phase, 'stun');
+    boss.update([actor]);
+    assert.equal(boss.phase, 'burrow');
+    assert.equal(boss.x, boss.startX);
+    assert.equal(boss.y, boss.startY);
+    assert.equal(boss.stunsThisLoop, 1);
+    runUntil(boss, [actor], () => boss.phase === 'stun' || boss.hp < 2, 80);
+    assert.equal(boss.hp, 1);
+    assert.equal(boss.phase, 'stun');
+    assert.notEqual(boss.phase, 'dormant');
+});
+
+check('maxStunsPerLoop 1 stays dormant after the stun until a new instance', () => {
+    resetWorld();
+    const plate = new PressurePlate('c1', 80, 80, []);
+    plate.isPressed = true;
+    state.plates = [plate];
+    state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast')];
+    state.doors = [new Door('boss_door', 0, 0, 40, 80)];
+    const actor = { x: 85, y: 125, w: 30, h: 30 };
+    const boss = fastBoss(10, 10, {
+        corePlateIds: ['c1'],
+        stunTime: 0.05,
+        surfaceInterval: 0.05,
+        telegraphTime: 0.05,
+        maxStunsPerLoop: 1
+    });
+    runUntil(boss, [actor], () => boss.phase === 'stun');
+    assert.equal(boss.hp, 2);
+    for (let i = 0; i < boss.stunTicks(); i++) boss.update([actor]);
+    assert.equal(boss.phase, 'dormant');
+    assert.equal(boss.hp, 2);
+    for (let i = 0; i < 40; i++) boss.update([actor]);
+    assert.equal(boss.phase, 'dormant');
+    assert.equal(boss.hp, 2);
+
+    state.bossCheckpoint = { burrower: { hp: boss.hp } };
+    state.bossCheckpointLive = true;
+    const next = fastBoss(10, 10, {
+        id: 'burrower',
+        corePlateIds: ['c1'],
+        stunTime: 0.05,
+        maxStunsPerLoop: 1
+    });
+    assert.equal(next.hp, 2);
+    assert.equal(next.phase, 'burrow');
+    assert.equal(next.stunsThisLoop, 0);
 });
 
 check('a pressed non-core plate collapses the tile without a stun', () => {
