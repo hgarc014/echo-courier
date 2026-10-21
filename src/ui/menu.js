@@ -1,5 +1,5 @@
 import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities } from '../core/state.js';
-import { LEVELS } from '../data/levels.js';
+import { LEVELS, WORLDS, getShopUnlockedAbilities } from '../data/levels.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
 
@@ -44,8 +44,9 @@ export function refreshLevelSelectGrid() {
     const uiLevelGrid = document.getElementById('level-select-grid');
     if (!uiLevelGrid) return;
     uiLevelGrid.innerHTML = '';
-    LEVELS.forEach((lvl, idx) => {
-        if (lvl.isTutorial || lvl.isSandbox) return;
+
+    const placed = new Set();
+    const appendLevelButton = (lvl, idx) => {
         let isDev = document.getElementById('dev-mode-checkbox').checked;
         let unlocked = isDev || idx <= state.maxUnlockedLevel;
         let btn = document.createElement('button');
@@ -58,8 +59,27 @@ export function refreshLevelSelectGrid() {
             ? `Level ${idx + 1}, gold star challenge complete`
             : unlocked ? `Level ${idx + 1}` : `Level ${idx + 1}, locked`);
         if (hasGold) btn.title = 'Gold star challenge complete';
+        else if (lvl.challenge?.desc) btn.title = `Par: ${lvl.challenge.desc}`;
         if (unlocked) btn.onclick = () => startGame(idx);
         uiLevelGrid.appendChild(btn);
+    };
+
+    for (const world of WORLDS) {
+        const header = document.createElement('div');
+        header.className = 'world-header';
+        header.textContent = `World ${world.id} — ${world.name}`;
+        uiLevelGrid.appendChild(header);
+        for (const idx of world.levels) {
+            const lvl = LEVELS[idx];
+            if (!lvl || lvl.isTutorial || lvl.isSandbox) continue;
+            placed.add(idx);
+            appendLevelButton(lvl, idx);
+        }
+    }
+
+    LEVELS.forEach((lvl, idx) => {
+        if (lvl.isTutorial || lvl.isSandbox || placed.has(idx)) return;
+        appendLevelButton(lvl, idx);
     });
 }
 
@@ -98,26 +118,7 @@ export function initMenu() {
     preloadDialogVoice().finally(() => refreshVoiceEngineStatus());
     
     refreshLevelSelectGrid();
-    
-    let shopDash = document.getElementById('shop-dash');
-    if (state.abilitiesPurchased['dash']) { shopDash.innerText = 'DASH (OWNED)'; shopDash.style.opacity = '0.5'; shopDash.disabled = true; }
-    else { shopDash.innerText = 'DASH ($150)'; shopDash.style.opacity = '1'; shopDash.disabled = false; }
-    shopDash.onclick = () => { if (getCredits() >= 150) { state.abilitiesPurchased['dash'] = true; saveState(); initMenu(); } };
-    
-    let shopToss = document.getElementById('shop-toss');
-    if (state.abilitiesPurchased['toss']) { shopToss.innerText = 'TOSS (OWNED)'; shopToss.style.opacity = '0.5'; shopToss.disabled = true; }
-    else { shopToss.innerText = 'TOSS ($150)'; shopToss.style.opacity = '1'; shopToss.disabled = false; }
-    shopToss.onclick = () => { if (getCredits() >= 150) { state.abilitiesPurchased['toss'] = true; saveState(); initMenu(); } };
-    
-    let shopCloak = document.getElementById('shop-cloak');
-    if (state.abilitiesPurchased['cloak']) { shopCloak.innerText = 'CLOAK (OWNED)'; shopCloak.style.opacity = '0.5'; shopCloak.disabled = true; }
-    else { shopCloak.innerText = 'CLOAK ($200)'; shopCloak.style.opacity = '1'; shopCloak.disabled = false; }
-    shopCloak.onclick = () => { if (getCredits() >= 200) { state.abilitiesPurchased['cloak'] = true; saveState(); initMenu(); } };
-
-    let shopGhostShield = document.getElementById('shop-ghost-shield');
-    if (state.abilitiesPurchased['ghostShield']) { shopGhostShield.innerText = 'ECHO SHIELD (OWNED)'; shopGhostShield.style.opacity = '0.5'; shopGhostShield.disabled = true; }
-    else { shopGhostShield.innerText = 'ECHO SHIELD ($200)'; shopGhostShield.style.opacity = '1'; shopGhostShield.disabled = false; }
-    shopGhostShield.onclick = () => { if (getCredits() >= 200) { state.abilitiesPurchased['ghostShield'] = true; saveState(); initMenu(); } };
+    refreshShopButtons();
     
     function updateSuitButtons() {
         document.querySelectorAll('.suit-btn').forEach((btn) => {
@@ -181,6 +182,33 @@ export function initMenu() {
             e.currentTarget.blur();
         };
     }
+}
+
+export function refreshShopButtons() {
+    const devShop = document.getElementById('dev-mode-checkbox').checked;
+    const shopUnlocked = getShopUnlockedAbilities(state.maxUnlockedLevel);
+    const configureShopButton = (btn, abilityId, label, price) => {
+        if (!btn) return;
+        if (state.abilitiesPurchased[abilityId]) {
+            btn.innerText = `${label} (OWNED)`;
+            btn.style.opacity = '0.5';
+            btn.disabled = true;
+        } else if (!devShop && !shopUnlocked.includes(abilityId)) {
+            const world = WORLDS.find(w => w.unlocks.includes(abilityId));
+            btn.innerText = world ? `${label} (LOCKED — World ${world.id})` : `${label} (LOCKED)`;
+            btn.style.opacity = '0.4';
+            btn.disabled = true;
+        } else {
+            btn.innerText = `${label} ($${price})`;
+            btn.style.opacity = '1';
+            btn.disabled = false;
+        }
+        btn.onclick = () => { if (getCredits() >= price) { state.abilitiesPurchased[abilityId] = true; saveState(); initMenu(); } };
+    };
+    configureShopButton(document.getElementById('shop-dash'), 'dash', 'DASH', 150);
+    configureShopButton(document.getElementById('shop-toss'), 'toss', 'TOSS', 150);
+    configureShopButton(document.getElementById('shop-cloak'), 'cloak', 'CLOAK', 200);
+    configureShopButton(document.getElementById('shop-ghost-shield'), 'ghostShield', 'ECHO SHIELD', 200);
 }
 
 function refreshVoiceEngineStatus() {
