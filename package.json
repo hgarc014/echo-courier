@@ -1,0 +1,6 @@
+{
+  "name": "echo-courier",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node tests/editorRoundTrip.test.mjs" }
+}

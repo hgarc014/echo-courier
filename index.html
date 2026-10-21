@@ -279,6 +279,19 @@
           <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-cloak"> cloak</label>
           <label><input type="checkbox" id="editor-meta-ghostShield"> ghostShield</label>
         </div>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">World <select id="editor-meta-world" style="padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"><option value="">None (no world gate)</option></select></label>
+        <div style="font-size:0.8rem; margin:8px 0;" title="Extra abilities this level's world unlocks (purchased abilities allowed in playtest)">World unlocks:
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-unlock-dash"> dash</label>
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-unlock-toss"> toss</label>
+          <label style="margin-right:8px;"><input type="checkbox" id="editor-meta-unlock-cloak"> cloak</label>
+          <label><input type="checkbox" id="editor-meta-unlock-ghostShield"> ghostShield</label>
+        </div>
+        <h4 style="margin: 12px 0 8px;">Boss / Challenge</h4>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-boss"> Boss level (robots emerge after intro, boss music)</label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Boss intro speaker <input id="editor-meta-boss-speaker" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Boss intro text<textarea id="editor-meta-boss-text" rows="2" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></textarea></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Intro door ID (opens when intro ends) <input id="editor-meta-boss-door" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;" title="Name of the campaign level whose challenge applies (challenges are code)">Challenge from level <input id="editor-meta-challenge" type="text" placeholder="e.g. Level 12: Danger Courier" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
         <h4 style="margin: 12px 0 8px;">In-Game Demo</h4>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-autoplay" checked> Auto-play on first enter</label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;"><input type="checkbox" id="editor-meta-demo-skippable" checked> Skippable</label>

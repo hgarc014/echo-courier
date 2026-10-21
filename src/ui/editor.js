@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizeWorldId, WORLDS, copyBossMeta } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
@@ -86,7 +86,19 @@ export function setEditorLevelMetaFromLevel(level) {
     };
     const loopTime = normalizeLoopTime(level.loopTime);
     if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+    const worldId = normalizeWorldId(level.world);
+    if (worldId != null) state.editorLevelMeta.world = worldId;
+    if (Array.isArray(level.unlocks)) state.editorLevelMeta.unlocks = [...level.unlocks];
+    copyBossMeta(level, state.editorLevelMeta);
+    if (level.challenge && !level.isPlaytest) state.editorLevelMeta.challengeRef = level.name;
     return state.editorLevelMeta;
+}
+
+function populateWorldSelect(sel) {
+    if (!sel || sel.dataset.populated) return;
+    sel.dataset.populated = '1';
+    sel.innerHTML = '<option value="">None (no world gate)</option>' + WORLDS.map(w =>
+        `<option value="${w.id}">${w.id}: ${escapeAttr(w.name)}${w.unlocks.length ? ' (' + w.unlocks.join(', ') + ')' : ''}</option>`).join('');
 }
 
 function syncLevelConfigForm() {
@@ -103,6 +115,21 @@ function syncLevelConfigForm() {
     if (loopEl) loopEl.value = meta.loopTime != null ? String(meta.loopTime) : '';
     const speedEl = document.getElementById('editor-meta-crackspeed');
     if (speedEl) speedEl.value = meta.crackSpeed === 'fast' ? 'fast' : 'normal';
+    const worldEl = document.getElementById('editor-meta-world');
+    populateWorldSelect(worldEl);
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    const bossEl = document.getElementById('editor-meta-boss');
+    if (bossEl) bossEl.checked = !!meta.isBoss;
+    setVal('editor-meta-boss-speaker', meta.bossIntro?.speaker || '');
+    setVal('editor-meta-boss-text', meta.bossIntro?.text || '');
+    setVal('editor-meta-boss-door', meta.bossIntroDoorId || '');
+    setVal('editor-meta-challenge', meta.challengeRef || '');
+    if (worldEl) worldEl.value = meta.world != null ? String(meta.world) : '';
+    const unlockSet = new Set(meta.unlocks || []);
+    for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
+        const el = document.getElementById('editor-meta-unlock-' + id);
+        if (el) el.checked = unlockSet.has(id);
+    }
     const grants = new Set(meta.grants || []);
     for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
         const el = document.getElementById('editor-meta-' + id);
@@ -161,6 +188,18 @@ function applyLevelConfigForm() {
         demo
     };
     if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+    const worldId = normalizeWorldId(document.getElementById('editor-meta-world')?.value);
+    if (worldId != null) state.editorLevelMeta.world = worldId;
+    const unlocks = ['dash', 'toss', 'cloak', 'ghostShield']
+        .filter(id => document.getElementById('editor-meta-unlock-' + id)?.checked);
+    if (worldId != null || unlocks.length) state.editorLevelMeta.unlocks = unlocks;
+    const val = id => document.getElementById(id)?.value?.trim() || '';
+    copyBossMeta({
+        isBoss: !!document.getElementById('editor-meta-boss')?.checked,
+        bossIntro: { speaker: val('editor-meta-boss-speaker'), text: val('editor-meta-boss-text') },
+        bossIntroDoorId: val('editor-meta-boss-door'),
+        challengeRef: val('editor-meta-challenge')
+    }, state.editorLevelMeta);
     setSaveStatus('Level config applied');
 }
 
@@ -691,6 +730,14 @@ function updatePropertiesPanel() {
         }
     }
     
+    if (selectedEntity instanceof ShooterRobot) {
+        html += `<label><input type="checkbox" id="prop-robot-engaged" ${selectedEntity.engaged?'checked':''}> Engaged at start</label><br>`;
+        html += `<label><input type="checkbox" id="prop-robot-emerging" ${selectedEntity.isEmerging?'checked':''}> Emerging at start</label><br>`;
+        html += `<label>Emerge until path idx: <input type="number" min="0" id="prop-robot-emerge-idx" value="${selectedEntity.emergeUntilPathIndex||0}" style="width:60px"></label><br>`;
+        html += `<label>HP: <input type="number" min="1" id="prop-robot-hp" value="${selectedEntity.hp??3}" style="width:60px"></label> `;
+        html += `<label>Fire cooldown: <input type="number" min="0" id="prop-robot-cooldown" value="${selectedEntity.fireCooldown||0}" style="width:60px"></label><br>`;
+    }
+
     if (selectedEntity instanceof HintPlate) {
         html += `<label>Title: <input type="text" id="prop-hint-title" value="${escapeAttr(selectedEntity.title||'')}" style="width:100%"></label><br>`;
         html += `<label>Demo ID: <input type="text" id="prop-hint-demoId" value="${escapeAttr(selectedEntity.demoId||'')}" style="width:100%"></label><br>`;
@@ -732,6 +779,13 @@ function updatePropertiesPanel() {
         if (document.getElementById('prop-closedT')) selectedEntity.closedT = parseInt(document.getElementById('prop-closedT').value, 10) || 60;
         if (document.getElementById('prop-timeline')) selectedEntity.requiredTimeline = document.getElementById('prop-timeline').value || 'present';
 
+        if (document.getElementById('prop-robot-engaged')) {
+            selectedEntity.engaged = document.getElementById('prop-robot-engaged').checked;
+            selectedEntity.isEmerging = document.getElementById('prop-robot-emerging').checked;
+            selectedEntity.emergeUntilPathIndex = Math.max(0, parseInt(document.getElementById('prop-robot-emerge-idx').value, 10) || 0);
+            selectedEntity.hp = Math.max(1, parseInt(document.getElementById('prop-robot-hp').value, 10) || 3);
+            selectedEntity.fireCooldown = Math.max(0, parseInt(document.getElementById('prop-robot-cooldown').value, 10) || 0);
+        }
         if (document.getElementById('prop-hint-title')) selectedEntity.title = document.getElementById('prop-hint-title').value || 'Hint Demo';
         if (document.getElementById('prop-hint-demoId')) selectedEntity.demoId = document.getElementById('prop-hint-demoId').value || null;
         if (document.getElementById('prop-hint-autoOpen')) selectedEntity.autoOpen = document.getElementById('prop-hint-autoOpen').checked;
