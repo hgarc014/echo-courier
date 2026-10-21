@@ -189,8 +189,9 @@ export function setUnlockAll(enabled) {
 }
 
 export function isDevMode() {
-    // Settings "Unlock All Levels (Dev/Testing)" is full dev mode, same as ?dev=1:
-    // every level, rank 4, the shop, and every ability. It is not level-select only.
+    // Settings "Unlock All Levels (Dev/Testing)" is full dev mode, same as ?dev=1
+    // with the dev checkbox: every level, rank 4, and the shop. Toss, cloak, and
+    // ghost shield stay granted. Dash does not: Heavy Going still applies last.
     if (isUnlockAll()) return true;
     if (!isDevUrlEnabled()) return false;
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false;
@@ -243,9 +244,16 @@ export function applyLevelAbilityOverrides(level) {
 }
 
 export function getUnlockedAbilities() {
-    // Dev mode skips the Heavy Going dash rule, so Unlock All grants dash on W1 too.
-    if (isDevMode()) return ['dash', 'toss', 'cloak', 'ghostShield'];
+    // Dev mode (Unlock All, or ?dev=1 with the checkbox) grants toss, cloak, and
+    // ghost shield. There is no within-world gate for those three — only the shop's
+    // world list, which dev mode still bypasses. Dash is applied last by
+    // dashUnlockedByProgression, so W1 and W2 before Heavy Going never have it.
     let unlocks = new Set();
+    if (isDevMode()) {
+        unlocks.add('toss');
+        unlocks.add('cloak');
+        unlocks.add('ghostShield');
+    }
     const gate = state.worldUnlockedAbilities;
     const allowPurchased = (ability) => gate == null || gate.includes(ability);
     if (state.abilitiesPurchased['dash'] && allowPurchased('dash')) unlocks.add('dash');

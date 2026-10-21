@@ -10,6 +10,20 @@ import { SFX } from '../../core/audio.js';
 export const GATEKEEPER_WINDUP_TICKS = 105;
 const FLASH_TICKS = 12;
 
+// Wind-up beam ink. Null outside the warning window.
+// Flashes at full strength from frame 0. The old charge ramp stayed faint for the first ~0.6s.
+export function auditWarningInk(delta) {
+    const d = Number(delta);
+    if (!(d > 0 && d <= GATEKEEPER_WINDUP_TICKS)) return null;
+    const elapsed = GATEKEEPER_WINDUP_TICKS - d;
+    const on = Math.floor(elapsed / 5) % 2 === 0;
+    return {
+        fill: on ? 0.46 : 0.32,
+        stroke: on ? 1 : 0.84,
+        lineWidth: on ? 3.5 : 2.75
+    };
+}
+
 /** Blank, non-finite, or negative → off (null). 0 is a real window of the audit tick only. */
 export function normalizeFreshTicks(raw) {
     if (raw == null) return null;
@@ -225,7 +239,7 @@ export class Gatekeeper extends Entity {
                     const ty = plate.y + (plate.h || 40) / 2;
                     const ang = Math.atan2(ty - cy, tx - cx);
                     const dist = Math.hypot(tx - cx, ty - cy);
-                    const charge = 1 - delta / GATEKEEPER_WINDUP_TICKS;
+                    const ink = auditWarningInk(delta);
                     const walls = state.walls || [];
                     const samples = 16;
                     const spread = 0.22;
@@ -237,14 +251,14 @@ export class Gatekeeper extends Entity {
                         ctx.lineTo(cx + Math.cos(a) * reach, cy + Math.sin(a) * reach);
                     }
                     ctx.closePath();
-                    ctx.fillStyle = `rgba(255, 60, 40, ${0.08 + 0.22 * charge})`;
+                    ctx.fillStyle = `rgba(255, 60, 40, ${ink.fill})`;
                     ctx.fill();
                     const centerReach = wallRayDistance(cx, cy, ang, dist, walls);
                     ctx.beginPath();
                     ctx.setLineDash([8, 6]);
                     ctx.lineDashOffset = -now;
-                    ctx.strokeStyle = `rgba(255, 220, 160, ${0.35 + 0.6 * charge})`;
-                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = `rgba(255, 220, 160, ${ink.stroke})`;
+                    ctx.lineWidth = ink.lineWidth;
                     ctx.moveTo(cx, cy);
                     ctx.lineTo(cx + Math.cos(ang) * centerReach, cy + Math.sin(ang) * centerReach);
                     ctx.stroke();

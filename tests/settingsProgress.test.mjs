@@ -98,9 +98,12 @@ assert.equal(fresh.isUnlockAll(), true);
 assert.equal(fresh.isLevelUnlocked(20), true);
 assert.equal(fresh.isLevelUnlocked(11, { isPendingCampaign: false }), true);
 const abilities = fresh.getUnlockedAbilities();
-for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
+// No level is loaded, so Heavy Going does not add dash. Unlock All still grants
+// the other three; it no longer injects dash ahead of that rule.
+for (const id of ['toss', 'cloak', 'ghostShield']) {
     assert.ok(abilities.includes(id), `missing ability ${id}`);
 }
+assert.equal(abilities.includes('dash'), false);
 assert.equal(fresh.getPlayerRank(), 4);
 assert.equal(fresh.state.maxUnlockedLevel, 0);
 

@@ -1,6 +1,7 @@
 // Dash turns on at W2-L3 Heavy Going and stays on for every later world >= 2 level.
-// No W1 level and no earlier W2 level has dash. Resolution is the game's own
-// startGame / restartLevel / playtest path (getUnlockedAbilities + the controls HUD).
+// No W1 level and no earlier W2 level has dash. Unlock All and ?dev=1 (checkbox on)
+// follow the same rule. Resolution is the game's own startGame / restartLevel /
+// playtest path (getUnlockedAbilities + the controls HUD).
 // Run: node tests/dashRule.test.mjs
 import assert from 'node:assert/strict';
 import { installDomStubs } from './harness/domStub.mjs';
@@ -8,7 +9,7 @@ import { installDomStubs } from './harness/domStub.mjs';
 installDomStubs();
 const { main, state } = await import('./harness/replay.mjs');
 const { LEVELS, WORLDS } = await import('../src/data/levels.js');
-const { getUnlockedAbilities, setUnlockAll } = await import('../src/core/state.js');
+const { getUnlockedAbilities, setUnlockAll, isDevMode } = await import('../src/core/state.js');
 
 const elements = new Map();
 function makeEl(id) {
@@ -19,6 +20,7 @@ function makeEl(id) {
         innerHTML: '',
         textContent: '',
         value: '',
+        checked: false,
         style: {},
         className: '',
         classList: {
@@ -239,9 +241,44 @@ check('playtest uses world and name, not the LEVELS object', () => {
     assert.equal(controlsShowDash().touchHidden, false);
 });
 
-// #51: Unlock All is dev mode (every ability), not a level-select flag. It bypasses Heavy Going.
-check('Unlock All grants dash before Heavy Going, and turning it off restores the rule', () => {
+// Dev mode still grants toss, cloak, and ghost shield. Dash follows Heavy Going.
+function assertDevDashFollowsRule(label) {
     freshShop();
+    const earlyNames = ['First Shift', 'Thin Ice', 'Footprints'];
+    let sawEarly = 0;
+    let sawHeavy = false;
+    for (let i = 0; i < LEVELS.length; i++) {
+        const level = LEVELS[i];
+        const expected = specDash(level);
+        if (expected == null) continue;
+        main.startGame(i);
+        const got = getUnlockedAbilities();
+        const controls = controlsShowDash();
+        assert.equal(got.includes('dash'), expected, `${label} ${level.name}`);
+        assert.equal(controls.listed, expected, `${label} ${level.name} controls`);
+        assert.equal(controls.touchHidden, !expected, `${label} ${level.name} touch`);
+        assert.equal(got.includes('toss'), true, `${label} ${level.name} toss`);
+        assert.equal(got.includes('cloak'), true, `${label} ${level.name} cloak`);
+        assert.equal(got.includes('ghostShield'), true, `${label} ${level.name} shield`);
+        assert.deepEqual(state.abilitiesPurchased, {}, `${label} ${level.name} shop`);
+        if (!expected) assert.doesNotMatch(controls.hud, /Dash/, `${label} ${level.name} hud`);
+        if (earlyNames.some(name => String(level.name).includes(name))) {
+            assert.equal(expected, false, `${label} ${level.name} should be before Heavy Going`);
+            sawEarly++;
+        }
+        if (String(level.name).includes('Heavy Going')) {
+            assert.equal(expected, true, `${label} Heavy Going`);
+            sawHeavy = true;
+        }
+    }
+    assert.equal(sawEarly, earlyNames.length, `${label} early levels`);
+    assert.equal(sawHeavy, true, `${label} Heavy Going`);
+    const sandbox = LEVELS.findIndex(l => l.isSandbox);
+    main.startGame(sandbox);
+    assert.equal(getUnlockedAbilities().includes('dash'), true, `${label} sandbox grants`);
+}
+
+check('Unlock All respects Heavy Going: no dash on W1 or W2-L1/L2, dash from Heavy Going on', () => {
     const early = [
         LEVELS.findIndex(l => l.name === 'First Shift'),
         LEVELS.findIndex(l => String(l.name).includes('Thin Ice')),
@@ -250,17 +287,8 @@ check('Unlock All grants dash before Heavy Going, and turning it off restores th
     const heavy = LEVELS.findIndex(l => String(l.name).includes('Heavy Going'));
     try {
         setUnlockAll(true);
-        for (const i of early) {
-            main.startGame(i);
-            const got = getUnlockedAbilities();
-            assert.equal(got.includes('dash'), true, LEVELS[i].name);
-            assert.equal(got.includes('toss'), true, LEVELS[i].name);
-            assert.equal(got.includes('cloak'), true, LEVELS[i].name);
-            assert.equal(got.includes('ghostShield'), true, LEVELS[i].name);
-            assert.equal(controlsShowDash().listed, true, LEVELS[i].name);
-            assert.equal(controlsShowDash().touchHidden, false, LEVELS[i].name);
-            assert.deepEqual(state.abilitiesPurchased, {}, LEVELS[i].name);
-        }
+        assert.equal(isDevMode(), true);
+        assertDevDashFollowsRule('Unlock All');
     } finally {
         setUnlockAll(false);
         freshShop();
@@ -275,6 +303,26 @@ check('Unlock All grants dash before Heavy Going, and turning it off restores th
     assert.equal(getUnlockedAbilities().includes('dash'), true, 'Heavy Going still has dash');
     assert.equal(controlsShowDash().listed, true);
     assert.equal(controlsShowDash().touchHidden, false);
+});
+
+// ?dev=1 is the same isDevMode() path once the checkbox is on. Nothing treats it
+// as an ability override, so the dash rule applies there too.
+check('?dev=1 with the dev checkbox respects Heavy Going the same way', () => {
+    const box = document.getElementById('dev-mode-checkbox');
+    const prevSearch = location.search;
+    try {
+        setUnlockAll(false);
+        location.search = '?dev=1';
+        box.checked = true;
+        assert.equal(isDevMode(), true);
+        assertDevDashFollowsRule('?dev=1');
+    } finally {
+        location.search = prevSearch;
+        box.checked = false;
+        setUnlockAll(false);
+        freshShop();
+    }
+    assert.equal(isDevMode(), false);
 });
 
 process.exit(failures ? 1 : 0);
