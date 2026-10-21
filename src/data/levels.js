@@ -9,14 +9,14 @@ import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
 
-// W1 Dispatch is indices 0–4. Later worlds keep their previous levels, shifted +3.
-// #47 Subfloor routes stay appended after the sandbox (isPendingCampaign) and are not listed here.
+// W1 Dispatch is 0–4. W2 Subfloor (#47) is 5–9. Older campaign levels follow, shifted
+// past both. Provisional Subfloor slots (originally indices 2–4) sit at the front of Panopticon.
 export const WORLDS = [
   { id: 1, name: 'Dispatch',   unlocks: [],                 levels: [0, 1, 2, 3, 4] },
-  { id: 2, name: 'Subfloor',   unlocks: ['dash'],           levels: [5, 6, 7] },
-  { id: 3, name: 'Panopticon', unlocks: ['toss', 'cloak'],  levels: [8, 9, 10] },
-  { id: 4, name: 'Beamworks',  unlocks: ['ghostShield'],    levels: [11, 12] },
-  { id: 5, name: 'Overclock',  unlocks: [],                 levels: [13, 14] },
+  { id: 2, name: 'Subfloor',   unlocks: ['dash'],           levels: [5, 6, 7, 8, 9] },
+  { id: 3, name: 'Panopticon', unlocks: ['toss', 'cloak'],  levels: [10, 11, 12, 13, 14, 15] },
+  { id: 4, name: 'Beamworks',  unlocks: ['ghostShield'],    levels: [16, 17] },
+  { id: 5, name: 'Overclock',  unlocks: [],                 levels: [18, 19] },
 ];
 
 let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, projectiles;
@@ -68,7 +68,7 @@ export function installParChallenge(level) {
     if (par == null) return;
     level.challenge = {
         desc: `Par: finish in ${par} loops or fewer`,
-        check: () => state.pastRuns.length + 1 <= par
+        check: () => finishedWithinLoops(state.loopNumber, par)
     };
 }
 
@@ -670,6 +670,7 @@ export const LEVELS = [
     { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T cycles open two seconds, shut three, on the depot clock. Your echo has to still be on the plate when that window opens. Walk off early and the plate door is shut when the timer lets you through." }, obj: "Keep the echo on the plate through the loop. Cross the timer door in its second open window.", maxGhosts: 1, loopTime: 18, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
     { name: "Airlock Relay", story: { speaker: "ChronoHaul Dispatch", text: "Two airlocks, one timer, two echoes. Door A shuts the moment its plate is empty, so one recording cannot hold A and reach plate B. Park an echo on A, park the next on B, and carry the parcel through on the timer's window. Three loops. No spare timeline." }, obj: "Park an echo on plate A, then one on plate B. Carry the package through both doors and the timer.", maxGhosts: 2, loopTime: 25, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_L4_LAYOUT },
     { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. An empty plate locks its door. Fill them in order or the vault stays shut." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper audits three plates on a fixed beat. Be on the right plate at the right beat or that door locks for the loop. Break all three shields and the vault opens." }, obj: "Echo on g1 by the first audit, echo on g2 by the second, you on g3 at the third. Deliver from the vault.", maxGhosts: 2, loopTime: 24, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },
+    ...W2_LEVELS,
     { name: "Level 3: Sweep Coverage", voiceKey: "level-2-story", story: { speaker: "Sector Surveillance", text: "Camera grid online in Transit Spur C. Cloak is still locked behind procurement. Time the cone, use cover, and remember: discarded timelines trip the same sensors you do." }, obj: "One camera. Cross on the gap in the sweep. Echoes trigger cameras too.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL3_LAYOUT, demos: { intro: LEVEL3_DEMO } },
     { name: "Level 4: Overlapping Watch", voiceKey: "level-3-story", story: { speaker: "Local Hub Manager", text: "They stacked a patrol and a camera on the same corridor. Budget says that is your problem. Coordinate echoes and keep the parcel moving." }, obj: "Guard and camera together. Hold the door, avoid both sensors, deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL4_LAYOUT, demos: { intro: LEVEL4_DEMO } },
     { name: "Level 5: Unstable Deck", voiceKey: "level-4-story", story: { speaker: "ChronoHaul Dispatch", text: "Maintenance skipped the subfloor again. Cracked plating covers both sides of the door and collapses under courier mass. Dash implants are paywalled. Hold the door with an echo and cross the cracks quickly." }, obj: "Cracks cover both sides of the door. Echo-hold the door and cross the cracks quickly.", challenge: { desc: "Finish in 2 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 2) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL5_LAYOUT, demos: { intro: LEVEL5_DEMO } },
@@ -682,9 +683,16 @@ export const LEVELS = [
     { name: "Level 11: Time Dilation", voiceKey: "level-10-story", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; gatekeepers=[]; } },
 
     { name: "Level 12: Danger Courier", voiceKey: "level-11-story", bossVoiceKey: "level-11-boss-intro", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => finishedWithinLoops(state.loopNumber, 1) }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; gatekeepers=[]; } },
-    { name: "Dev Sandbox", voiceKey: "level-12-story", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox },
-    ...W2_LEVELS
+    { name: "Dev Sandbox", voiceKey: "level-12-story", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox }
 ];
+
+// #47 shipped these after the sandbox as pending. They are World 2 now, so they
+// count in the campaign. voiceKey misses the manifest and will not play another level's clip.
+W2_LEVELS.forEach((level, i) => {
+    level.isPendingCampaign = false;
+    if (!level.voiceKey) level.voiceKey = `w2-${i}-story`;
+    if (level.isBoss && !level.bossVoiceKey) level.bossVoiceKey = `w2-${i}-boss-intro`;
+});
 
 for (const level of LEVELS) installParChallenge(level);
 
@@ -692,8 +700,9 @@ for (const world of WORLDS) {
     for (const idx of world.levels) {
         const level = LEVELS[idx];
         if (!level) continue;
-        level.world = world.id;
-        level.unlocks = [...world.unlocks];
+        // Keep per-level world/unlocks already set by world content (W2). Fill the rest from WORLDS.
+        if (level.world == null) level.world = world.id;
+        if (!Array.isArray(level.unlocks)) level.unlocks = [...world.unlocks];
     }
 }
 

@@ -153,13 +153,21 @@ check('results text uses the same 1-based count as the HUD', () => {
     const thinMsg = document.getElementById('challenge-result').innerHTML;
     assert.match(thinMsg, /Finished in 1 loop \(par 1\)\./);
 
-    const basics = replaySolution(JSON.parse(readFileSync(new URL('./solutions/level01.json', import.meta.url), 'utf8')));
-    assert.equal(basics.completed, true);
-    assert.equal(basics.loopsUsed, 2);
-    assert.equal(state.loopNumber, 2);
-    const basicsMsg = document.getElementById('challenge-result').innerHTML;
-    assert.match(basicsMsg, /Finished in 2 loops\./);
-    assert.doesNotMatch(basicsMsg, /par /);
+    // First Shift replaced the old no-par Level 1. Clear par for this replay so the
+    // results panel still covers a 2-loop finish that must not mention par.
+    const savedPar = LEVELS[0].par;
+    LEVELS[0].par = undefined;
+    try {
+        const basics = replaySolution(JSON.parse(readFileSync(new URL('./solutions/w1-l1.json', import.meta.url), 'utf8')));
+        assert.equal(basics.completed, true);
+        assert.equal(basics.loopsUsed, 2);
+        assert.equal(state.loopNumber, 2);
+        const basicsMsg = document.getElementById('challenge-result').innerHTML;
+        assert.match(basicsMsg, /Finished in 2 loops\./);
+        assert.doesNotMatch(basicsMsg, /par /);
+    } finally {
+        LEVELS[0].par = savedPar;
+    }
 });
 
 check('menu par wording stays 1-based and the HUD markup starts at loop 1', () => {

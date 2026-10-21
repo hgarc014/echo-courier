@@ -149,14 +149,14 @@ try {
     const fresh = { name: 'Par Only', par: 2 };
     installParChallenge(fresh);
     assert.equal(fresh.challenge.desc, 'Par: finish in 2 loops or fewer');
-    const prevRuns = state.pastRuns;
-    state.pastRuns = [];
+    const prevLoop = state.loopNumber;
+    state.loopNumber = 1;
     assert.equal(fresh.challenge.check(), true);
-    state.pastRuns = [{}];
+    state.loopNumber = 2;
     assert.equal(fresh.challenge.check(), true);
-    state.pastRuns = [{}, {}];
+    state.loopNumber = 3;
     assert.equal(fresh.challenge.check(), false);
-    state.pastRuns = prevRuns;
+    state.loopNumber = prevLoop;
 
     const one = { par: 1 };
     installParChallenge(one);
