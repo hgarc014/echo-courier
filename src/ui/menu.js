@@ -1,5 +1,5 @@
 import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi } from '../core/state.js';
-import { LEVELS, WORLDS, getShopUnlockedAbilities } from '../data/levels.js';
+import { LEVELS, WORLDS, getShopUnlockedAbilities, formatParTooltip } from '../data/levels.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
 
@@ -62,7 +62,7 @@ export function refreshLevelSelectGrid() {
             : unlocked ? label : `${label}, locked`);
         if (hasGold) btn.title = 'Gold star challenge complete';
         else if (!unlocked) btn.title = 'Locked';
-        else if (lvl.challenge?.desc) btn.title = `Par: ${lvl.challenge.desc}`;
+        else if (lvl.challenge?.desc) btn.title = formatParTooltip(lvl.challenge.desc);
         if (unlocked) btn.onclick = () => startGame(idx);
         uiLevelGrid.appendChild(btn);
     };

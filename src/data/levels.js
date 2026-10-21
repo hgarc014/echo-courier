@@ -61,13 +61,23 @@ export function normalizePar(value) {
     return n;
 }
 
+// Level-select tooltip. Challenge text that already starts with "Par" is not prefixed again.
+export function formatParTooltip(desc) {
+    const text = String(desc ?? '').trim();
+    if (!text) return '';
+    if (/^par\b/i.test(text)) return text;
+    return `Par: ${text}`;
+}
+
 // Optional par challenge. Skips levels that already define their own challenge.
+// Desc has no "Par:" prefix — the level button adds it once via formatParTooltip.
 export function installParChallenge(level) {
     if (!level || level.par == null || level.challenge) return;
     const par = normalizePar(level.par);
     if (par == null) return;
+    const noun = par === 1 ? 'loop' : 'loops';
     level.challenge = {
-        desc: `Par: finish in ${par} loops or fewer`,
+        desc: `Finish in ${par} ${noun} or fewer`,
         check: () => finishedWithinLoops(state.loopNumber, par)
     };
 }

@@ -25,7 +25,7 @@ globalThis.speechSynthesis = { getVoices: () => [], speak() {}, cancel() {} };
 globalThis.fetch = async () => ({ ok: false, json: async () => ({}) });
 
 const { state } = await import('../src/core/state.js');
-const { LEVELS, getLevelSetup, serializeLevel, deserializeLevel, normalizeLoopTime, normalizePar, installParChallenge } = await import('../src/data/levels.js');
+const { LEVELS, getLevelSetup, serializeLevel, deserializeLevel, normalizeLoopTime, normalizePar, installParChallenge, formatParTooltip } = await import('../src/data/levels.js');
 const { setEditorLevelMetaFromLevel, refreshEditorLevelConfigForm } = await import('../src/ui/editor.js');
 
 const ENTITY_KEYS = ['walls', 'doors', 'plates', 'hints', 'packages', 'lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'burrowers', 'gatekeepers'];
@@ -148,7 +148,10 @@ try {
 
     const fresh = { name: 'Par Only', par: 2 };
     installParChallenge(fresh);
-    assert.equal(fresh.challenge.desc, 'Par: finish in 2 loops or fewer');
+    assert.equal(fresh.challenge.desc, 'Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip(fresh.challenge.desc), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Par: Finish in 2 loops or fewer'), 'Par: Finish in 2 loops or fewer');
+    assert.equal(formatParTooltip('Par: par already'), 'Par: par already');
     const prevLoop = state.loopNumber;
     state.loopNumber = 1;
     assert.equal(fresh.challenge.check(), true);
@@ -160,7 +163,13 @@ try {
 
     const one = { par: 1 };
     installParChallenge(one);
-    assert.equal(one.challenge.desc, 'Par: finish in 1 loops or fewer');
+    assert.equal(one.challenge.desc, 'Finish in 1 loop or fewer');
+    assert.equal(formatParTooltip(one.challenge.desc), 'Par: Finish in 1 loop or fewer');
+    for (const lvl of LEVELS) {
+        if (!lvl.challenge?.desc) continue;
+        const title = formatParTooltip(lvl.challenge.desc);
+        assert.equal(/^par:\s*par\b/i.test(title), false, `${lvl.name} tooltip doubled: ${title}`);
+    }
     for (const bad of [{ par: 0 }, { par: 2.5 }, { par: '' }, {}]) {
         installParChallenge(bad);
         assert.equal(bad.challenge, undefined);
