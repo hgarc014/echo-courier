@@ -155,28 +155,26 @@ const W1_L1_LAYOUT = {
     ...emptyActors()
 };
 
-// Package room, then a second corridor down to a dead-end plate. Zone is beside the package, behind d1.
+// Top strip holds the package and the door into the drop bay. The plate is down
+// the left shaft. Plate-first fits in the loop; package-then-shaft does not.
 const W1_L2_LAYOUT = {
     width: 800, height: 600, mapWidth: 800, mapHeight: 600,
-    player: { x: 60, y: 140 },
-    deliveryZone: { x: 650, y: 55, w: 110, h: 120 },
+    player: { x: 40, y: 60 },
+    deliveryZone: { x: 650, y: 40, w: 110, h: 100 },
     walls: [
         { x: 0, y: 0, w: 800, h: 20 },
         { x: 0, y: 580, w: 800, h: 20 },
         { x: 0, y: 0, w: 20, h: 600 },
         { x: 780, y: 0, w: 20, h: 600 },
-        { x: 200, y: 20, w: 20, h: 70 },
-        { x: 200, y: 190, w: 20, h: 390 },
-        { x: 220, y: 230, w: 90, h: 20 },
-        { x: 430, y: 230, w: 350, h: 20 },
-        { x: 600, y: 20, w: 20, h: 50 },
-        { x: 600, y: 190, w: 20, h: 40 },
-        { x: 240, y: 250, w: 20, h: 330 },
-        { x: 500, y: 250, w: 20, h: 330 }
+        // Drop bay. Door gap is y=50..150.
+        { x: 600, y: 20, w: 20, h: 30 },
+        { x: 600, y: 150, w: 20, h: 430 },
+        // Everything under the top strip is solid except the left shaft (x < 130).
+        { x: 130, y: 200, w: 470, h: 380 }
     ],
-    doors: [{ x: 600, y: 70, w: 20, h: 120, id: 'd1', type: 'standard' }],
-    plates: [{ x: 340, y: 480, linkedIds: ['d1'], id: 'p1', type: 'standard' }],
-    packages: [{ x: 400, y: 60, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    doors: [{ x: 600, y: 50, w: 20, h: 100, id: 'd1', type: 'standard' }],
+    plates: [{ x: 40, y: 500, linkedIds: ['d1'], id: 'p1', type: 'standard' }],
+    packages: [{ x: 520, y: 60, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
     hints: [],
     ...emptyActors()
 };
@@ -676,7 +674,7 @@ export function cloneDemo(demo) {
 
 export const LEVELS = [
     { name: "First Shift", story: { speaker: "ChronoHaul Dispatch", text: "Courier 83-A, first shift on the floor. That plate holds the door, but you cannot stand on it and walk through. Leave an echo on the plate. The echo is company property. Move the parcel." }, obj: "Stand on the plate and loop. Your echo holds the door while you deliver the package.", maxGhosts: 1, loopTime: 20, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L1_LAYOUT, demo: LEVEL1_DEMO, demos: { intro: LEVEL1_DEMO } },
-    { name: "Return Trip", story: { speaker: "ChronoHaul Dispatch", text: "Parcel and drop zone share this bay. The plate sits down a dead-end you only reach after the package corridor. Record the plate first. Fetch the box first and nobody is left holding the door." }, obj: "Loop on the alcove plate first, then carry the package through. Fetching first leaves the door unheld.", maxGhosts: 1, loopTime: 20, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L2_LAYOUT },
+    { name: "Return Trip", story: { speaker: "ChronoHaul Dispatch", text: "The drop bay is behind the door. The plate is down the left shaft. Record that plate first. Haul the parcel over to the shaft and the loop clock runs out before anyone is left holding the door." }, obj: "Loop on the shaft plate first, then carry the package through. Fetching the box first does not fit in the loop.", maxGhosts: 1, loopTime: 5, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L2_LAYOUT },
     { name: "Shift Change", story: { speaker: "ChronoHaul Dispatch", text: "Gate T cycles open two seconds, shut three, on the depot clock. Your echo has to still be on the plate when that window opens. Walk off early and the plate door is shut when the timer lets you through." }, obj: "Keep the echo on the plate through the loop. Cross the timer door in its second open window.", maxGhosts: 1, loopTime: 18, par: 2, mapWidth: 800, mapHeight: 600, layout: W1_L3_LAYOUT },
     { name: "Airlock Relay", story: { speaker: "ChronoHaul Dispatch", text: "Two airlocks, one timer, two echoes. Door A shuts the moment its plate is empty, so one recording cannot hold A and reach plate B. Park an echo on A, park the next on B, and carry the parcel through on the timer's window. Three loops. No spare timeline." }, obj: "Park an echo on plate A, then one on plate B. Carry the package through both doors and the timer.", maxGhosts: 2, loopTime: 25, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_L4_LAYOUT },
     { name: "Gatekeeper", isBoss: true, bossIntro: { speaker: "GATEKEEPER", text: "Audit sequence armed. Three plates. Three beats. An empty plate locks its door. Fill them in order or the vault stays shut." }, story: { speaker: "ChronoHaul Dispatch", text: "The Gatekeeper audits three plates on a fixed beat. Be on the right plate at the right beat or that door locks for the loop. Break all three shields and the vault opens." }, obj: "Echo on g1 by the first audit, echo on g2 by the second, you on g3 at the third. Deliver from the vault.", maxGhosts: 2, loopTime: 24, par: 3, mapWidth: 800, mapHeight: 600, layout: W1_MB_LAYOUT },

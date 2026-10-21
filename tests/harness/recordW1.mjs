@@ -4,6 +4,7 @@
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { main, state, keys, loadLevel } from './replay.mjs';
+import { displayedLoopNumber } from '../../src/core/loopDisplay.js';
 
 const FILES = {
     0: 'tests/solutions/w1-l1.json',
@@ -21,36 +22,41 @@ function tick(dir = {}, extra = []) {
     main.stepSimulation();
 }
 
-function moveTo(x, y, tol = 4, max = 900) {
+function moveTo(x, y, tol = 4, max = 900, opts = {}) {
     let stuck = 0;
+    const echoes = state.pastRuns.length;
     for (let i = 0; i < max; i++) {
-        if (state.gameState === 'LEVEL_COMPLETE') return;
+        if (state.gameState === 'LEVEL_COMPLETE') return 'done';
+        if (opts.stopOnRewind && state.pastRuns.length !== echoes) return 'rewind';
         const dx = x - state.player.x;
         const dy = y - state.player.y;
-        if (Math.abs(dx) <= tol && Math.abs(dy) <= tol) return;
+        if (Math.abs(dx) <= tol && Math.abs(dy) <= tol) return 'ok';
         // Axis-aligned. Diagonal steps are 4/√2 and orbit a target forever.
         let sx = 0, sy = 0;
         if (Math.abs(dx) > tol && (Math.abs(dx) >= Math.abs(dy) || Math.abs(dy) <= tol)) sx = Math.sign(dx);
         else if (Math.abs(dy) > tol) sy = Math.sign(dy);
-        else return;
+        else return 'ok';
         const px = state.player.x;
         const py = state.player.y;
         const frozen = state.rewindFreeze > 0;
         tick({ x: sx, y: sy });
+        if (opts.stopOnRewind && state.pastRuns.length !== echoes) return 'rewind';
         if (frozen) { stuck = 0; continue; }
         const ndx = x - state.player.x;
         const ndy = y - state.player.y;
-        if (Math.abs(ndx) <= tol && Math.abs(ndy) <= tol) return;
+        if (Math.abs(ndx) <= tol && Math.abs(ndy) <= tol) return 'ok';
         const closer = Math.abs(ndx) + Math.abs(ndy) < Math.abs(dx) + Math.abs(dy) - 0.5;
         const moved = state.player.x !== px || state.player.y !== py;
         if (moved && closer) { stuck = 0; continue; }
         stuck++;
         // A 4px step that overshoots a nearby point is close enough.
-        if (Math.abs(dx) <= 4 + tol && Math.abs(dy) <= 4 + tol) return;
+        if (Math.abs(dx) <= 4 + tol && Math.abs(dy) <= 4 + tol) return 'ok';
         if (stuck > 8) {
+            if (opts.allowBlocked) return 'blocked';
             throw new Error(`moveTo(${x},${y}) blocked at ${Math.round(state.player.x)},${Math.round(state.player.y)} tick ${state.currentTick} loops ${state.pastRuns.length}`);
         }
     }
+    if (opts.allowBlocked) return 'timeout';
     throw new Error(`moveTo(${x},${y}) timed out at ${Math.round(state.player.x)},${Math.round(state.player.y)} tick ${state.currentTick} loops ${state.pastRuns.length}`);
 }
 
@@ -121,18 +127,13 @@ function solveL1() {
 }
 
 function solveL2() {
-    moveTo(340, 140, 2, 500);
-    standOn('p1', 350, 490);
-    wait(10);
+    standOn('p1', 48, 508);
+    wait(8);
     pressR();
-    moveTo(360, 140, 2, 500);
-    moveTo(400, 70, 2, 400);
+    moveTo(520, 60, 2, 500);
     grab();
-    moveTo(400, 110, 2, 200);
-    moveTo(560, 110, 4, 500);
-    waitUntil(() => doorOpen('d1'), 800, 'L2 door');
-    wait(48);
-    moveTo(670, 90, 4, 400);
+    waitUntil(() => doorOpen('d1'), 500, 'L2 door');
+    moveTo(660, 70, 4, 400);
     dropInZone();
 }
 
@@ -239,19 +240,36 @@ export function recordLevel(levelIndex, outPath) {
 export function runNaive(which) {
     const table = {
         'l2-fetch-first': () => {
+            // Real fetch-first: grab the package, walk it to the shaft plate, press R,
+            // then try to deliver on the next loop while that echo holds the door.
             loadLevel({ level: 1 });
-            moveTo(360, 140, 2, 500);
-            moveTo(400, 70, 2, 400);
-            grab();
-            moveTo(400, 140, 2, 300);
-            moveTo(340, 140, 2, 300);
-            standOn('p1', 350, 490);
-            wait(20);
-            // Leave the plate while carrying — the door closes and nobody else holds it.
-            moveTo(340, 140, 2, 500);
-            moveTo(560, 110, 4, 400);
-            wait(30);
-            for (let i = 0; i < 400 && state.gameState === 'PLAYING'; i++) tick();
+            const pkg = state.packages.find(p => p.requiredForDelivery !== false);
+            const plate = state.plates.find(p => p.id === 'p1');
+            const zone = state.deliveryZone;
+            const walk = { stopOnRewind: true, allowBlocked: true };
+            moveTo(pkg.x, pkg.y, 2, 800, walk);
+            if (state.pastRuns.length === 0 && state.gameState === 'PLAYING') grab();
+            const beforePlate = state.pastRuns.length;
+            moveTo(plate.x + 8, plate.y + 8, 4, 1200, walk);
+            const onPlate = overlaps(state.player, plate);
+            if (state.pastRuns.length === beforePlate && state.gameState === 'PLAYING') pressR();
+            else if (state.gameState === 'PLAYING') {
+                // Loop clock already rewound the fetch. Press R once the freeze lifts
+                // so the scripted inputs include an R, from spawn — not a plate hold.
+                wait(20);
+                if (state.gameState === 'PLAYING') pressR();
+            }
+            const afterEcho = state.pastRuns.length;
+            if (state.gameState !== 'PLAYING') return;
+            moveTo(pkg.x, pkg.y, 4, 800, walk);
+            if (state.pastRuns.length === afterEcho && !state.packages.some(p => p.carriedBy === 'player')) {
+                try { grab(); } catch { /* package is with the echo, or out of reach */ }
+            }
+            moveTo(zone.x + 10, zone.y + 10, 6, 800, walk);
+            if (state.packages.some(p => p.carriedBy === 'player') && overlaps(state.player, zone)) {
+                tick({}, ['space']);
+            }
+            for (let i = 0; i < 240 && state.gameState === 'PLAYING' && state.pastRuns.length <= afterEcho; i++) tick();
         },
         'l3-leave-plate': () => {
             loadLevel({ level: 2 });
@@ -286,7 +304,13 @@ export function runNaive(which) {
     const fn = table[which];
     if (!fn) throw new Error(`unknown naive plan ${which}`);
     fn();
-    return { completed: state.gameState === 'LEVEL_COMPLETE', state: state.gameState, tick: state.currentTick, loops: state.pastRuns.length };
+    return {
+        completed: state.gameState === 'LEVEL_COMPLETE',
+        state: state.gameState,
+        tick: state.currentTick,
+        loops: displayedLoopNumber(state.loopNumber),
+        par: state.currentLevelMeta?.par ?? null
+    };
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

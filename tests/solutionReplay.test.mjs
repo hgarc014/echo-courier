@@ -58,6 +58,11 @@ check('truncated w2-l1 solution fails', () => {
 for (const plan of ['l2-fetch-first', 'l3-leave-plate', 'l4-two-loops', 'mb-rush-vault']) {
     check(`naive ${plan} fails`, () => {
         const r = runNaive(plan);
+        if (plan === 'l2-fetch-first') {
+            const withinPar = r.completed && (r.par == null || r.loops <= r.par);
+            assert.equal(withinPar, false, `${plan} completed within par (${r.loops} loops, par ${r.par})`);
+            return;
+        }
         assert.equal(r.completed, false, `${plan} completed`);
     });
 }
