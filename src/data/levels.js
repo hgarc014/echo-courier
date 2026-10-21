@@ -52,6 +52,25 @@ export function normalizeLoopTime(value) {
     return n;
 }
 
+// Positive integer loop counts only. Blank, zero, and non-integers mean "no par".
+export function normalizePar(value) {
+    if (value == null || value === '') return null;
+    const n = typeof value === 'number' ? value : Number(String(value).trim());
+    if (!Number.isInteger(n) || n <= 0) return null;
+    return n;
+}
+
+// Optional par challenge. Skips levels that already define their own challenge.
+export function installParChallenge(level) {
+    if (!level || level.par == null || level.challenge) return;
+    const par = normalizePar(level.par);
+    if (par == null) return;
+    level.challenge = {
+        desc: `Par: finish in ${par} loops or fewer`,
+        check: () => state.pastRuns.length + 1 <= par
+    };
+}
+
 function setupDevSandbox() {
     const W = 1600;
     const H = 1200;
@@ -562,6 +581,8 @@ export const LEVELS = [
     ...W2_LEVELS
 ];
 
+for (const level of LEVELS) installParChallenge(level);
+
 for (const world of WORLDS) {
     for (const idx of world.levels) {
         const level = LEVELS[idx];
@@ -792,6 +813,8 @@ export function serializeLevel(src = state) {
         };
         const loopTime = normalizeLoopTime(m.loopTime);
         if (loopTime != null) payload.meta.loopTime = loopTime;
+        const par = normalizePar(m.par);
+        if (par != null) payload.meta.par = par;
         const worldId = normalizeWorldId(m.world);
         if (worldId != null) payload.meta.world = worldId;
         if (Array.isArray(m.unlocks)) payload.meta.unlocks = [...m.unlocks];
@@ -857,6 +880,8 @@ export function deserializeLevel(data) {
             };
             const loopTime = normalizeLoopTime(data.meta.loopTime);
             if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+            const par = normalizePar(data.meta.par);
+            if (par != null) state.editorLevelMeta.par = par;
             const worldId = normalizeWorldId(data.meta.world);
             if (worldId != null) state.editorLevelMeta.world = worldId;
             if (Array.isArray(data.meta.unlocks)) state.editorLevelMeta.unlocks = [...data.meta.unlocks];

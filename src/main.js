@@ -3,7 +3,7 @@ import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, sy
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, copyBossMeta, getChallengeByRef } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
@@ -1052,6 +1052,8 @@ export function startPlaytestFromEditor() {
     };
     const playtestLoopTime = normalizeLoopTime(em.loopTime);
     if (playtestLoopTime != null) state.currentLevelMeta.loopTime = playtestLoopTime;
+    const playtestPar = normalizePar(em.par);
+    if (playtestPar != null) state.currentLevelMeta.par = playtestPar;
     state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
     state.worldUnlockedAbilities = getPlaytestWorldUnlocks(state.currentLevelMeta);
     state.bossCheckpoint = null;

@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizeWorldId, WORLDS, copyBossMeta } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizePar, normalizeWorldId, WORLDS, copyBossMeta } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
@@ -92,6 +92,8 @@ export function setEditorLevelMetaFromLevel(level) {
     };
     const loopTime = normalizeLoopTime(level.loopTime);
     if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+    const par = normalizePar(level.par);
+    if (par != null) state.editorLevelMeta.par = par;
     const worldId = normalizeWorldId(level.world);
     if (worldId != null) state.editorLevelMeta.world = worldId;
     if (Array.isArray(level.unlocks)) state.editorLevelMeta.unlocks = [...level.unlocks];
@@ -119,6 +121,8 @@ function syncLevelConfigForm() {
     if (obj) obj.value = meta.obj || '';
     if (maxG) maxG.value = meta.maxGhosts ?? 3;
     if (loopEl) loopEl.value = meta.loopTime != null ? String(meta.loopTime) : '';
+    const parEl = document.getElementById('editor-meta-par');
+    if (parEl) parEl.value = meta.par != null ? String(meta.par) : '';
     const speedEl = document.getElementById('editor-meta-crackspeed');
     if (speedEl) speedEl.value = meta.crackSpeed === 'fast' ? 'fast' : 'normal';
     const worldEl = document.getElementById('editor-meta-world');
@@ -181,6 +185,9 @@ function applyLevelConfigForm() {
     const loopTime = normalizeLoopTime(document.getElementById('editor-meta-looptime')?.value);
     const loopEl = document.getElementById('editor-meta-looptime');
     if (loopEl && loopTime == null) loopEl.value = '';
+    const par = normalizePar(document.getElementById('editor-meta-par')?.value);
+    const parEl = document.getElementById('editor-meta-par');
+    if (parEl && par == null) parEl.value = '';
     state.editorLevelMeta = {
         name: ensureEditorLevelMeta().name || 'Editor Level',
         story: {
@@ -194,6 +201,7 @@ function applyLevelConfigForm() {
         demo
     };
     if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+    if (par != null) state.editorLevelMeta.par = par;
     const worldId = normalizeWorldId(document.getElementById('editor-meta-world')?.value);
     if (worldId != null) state.editorLevelMeta.world = worldId;
     const unlocks = ['dash', 'toss', 'cloak', 'ghostShield']
