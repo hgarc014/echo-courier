@@ -806,8 +806,79 @@ export class Pit extends Entity {
     }
 }
 
-const CRACK_STAGE_TICKS = 60;
-const CRACK_STAGES = 3;
+export const CRACK_STAGE_TICKS = 60;
+export const CRACK_FAST_STAGE_TICKS = 12; // 3 stages × 12 = 36 ticks (~0.6s at 60fps)
+export const CRACK_STAGES = 3;
+
+export function crackStageTicksFor(speed) {
+    return speed === 'fast' ? CRACK_FAST_STAGE_TICKS : CRACK_STAGE_TICKS;
+}
+
+function spawnEchoFellPuff(actor) {
+    if (!actor || actor._crackFell) return;
+    actor._crackFell = true;
+    if (!Array.isArray(state.ghostFellFx)) state.ghostFellFx = [];
+    const w = actor.w || 30;
+    const h = actor.h || 30;
+    const bits = [];
+    for (let i = 0; i < 7; i++) {
+        bits.push({
+            a: (i / 7) * Math.PI * 2 + 0.35,
+            speed: 0.65 + (i % 3) * 0.3,
+            size: 2 + (i % 2)
+        });
+    }
+    state.ghostFellFx.push({
+        x: actor.x + w / 2,
+        y: actor.y + h / 2,
+        ttl: 30,
+        max: 30,
+        bits
+    });
+}
+
+export function tickEchoFellFx() {
+    const list = state.ghostFellFx;
+    if (!list || !list.length) return;
+    for (let i = list.length - 1; i >= 0; i--) {
+        list[i].ttl--;
+        if (list[i].ttl <= 0) list.splice(i, 1);
+    }
+}
+
+export function renderEchoFellFx(ctx) {
+    const list = state.ghostFellFx;
+    if (!ctx || !list || !list.length) return;
+    for (const fx of list) {
+        const life = Math.max(0, fx.ttl / fx.max);
+        const age = 1 - life;
+        ctx.save();
+        for (let i = 0; i < 3; i++) {
+            const radius = 5 + age * (18 + i * 14);
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = `rgba(0, 243, 255, ${life * (0.7 - i * 0.16)})`;
+            ctx.arc(fx.x, fx.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = `rgba(125, 249, 255, ${life * 0.14})`;
+            ctx.fill();
+        }
+        for (const bit of fx.bits) {
+            const dist = age * bit.speed * 28;
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(190, 252, 255, ${life * 0.85})`;
+            ctx.arc(
+                fx.x + Math.cos(bit.a) * dist,
+                fx.y + Math.sin(bit.a) * dist + age * 8,
+                Math.max(0.6, bit.size * life),
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+}
 
 function isOrthoCrackNeighbor(a, b) {
     const eps = 1;
@@ -819,12 +890,17 @@ function isOrthoCrackNeighbor(a, b) {
 }
 
 export class CrackedFloor extends Entity {
-    constructor(x, y, w, h) {
+    constructor(x, y, w, h, crackSpeed) {
         super(x, y, w, h, 'crack');
         this.ticks = 0;
         this.stage = 0;
         this.collapsing = false;
         this.broken = false;
+        this.setCrackSpeed(crackSpeed);
+    }
+    setCrackSpeed(speed) {
+        this.crackSpeed = speed === 'fast' ? 'fast' : 'normal';
+        this.stageTicks = crackStageTicksFor(this.crackSpeed);
     }
     startCollapse() {
         if (this.broken || this.collapsing) return;
@@ -841,12 +917,16 @@ export class CrackedFloor extends Entity {
     }
     update(actors) {
         if (this.broken) {
+            let playerFell = false;
             for (let a of actors) {
                 if (!AABB(a.x, a.y, a.w, a.h, this.x, this.y, this.w, this.h)) continue;
-                if (isPresentPlayer(a)) return "Fell into pit!";
-                if (a.id !== undefined) a.isActive = false;
+                if (isPresentPlayer(a)) { playerFell = true; continue; }
+                if (a.id !== undefined && a.isActive) {
+                    spawnEchoFellPuff(a);
+                    a.isActive = false;
+                }
             }
-            return null;
+            return playerFell ? "Fell into pit!" : null;
         }
         if (!this.collapsing) {
             for (let a of actors) {
@@ -858,13 +938,14 @@ export class CrackedFloor extends Entity {
         }
         if (this.collapsing && !this.broken) {
             this.ticks++;
-            if (this.ticks >= CRACK_STAGE_TICKS * CRACK_STAGES) {
+            const step = this.stageTicks || CRACK_STAGE_TICKS;
+            if (this.ticks >= step * CRACK_STAGES) {
                 this.broken = true;
                 this.stage = CRACK_STAGES + 1;
                 SFX.break();
                 this.cascadeNeighbors();
             } else {
-                const next = 1 + Math.floor(this.ticks / CRACK_STAGE_TICKS);
+                const next = 1 + Math.floor(this.ticks / step);
                 if (next !== this.stage) {
                     this.stage = next;
                     SFX.crack();
@@ -919,6 +1000,7 @@ export class CrackedFloor extends Entity {
         if (stage === 1) {
             this.renderFloor(ctx, 0, '#c9893a');
             this.drawFractures(ctx, 3, '#3a2010', 2);
+            this.drawCrumbleOutline(ctx);
         } else if (stage === 2) {
             this.renderFloor(ctx, 8, '#6a4020');
             this.drawFractures(ctx, 5, '#1a0800', 3);
@@ -926,5 +1008,35 @@ export class CrackedFloor extends Entity {
             this.renderFloor(ctx, 14, '#3a2010');
             this.drawFractures(ctx, 7, '#000', 4);
         }
+    }
+    drawCrumbleOutline(ctx) {
+        const x = this.x, y = this.y, w = this.w, h = this.h;
+        const pts = [];
+        const pushEdge = (x0, y0, x1, y1, nx, ny) => {
+            const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+            const n = Math.max(1, Math.round(len / 8));
+            for (let i = 0; i < n; i++) {
+                const t = i / n;
+                const px = x0 + (x1 - x0) * t;
+                const py = y0 + (y1 - y0) * t;
+                const o = (i % 2) ? 4 : -2;
+                pts.push([px + nx * o, py + ny * o]);
+            }
+        };
+        pushEdge(x, y, x + w, y, 0, -1);
+        pushEdge(x + w, y, x + w, y + h, 1, 0);
+        pushEdge(x + w, y + h, x, y + h, 0, 1);
+        pushEdge(x, y + h, x, y, -1, 0);
+        if (!pts.length) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.setLineDash([5, 3]);
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = 'rgba(255, 228, 170, 0.95)';
+        ctx.stroke();
+        ctx.restore();
     }
 }

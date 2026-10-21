@@ -46,8 +46,21 @@ const DEFAULT_EDITOR_META = () => ({
     obj: '',
     grants: [],
     maxGhosts: 3,
+    crackSpeed: 'normal',
     demo: undefined
 });
+
+function normalizeCrackSpeed(speed) {
+    return speed === 'fast' ? 'fast' : 'normal';
+}
+
+function applyCrackSpeedToWorld(speed) {
+    const normalized = normalizeCrackSpeed(speed);
+    for (const crack of state.cracks || []) {
+        if (crack && typeof crack.setCrackSpeed === 'function') crack.setCrackSpeed(normalized);
+    }
+    return normalized;
+}
 
 export function ensureEditorLevelMeta() {
     if (!state.editorLevelMeta) state.editorLevelMeta = DEFAULT_EDITOR_META();
@@ -68,6 +81,7 @@ export function setEditorLevelMetaFromLevel(level) {
         obj: level.obj || '',
         grants: [...(level.grants || [])],
         maxGhosts: level.maxGhosts ?? 3,
+        crackSpeed: normalizeCrackSpeed(level.crackSpeed),
         demo: cloneDemo(level.demo)
     };
     const loopTime = normalizeLoopTime(level.loopTime);
@@ -87,6 +101,8 @@ function syncLevelConfigForm() {
     if (obj) obj.value = meta.obj || '';
     if (maxG) maxG.value = meta.maxGhosts ?? 3;
     if (loopEl) loopEl.value = meta.loopTime != null ? String(meta.loopTime) : '';
+    const speedEl = document.getElementById('editor-meta-crackspeed');
+    if (speedEl) speedEl.value = meta.crackSpeed === 'fast' ? 'fast' : 'normal';
     const grants = new Set(meta.grants || []);
     for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
         const el = document.getElementById('editor-meta-' + id);
@@ -141,10 +157,23 @@ function applyLevelConfigForm() {
         obj: document.getElementById('editor-meta-obj')?.value || '',
         grants,
         maxGhosts: parseInt(document.getElementById('editor-meta-maxghosts')?.value, 10) || 0,
+        crackSpeed: applyCrackSpeedToWorld(document.getElementById('editor-meta-crackspeed')?.value),
         demo
     };
     if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
     setSaveStatus('Level config applied');
+}
+
+let crackSpeedControlBound = false;
+function bindCrackSpeedControl() {
+    if (crackSpeedControlBound) return;
+    const speedEl = document.getElementById('editor-meta-crackspeed');
+    if (!speedEl) return;
+    crackSpeedControlBound = true;
+    speedEl.addEventListener('change', () => {
+        const speed = applyCrackSpeedToWorld(speedEl.value);
+        ensureEditorLevelMeta().crackSpeed = speed;
+    });
 }
 
 
@@ -289,6 +318,9 @@ function pasteClipboard() {
     else if (clipboard.list === 'lasers') data.id = 'l_' + Date.now();
     const spawned = (deserializeLevel({ [clipboard.list]: [data] })[clipboard.list] || [])[0];
     if (!spawned) return;
+    if (clipboard.list === 'cracks' && typeof spawned.setCrackSpeed === 'function') {
+        spawned.setCrackSpeed(ensureEditorLevelMeta().crackSpeed);
+    }
     state[clipboard.list].push(spawned);
     selectedEntity = spawned;
     updatePropertiesPanel();
@@ -317,6 +349,7 @@ export function syncEditorUi() {
     if (applyBtn) applyBtn.onclick = () => applyLevelConfigForm();
     ensureEditorLevelMeta();
     syncLevelConfigForm();
+    bindCrackSpeedControl();
     window.refreshEditorLevelConfigForm = syncLevelConfigForm;
 
     refreshSaveSlotList();
@@ -437,7 +470,7 @@ export function initEditor(canvas, ctx) {
         else if (type === 'drone') { spawned = new Drone([{x:cx,y:cy}, {x:cx+60,y:cy}]); state.drones.push(spawned); }
         else if (type === 'wind') { spawned = new WindTunnel(cx, cy, 40, 80, 0, 5); state.winds.push(spawned); }
         else if (type === 'static') { spawned = new StaticZone(cx, cy, 80, 80); state.statics.push(spawned); }
-        else if (type === 'crack') { spawned = new CrackedFloor(cx, cy, 40, 40); state.cracks.push(spawned); }
+        else if (type === 'crack') { spawned = new CrackedFloor(cx, cy, 40, 40, ensureEditorLevelMeta().crackSpeed); state.cracks.push(spawned); }
         else if (type === 'robot') { spawned = new ShooterRobot([{x:cx,y:cy}, {x:cx+40,y:cy}]); state.robots.push(spawned); }
         else if (type === 'player') {
             if (!state.player) state.player = new PlayerEntity(cx, cy, 30, 30, 'player');
@@ -575,6 +608,7 @@ export function initEditor(canvas, ctx) {
     
     ensureEditorLevelMeta();
     syncLevelConfigForm();
+    bindCrackSpeedControl();
 
     refreshSaveSlotList();
 }
