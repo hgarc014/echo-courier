@@ -336,9 +336,12 @@ export class Prism extends Entity {
             const reach = lead + this.sweepSpeed * this.telegraphTime;
             const a0 = angle + this.spin * lead;
             const a1 = angle + this.spin * reach;
-            ctx.fillStyle = 'rgba(255, 220, 40, 0.18)';
+            ctx.fillStyle = 'rgba(255, 176, 0, 0.62)';
             traceSector(ctx, origin.x, origin.y, a0, a1, this.range, blockers);
             ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 214, 60, 0.95)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
             ctx.fillStyle = 'rgba(255, 40, 40, 0.28)';
             traceSector(ctx, origin.x, origin.y, angle - this.arc / 2, angle + this.arc / 2, this.range, blockers);
             ctx.fill();

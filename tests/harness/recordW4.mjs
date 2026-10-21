@@ -144,12 +144,16 @@ function shieldGhostUp(id) {
 // ---- intended solutions ----
 
 function solveL1() {
-    standOn('p1', 120, 275);
+    // Plate is upstairs. The obvious grab is downstairs, on the wrong side of the beam.
+    moveTo(48, 80, 2, 500);
+    standOn('p1', 220, 80);
     wait(12);
     pressR();
-    waitUntil(() => laserOff('l1'), 400, 'L1 laser');
-    moveTo(500, 280, 2, 700);
+    moveTo(48, 460, 2, 500);
+    moveTo(200, 460, 2, 400);
     grab();
+    waitUntil(() => laserOff('l1'), 500, 'L1 laser');
+    moveTo(560, 460, 2, 500);
     dropInZone();
 }
 
@@ -200,15 +204,35 @@ function solveL4() {
     grab();
     moveTo(580, 450, 2, 600);
     waitUntil(() => shieldGhostIn('beam'), 800, 'L4 shield');
-    moveTo(580, 112, 2, 500);
-    moveTo(400, 112, 2, 400);
+    moveTo(580, 110, 2, 500);
+    moveTo(400, 110, 2, 400);
     waitUntil(() => laserOff('l2'), 400, 'L4 hall laser');
-    moveTo(280, 112, 2, 400);
+    moveTo(280, 110, 2, 400);
     waitUntil(() => doorOpen('ad'), 600, 'L4 alarm door');
-    moveTo(200, 112, 2, 300);
+    moveTo(200, 110, 2, 300);
     waitUntil(() => doorOpen('td'), 500, 'L4 timer');
     moveTo(50, 80, 2, 400);
     dropInZone();
+}
+
+function secondsUntilBeam(target) {
+    const prism = state.prisms[0];
+    const pi2 = Math.PI * 2;
+    let delta = target - prism.beamAngle(state.currentTick);
+    delta = ((delta % pi2) + pi2) % pi2;
+    return delta / prism.sweepSpeed;
+}
+
+// Climb from the safe line (y=440, outside Prism range) takes ~0.8s.
+// Leave just under a second before the beam points north so the glass arrives
+// on the quiet face, and not while the beam is sweeping the south lane.
+function climbWindow() {
+    if (!shieldGhostIn('gate')) return false;
+    const prism = state.prisms[0];
+    if (!prism || prism.defeated || prism.hp <= 0) return false;
+    const untilNorth = secondsUntilBeam(-Math.PI / 2);
+    // Climb is ~0.8s and the quiet-face window is about a second wide.
+    return untilNorth > 0.4 && untilNorth < 1.15;
 }
 
 function solveMB() {
@@ -216,38 +240,39 @@ function solveMB() {
     moveTo(660, 530, 2, 500);
     moveTo(660, 440, 2, 300);
     moveTo(210, 440, 2, 700);
-    wait(12);
+    wait(8);
     pressR();
-    // Ammo sits in the south room. Carry it through the shielded gate during a north-facing window.
-    waitUntil(() => shieldGhostIn('gate') && state.currentTick >= 240, 800, 'MB gate shield');
+    waitUntil(() => shieldGhostIn('gate'), 700, 'MB gate shield');
     moveTo(420, 530, 2, 400);
     grab();
     moveTo(660, 530, 2, 500);
     moveTo(660, 440, 2, 300);
     moveTo(385, 440, 2, 500);
+    waitUntil(climbWindow, 500, 'MB climb 1');
     moveTo(385, 248, 2, 400);
-    waitUntil(() => state.prisms[0].hp <= 2, 600, 'MB hit 1');
+    waitUntil(() => state.prisms[0].hp <= 2, 180, 'MB hit 1');
     moveTo(385, 440, 2, 400);
     moveTo(660, 440, 2, 500);
     moveTo(660, 530, 2, 300);
     moveTo(180, 530, 2, 600);
     grab();
-    waitUntil(() => state.currentTick >= 1000, 800, 'MB past south sweep');
     moveTo(660, 530, 2, 600);
     moveTo(660, 440, 2, 300);
     moveTo(385, 440, 2, 500);
+    waitUntil(climbWindow, 500, 'MB climb 2');
     moveTo(385, 248, 2, 400);
-    waitUntil(() => state.prisms[0].hp <= 1, 600, 'MB hit 2');
+    waitUntil(() => state.prisms[0].hp <= 1, 180, 'MB hit 2');
     moveTo(385, 440, 2, 400);
     moveTo(660, 440, 2, 500);
     moveTo(660, 530, 2, 300);
     moveTo(480, 530, 2, 400);
     pressR();
-    // The loop-2 echo replays both carries and lands the killing hit.
-    waitUntil(() => doorOpen('boss_door'), 1400, 'MB door');
+    // Fetch the real parcel while the echo is still crossing. The door opens
+    // when that echo's first quiet-face hit lands.
     moveTo(560, 530, 2, 400);
     grab();
-    waitUntil(() => doorOpen('boss_door'), 400, 'MB door still');
+    moveTo(660, 530, 2, 300);
+    waitUntil(() => doorOpen('boss_door'), 700, 'MB door');
     dropInZone();
 }
 
@@ -322,7 +347,17 @@ export function runNaive(which) {
             tick({}, ['space'], true);
             tick({}, [], true);
             softMove(580, 450);
-            softMove(580, 112);
+            softMove(580, 110);
+            wait(80, true);
+        },
+        'l1-grab-first': () => {
+            loadLevel({ level: levelIndex('W4-L1') });
+            // The box is on the way to the zone. Walking it there crosses the beam.
+            softMove(200, 460);
+            tick({}, ['space'], true);
+            tick({}, [], true);
+            softMove(520, 460);
+            softMove(660, 450);
             wait(80, true);
         },
         'mb-no-shield': () => {

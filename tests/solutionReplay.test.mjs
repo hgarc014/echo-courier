@@ -58,7 +58,7 @@ for (const f of w4Files) {
     });
 }
 
-for (const plan of ['l2-one-plate', 'l3-no-shield', 'l4-crack-park', 'mb-no-shield']) {
+for (const plan of ['l1-grab-first', 'l2-one-plate', 'l3-no-shield', 'l4-crack-park', 'mb-no-shield']) {
     check(`naive ${plan} fails`, () => {
         const r = runNaiveW4(plan);
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);

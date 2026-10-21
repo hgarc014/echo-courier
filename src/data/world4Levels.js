@@ -35,15 +35,19 @@ function parChallenge(loops) {
 
 const story = (speaker, text) => ({ speaker, text });
 
-// Full-height beam. Plate on the left shuts it; fragile waits on the right.
+// Lower hall is the haul. The plate is upstairs, and the only stair is the left shaft.
+// Grabbing the glass and walking right walks it into the beam.
 const W4_L1_LAYOUT = base({
-    player: { x: 50, y: 280 },
-    deliveryZone: { x: 640, y: 230, w: 120, h: 140 },
-    walls: borders(),
+    player: { x: 48, y: 460 },
+    deliveryZone: { x: 640, y: 420, w: 120, h: 120 },
+    walls: [
+        ...borders(),
+        { x: 130, y: 250, w: 650, h: 20 }
+    ],
     doors: [],
-    plates: [{ x: 120, y: 270, linkedIds: ['l1'], id: 'p1', type: 'standard' }],
-    packages: [{ x: 500, y: 280, id: 'pkg1', packageType: 'fragile', requiredForDelivery: true }],
-    lasers: [{ x: 390, y: 20, w: 24, h: 560, id: 'l1' }]
+    plates: [{ x: 220, y: 80, linkedIds: ['l1'], id: 'p1', type: 'standard' }],
+    packages: [{ x: 200, y: 460, id: 'pkg1', packageType: 'fragile', requiredForDelivery: true }],
+    lasers: [{ x: 430, y: 270, w: 24, h: 310, id: 'l1' }]
 });
 
 // One echo, two plates. Upper hall is the switch path; lower hall is the haul.
@@ -97,12 +101,13 @@ const W4_L4_LAYOUT = base({
         // Tunnel floor. East gap x=660+ is the shaft into the beam, capped above.
         { x: 20, y: 340, w: 540, h: 20 },
         { x: 620, y: 340, w: 40, h: 20 },
-        // Top-hall dividers. The open lane is y=110–150; the camera watches east of it.
-        { x: 250, y: 20, w: 20, h: 90 },
-        { x: 250, y: 150, w: 20, h: 50 }
+        // Top-hall dividers. Open lane is y=90–160 so a courier at y=110
+        // clears the wall and the closed door by more than one movement frame.
+        { x: 250, y: 20, w: 20, h: 70 },
+        { x: 250, y: 160, w: 20, h: 40 }
     ],
     doors: [
-        { x: 250, y: 110, w: 20, h: 40, id: 'ad', type: 'alarm' },
+        { x: 250, y: 90, w: 20, h: 70, id: 'ad', type: 'alarm' },
         { x: 160, y: 40, w: 20, h: 140, id: 'td', type: 'timer', openT: 120, closedT: 150 }
     ],
     plates: [{ x: 80, y: 470, linkedIds: ['l2'], id: 'p2', type: 'standard' }],
@@ -147,13 +152,15 @@ const W4_MB_LAYOUT = base({
     prisms: [{
         x: 376, y: 176, w: 48, h: 48, id: 'prism',
         hp: 3,
-        sweepSpeed: Math.PI / 2 / 3,
+        // Full turn in 8.5s (default is 12s). The quiet face points south at 5s,
+        // which is when a courier who shielded the gate can actually be there.
+        sweepSpeed: (2 * Math.PI) / 8.5,
         arc: Math.PI / 12,
         range: 240,
         receiverArc: Math.PI / 2,
         telegraphTime: 1.5,
         receiverRange: 78,
-        startAngle: 0,
+        startAngle: -Math.PI / 2 - ((2 * Math.PI) / 8.5) * 5 + 2 * Math.PI,
         spin: 1,
         defeatDoorId: 'boss_door'
     }]
@@ -185,8 +192,8 @@ const SHIELD = { unlocks: ['ghostShield'], grants: ['ghostShield'] };
 export const W4_LEVELS = [
     level(
         'W4-L1: Glass',
-        'Hold the laser plate with an echo, then carry the fragile package through.',
-        'Fragile cargo on this manifest. The grid vaporizes it, and you with it. An echo on the plate kills the beam.',
+        'Glass does not survive a live beam. The switch for this one is not on the floor with the cargo.',
+        'The box is downstairs. So is the beam. Whatever kills that beam is not standing next to the box.',
         2, 1, 22, W4_L1_LAYOUT
     ),
     level(
@@ -197,8 +204,8 @@ export const W4_LEVELS = [
     ),
     level(
         'W4-L3: Shieldwall',
-        'Park a shielded echo in the beam, facing the emitter. Carry the fragile package through.',
-        'No plate on this emitter. Walk into the beam, face it, and stop. Your echo\'s shield is the wall.',
+        'No plate on this emitter. A shield covers one side of an echo — the side it was facing when the loop closed.',
+        'Nothing in this hall switches the beam off. Walking through is not the same as standing in it. The loop remembers which way you were looking.',
         2, 1, 24, W4_L3_LAYOUT,
         SHIELD
     ),
@@ -211,16 +218,16 @@ export const W4_LEVELS = [
     ),
     level(
         'W4-MB: Prism',
-        'Block the gate with a shield echo. Shatter fragile ammo on Prism\'s back, then deliver.',
-        'Prism sweeps a beam and keeps a mirror on its back. Fragile ammo into that mirror is the only thing that hurts it. One heartbeat, one phase.',
-        3, 2, 30, W4_MB_LAYOUT,
+        'The south gate is an unswitched beam. Glass hurts the machine, but not from the side that is firing.',
+        'The sweep warns before it burns. The gate stays up until something stands in it the right way. What you carry only matters on the quiet face.',
+        3, 2, 20, W4_MB_LAYOUT,
         {
             ...SHIELD,
             flags: {
                 isBoss: true,
                 bossIntro: {
                     speaker: 'PRISM',
-                    text: 'The turret never stops. A yellow arc marks where the beam is about to be. The mirror is on the back — feed it glass.'
+                    text: 'The turret never stops. A warning marks where the beam is about to be. The face that fires is not the weak side.'
                 }
             }
         }

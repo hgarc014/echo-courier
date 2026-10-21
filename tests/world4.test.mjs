@@ -50,7 +50,7 @@ const SPEC = {
     'W4-L2: Two Beams, One Ghost': { par: 2, loopTime: 26, maxGhosts: 1, grants: [] },
     'W4-L3: Shieldwall': { par: 2, loopTime: 24, maxGhosts: 1, grants: ['ghostShield'] },
     'W4-L4: Prism Freight': { par: 3, loopTime: 36, maxGhosts: 2, grants: ['ghostShield'] },
-    'W4-MB: Prism': { par: 3, loopTime: 30, maxGhosts: 2, grants: ['ghostShield'] }
+    'W4-MB: Prism': { par: 3, loopTime: 20, maxGhosts: 2, grants: ['ghostShield'] }
 };
 
 for (const { level, index } of w4) {
@@ -98,7 +98,10 @@ for (const { level, index } of w4) {
             assert.equal(json.prisms.length, 1);
             const boss = json.prisms[0];
             assert.equal(boss.hp, 3);
-            assert.equal(boss.sweepSpeed, PRISM_DEFAULTS.sweepSpeed);
+            assert.equal(boss.sweepSpeed, (2 * Math.PI) / 8.5);
+            assert.ok(boss.sweepSpeed > PRISM_DEFAULTS.sweepSpeed, 'boss sweep is tighter than the default turret');
+            const northAt = -Math.PI / 2 - ((2 * Math.PI) / 8.5) * 5 + 2 * Math.PI;
+            assert.ok(Math.abs(boss.startAngle - northAt) < 1e-9, 'quiet face is phased to the gate crossing');
             assert.equal(boss.arc, PRISM_DEFAULTS.arc);
             assert.equal(boss.range, 240);
             assert.equal(boss.receiverArc, PRISM_DEFAULTS.receiverArc);
@@ -111,6 +114,25 @@ for (const { level, index } of w4) {
         }
     });
 }
+
+check('W4-L4 haul lane clears the divider by more than a movement frame', () => {
+    const idx = LEVELS.findIndex(l => l.name.startsWith('W4-L4'));
+    const setup = getLevelSetup(idx);
+    const routeY = 110;
+    const margin = 8;
+    const box = { x: 0, y: routeY - margin, w: 30, h: 30 + margin * 2 };
+    const hits = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    for (let x = 240; x <= 600; x += 10) {
+        box.x = x;
+        for (const wall of setup.walls) {
+            assert.equal(hits(box, wall), false, `route box at ${x} clips wall ${wall.x},${wall.y} ${wall.w}x${wall.h}`);
+        }
+    }
+    const door = setup.doors.find(d => d.id === 'ad');
+    assert.ok(door, 'alarm door');
+    assert.ok(door.y <= routeY - margin, 'door opening starts above the courier');
+    assert.ok(door.y + door.h >= routeY + 30 + margin, 'door opening ends below the courier');
+});
 
 check('inspector prism config survives JSON', () => {
     resetWorld();
