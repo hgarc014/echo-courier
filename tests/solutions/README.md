@@ -10,7 +10,7 @@ replays every file headlessly in CI and fails if the level no longer completes, 
 {
   "format": "echo-courier-solution/v1",
   "level": 0,                      // LEVELS index; null for an editor layout
-  "levelName": "Level 1: The Basics",
+  "levelName": "First Shift",
   "layout": { ... }, "meta": { ... },   // editor playtests only: serialized layout + level meta
   "loops": [                       // one array per loop (split at every rewind)
     [["s+d", 4], ["d", 30], ["", 20], ["r", 1]],
@@ -29,7 +29,9 @@ for that many 60 Hz simulation ticks. Dialog/briefing screens are skipped automa
   DELIVERY SUCCESSFUL panel press **EXPORT SOLUTION (DEV)**. It downloads
   `levelN.solution.json` (or `editor.solution.json`). `window.exportSolution()` in the console
   also prints / copies it. Recording restarts on level start, Q-restart and playtest start.
-- **Scripted:** `node tests/harness/recordLevel1.mjs tests/solutions/level01.json` shows how to
-  drive the sim with code and export through the same recorder.
+- **Scripted:** `node tests/harness/recordW1.mjs <levelIndex|all>` drives the World 1 sim and writes
+  `w1-l1.json` … `w1-mb.json`. `node tests/harness/recordLevel1.mjs [tests/solutions/w1-l1.json]`
+  records First Shift only.
 
-Drop the file here as `levelNN.json` and run `npm test`.
+Drop the file here and run `npm test`. World 1 replays also drop the last loop (must fail) and
+run a cheap wrong plan for Return Trip, Shift Change, Airlock Relay, and Gatekeeper.
