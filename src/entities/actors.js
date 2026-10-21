@@ -3,6 +3,27 @@ import { Entity } from './base.js';
 import { AABB, resolveDashFacing } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
 import { pickCourierFrame } from '../core/atlas.js';
+import { dominantFacing, shieldSlab } from '../systems/laserShield.js';
+
+function drawGhostShield(ctx, actor) {
+    if (!getUnlockedAbilities().includes('ghostShield')) return;
+    const f = dominantFacing(actor.facingX, actor.facingY);
+    if (!f) return;
+    const slab = shieldSlab(actor, f);
+    if (!slab) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 221, 0, 0.9)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    const cx = actor.x + (actor.w || 30) / 2;
+    const cy = actor.y + (actor.h || 30) / 2;
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + f.x * 18, cy + f.y * 18);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 221, 0, 0.25)';
+    ctx.fillRect(slab.x, slab.y, slab.w, slab.h);
+    ctx.restore();
+}
 
 function walkPose(moving, carrying, dashing, tick) {
     const walk = moving ? Math.sin(tick * 0.55) : 0;
@@ -77,16 +98,16 @@ export class PlayerEntity extends Entity {
         const t = state.currentTick;
         const cloaking = this.cloakTimer > 0;
         const dashing = this.dashCooldown > 48;
-        if (drawCourier(ctx, this, {
+        if (!drawCourier(ctx, this, {
             cloaking, dashing, carrying: this.carrying, moving: this.moving, tick: t,
             tint: state.playerColor, tintAlpha: 0.2,
             alpha: cloaking ? 0.85 : 1,
             scanlines: cloaking
         })) {
-            return;
+            ctx.fillStyle = state.playerColor;
+            ctx.fillRect(this.x, this.y, this.w, this.h);
         }
-        ctx.fillStyle = state.playerColor;
-        ctx.fillRect(this.x, this.y, this.w, this.h);
+        drawGhostShield(ctx, this);
     }
 }
 
@@ -209,27 +230,6 @@ export class Ghost extends Entity {
             ctx.fillStyle = '#00f3ff'; ctx.fillRect(this.x, this.y, this.w, this.h);
         }
 
-        if (getUnlockedAbilities().includes('ghostShield')) {
-            const cx = this.x + this.w / 2;
-            const cy = this.y + this.h / 2;
-            const facingX = this.facingX || 1;
-            const facingY = this.facingY || 0;
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255, 221, 0, 0.9)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx + facingX * 18, cy + facingY * 18);
-            ctx.stroke();
-            ctx.fillStyle = 'rgba(255, 221, 0, 0.25)';
-            if (Math.abs(facingX) > 0) {
-                const shieldX = facingX > 0 ? this.x + this.w - 4 : this.x - 8;
-                ctx.fillRect(shieldX, this.y - 2, 8, this.h + 4);
-            } else if (Math.abs(facingY) > 0) {
-                const shieldY = facingY > 0 ? this.y + this.h - 4 : this.y - 8;
-                ctx.fillRect(this.x - 2, shieldY, this.w + 4, 8);
-            }
-            ctx.restore();
-        }
+        drawGhostShield(ctx, this);
     }
 }

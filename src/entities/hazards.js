@@ -1,4 +1,4 @@
-import { state } from '../core/state.js';
+import { state, getUnlockedAbilities } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB, checkWallCollision, lineOfSightBlocked } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
@@ -14,6 +14,7 @@ import {
     overlapArea,
     pointInRect
 } from '../core/hitZones.js';
+import { collectShieldSlabs, laserHotRects } from '../systems/laserShield.js';
 
 function isPresentPlayer(actor) {
     return actor && actor.id === undefined && actor.assetName === 'player';
@@ -21,18 +22,30 @@ function isPresentPlayer(actor) {
 
 export class Laser extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'laser'); this.id=id; this.isOpen=false; }
+    hotRects() {
+        if (this.isOpen) return [];
+        const enabled = getUnlockedAbilities().includes('ghostShield');
+        const slabs = collectShieldSlabs(state.player, state.activeGhosts, enabled);
+        return laserHotRects(this, slabs);
+    }
     render(ctx) {
-        if (!this.isOpen) {
-            const pulse = 0.78 + 0.22 * Math.abs(Math.sin(state.currentTick * 0.18));
-            const img = resolveSprite(state, 'laser');
+        if (this.isOpen) return;
+        const rects = this.hotRects();
+        if (!rects.length) return;
+        const pulse = 0.78 + 0.22 * Math.abs(Math.sin(state.currentTick * 0.18));
+        const img = resolveSprite(state, 'laser');
+        for (const r of rects) {
             if (img) {
-                ctx.save(); ctx.beginPath(); ctx.rect(this.x, this.y, this.w, this.h); ctx.clip();
+                ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
                 ctx.globalAlpha = pulse;
                 const tile = 40;
-                for(let i=0; i<this.h; i+=tile) ctx.drawImage(img, this.x+(this.w/2 - 20), this.y+i, tile, tile);
-                for(let i=0; i<this.w; i+=tile) ctx.drawImage(img, this.x+i, this.y+(this.h/2 - 20), tile, tile);
+                for (let i = 0; i < r.h; i += tile) ctx.drawImage(img, r.x + (r.w / 2 - 20), r.y + i, tile, tile);
+                for (let i = 0; i < r.w; i += tile) ctx.drawImage(img, r.x + i, r.y + (r.h / 2 - 20), tile, tile);
                 ctx.restore();
-            } else { ctx.fillStyle=`rgba(255,0,0,${0.35 * pulse})`; ctx.fillRect(this.x, this.y, this.w, this.h); }
+            } else {
+                ctx.fillStyle = `rgba(255,0,0,${0.35 * pulse})`;
+                ctx.fillRect(r.x, r.y, r.w, r.h);
+            }
         }
     }
 }

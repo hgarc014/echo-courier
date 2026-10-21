@@ -3,24 +3,28 @@ import { PlayerEntity } from '../entities/actors.js';
 import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
 import { Burrower, normalizeMaxStunsPerLoop } from '../entities/bosses/Burrower.js';
+import { Prism, serializePrism, normalizePrismParams } from '../entities/bosses/Prism.js';
 import { finishedWithinLoops } from '../core/loopDisplay.js';
 import { Gatekeeper, normalizeFreshTicks } from '../entities/bosses/gatekeeper.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
+import { W4_LEVELS } from './world4Levels.js';
 import { PIT_KILL_FRACTION, clampKillFraction } from '../core/hitZones.js';
 
 // W1 Dispatch is 0–4. W2 Subfloor (#47) is 5–9. Older campaign levels follow, shifted
 // past both. Provisional Subfloor slots (originally indices 2–4) sit at the front of Panopticon.
+// Beamworks starts empty. The contiguous W4- name block is appended after this campaign
+// and filled in below, so a later world can be inserted before that block.
 export const WORLDS = [
   { id: 1, name: 'Dispatch',   unlocks: [],                 levels: [0, 1, 2, 3, 4] },
   { id: 2, name: 'Subfloor',   unlocks: ['dash'],           levels: [5, 6, 7, 8, 9] },
   { id: 3, name: 'Panopticon', unlocks: ['toss', 'cloak'],  levels: [10, 11, 12, 13, 14, 15] },
-  { id: 4, name: 'Beamworks',  unlocks: ['ghostShield'],    levels: [16, 17] },
+  { id: 4, name: 'Beamworks',  unlocks: ['ghostShield'],    levels: [] },
   { id: 5, name: 'Overclock',  unlocks: [],                 levels: [18, 19] },
 ];
 
-let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, projectiles;
+let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, prisms, projectiles;
 
 export function createBoundWalls(w, h, t = 20) {
     return [
@@ -132,10 +136,11 @@ function setupDevSandbox() {
     robots[0].fireCooldown = 90;
     projectiles = [];
     gatekeepers = [];
+    prisms = [];
 }
 
 function emptyActors() {
-    return { lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], gatekeepers: [] };
+    return { lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], gatekeepers: [], prisms: [] };
 }
 
 // W1-L1. Plate sits on the LEVEL1_DEMO move target so the intro hint still lines up.
@@ -684,11 +689,12 @@ export const LEVELS = [
     { name: "Level 8: Timed Gate", voiceKey: "level-7-story", story: { speaker: "Sector Surveillance", text: "Gate TD-1 is locked to a maintenance cycle. Plates are offline in this spur. The door opens and shuts on its own clock. Cross with the parcel while the gate is open." }, obj: "Timer door cycles open and shut. Carry the package through while it is open.", challenge: { desc: "Finish in 2 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 2) }, maxGhosts: 2, mapWidth: 800, mapHeight: 600, layout: LEVEL8_LAYOUT, demos: { intro: LEVEL8_DEMO } },
     { name: "Level 9: Fragile Grid", voiceKey: "level-8-story", story: { speaker: "Local Hub Manager", text: "Class-4 fragile tech on this manifest. The laser grid vaporizes it on contact, and a live beam will burn you too. Hold both plates with echoes, then walk the cargo to the zone." }, obj: "Lasers vaporize fragile cargo. Echo-hold both plates, then deliver.", challenge: { desc: "Finish in 3 loops or fewer", check: () => finishedWithinLoops(state.loopNumber, 3) }, maxGhosts: 3, mapWidth: 800, mapHeight: 600, layout: LEVEL9_LAYOUT, demos: { intro: LEVEL9_DEMO } },
 
-    { name: "Level 10: Fast Shipping", voiceKey: "level-9-story", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Critical: Package is highly unstable. Detonation sequence activates upon handling. The company expects immediate delivery. Do not fail." }, obj: "Timed packages explode! Toss them over the gap instantly.", challenge: { desc: "Do NOT use Dash", check: () => state.runStats.dashes === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,40,40)); packages=[new Package('pkg1',100,300,'timed')]; doors=[]; plates=[]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; gatekeepers=[]; } },
-    { name: "Level 11: Time Dilation", voiceKey: "level-10-story", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; gatekeepers=[]; } },
+    { name: "Level 10: Fast Shipping", voiceKey: "level-9-story", grants: ['toss'], story: { speaker: "ChronoHaul Dispatch", text: "Critical: Package is highly unstable. Detonation sequence activates upon handling. The company expects immediate delivery. Do not fail." }, obj: "Timed packages explode! Toss them over the gap instantly.", challenge: { desc: "Do NOT use Dash", check: () => state.runStats.dashes === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600)]; cracks=[]; for(let i=20;i<580;i+=40) cracks.push(new CrackedFloor(380,i,40,40)); packages=[new Package('pkg1',100,300,'timed')]; doors=[]; plates=[]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; robots=[]; projectiles=[]; gatekeepers=[]; prisms=[]; } },
+    { name: "Level 11: Time Dilation", voiceKey: "level-10-story", story: { speaker: "Unknown Hacker [Encrypted]", text: "They're trapping your discarded timelines in these Static Zones. The purple fields literally harvest temporal energy by slowing your echoes down. They're farming you." }, obj: "Static Zones slow ghost playback. Squeeze your execution.", challenge: { desc: "No Alarms Triggered", check: () => state.runStats.alarms === 0 }, maxGhosts: 3, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600), new Wall(450,20,40,180), new Wall(450,400,40,180), new Wall(550,20,40,180), new Wall(550,400,40,180)]; statics=[new StaticZone(200,20,200,560)]; doors=[new TimerDoor('td1',450,200,40,200,60,60)]; doors.push(new Door('d1', 550, 200, 40, 200)); plates=[new PressurePlate('p1', 300, 450, 'd1')]; packages=[new Package('pkg1',100,100)]; lasers=[]; guards=[]; cameras=[]; drones=[]; winds=[]; cracks=[]; robots=[]; projectiles=[]; gatekeepers=[]; prisms=[]; } },
 
-    { name: "Level 12: Danger Courier", voiceKey: "level-11-story", bossVoiceKey: "level-11-boss-intro", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => finishedWithinLoops(state.loopNumber, 1) }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; gatekeepers=[]; } },
-    { name: "Dev Sandbox", voiceKey: "level-12-story", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox }
+    { name: "Level 12: Danger Courier", voiceKey: "level-11-story", bossVoiceKey: "level-11-boss-intro", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => finishedWithinLoops(state.loopNumber, 1) }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; gatekeepers=[]; prisms=[]; } },
+    { name: "Dev Sandbox", voiceKey: "level-12-story", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox },
+    ...W4_LEVELS
 ];
 
 // #47 shipped these after the sandbox as pending. They are World 2 now, so they
@@ -701,11 +707,23 @@ W2_LEVELS.forEach((level, i) => {
 
 for (const level of LEVELS) installParChallenge(level);
 
+// World 4 points at the contiguous W4- block appended after the campaign.
+// Name lookup (not a hardcoded index list) so a later world can slot in before it.
+{
+    const beam = WORLDS.find(w => w.id === 4);
+    const start = LEVELS.findIndex(l => typeof l.name === 'string' && l.name.startsWith('W4-'));
+    const indices = [];
+    if (start >= 0) {
+        for (let i = start; i < LEVELS.length && String(LEVELS[i].name || '').startsWith('W4-'); i++) indices.push(i);
+    }
+    if (beam) beam.levels = indices;
+}
+
 for (const world of WORLDS) {
     for (const idx of world.levels) {
         const level = LEVELS[idx];
         if (!level) continue;
-        // Keep per-level world/unlocks already set by world content (W2). Fill the rest from WORLDS.
+        // Keep per-level world/unlocks already set by world content (W2, W4). Fill the rest from WORLDS.
         if (level.world == null) level.world = world.id;
         if (!Array.isArray(level.unlocks)) level.unlocks = [...world.unlocks];
     }
@@ -871,6 +889,11 @@ function deserializeGatekeeper(raw) {
     return new Gatekeeper(g.id, g.x, g.y, opts);
 }
 
+function deserializePrism(p) {
+    const params = normalizePrismParams(p || {});
+    return new Prism(p?.x || 0, p?.y || 0, { ...params, id: p?.id || 'prism' });
+}
+
 // Boss/challenge level config shared by serialize, deserialize and the editor.
 // challengeRef names the campaign level whose code-defined challenge applies (challenges are functions).
 export const BOSS_META_KEYS = ['isBoss', 'bossIntro', 'bossIntroDoorId', 'challengeRef'];
@@ -966,6 +989,7 @@ export function serializeLevel(src = state) {
         robots: (src.robots || []).map(serializeRobot),
         burrowers: (src.burrowers || []).map(serializeBurrower),
         gatekeepers: (src.gatekeepers || []).map(serializeGatekeeper),
+        prisms: (src.prisms || []).map(serializePrism),
         crackSpeed: crackSpeedFromMeta(m, src.crackSpeed)
     };
     if (demo) payload.demo = demo;
@@ -1044,6 +1068,7 @@ export function deserializeLevel(data) {
     robots = (data.robots||[]).map(deserializeRobot);
     burrowers = (data.burrowers||[]).map(deserializeBurrower);
     gatekeepers = (data.gatekeepers||[]).map(deserializeGatekeeper);
+    prisms = (data.prisms||[]).map(deserializePrism);
     projectiles = [];
 
     const demo = cloneDemo(data.demo || data.meta?.demo);
@@ -1086,7 +1111,7 @@ export function deserializeLevel(data) {
         }
     }
     
-    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, projectiles }, size);
+    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, prisms, projectiles }, size);
 }
 
 export function getLevelSetup(index) {
@@ -1096,6 +1121,7 @@ export function getLevelSetup(index) {
     
     if (level.setup) {
         gatekeepers = [];
+        prisms = [];
         level.setup();
         hints = [];
         burrowers = [];
@@ -1105,7 +1131,7 @@ export function getLevelSetup(index) {
         return withMapSize({
             player, deliveryZone, walls, doors, plates, hints, packages,
             lasers, guards, cameras, drones, winds, statics, cracks,
-            robots, burrowers, gatekeepers, projectiles
+            robots, burrowers, gatekeepers, prisms, projectiles
         }, size);
     } else if (level.layout) {
         const payload = { ...level.layout, ...size, demos: level.demos, demo: level.demo };

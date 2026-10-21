@@ -6,10 +6,11 @@ import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package
 import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
 import { Burrower } from '../entities/bosses/Burrower.js';
 import { Gatekeeper } from '../entities/bosses/gatekeeper.js';
+import { Prism } from '../entities/bosses/Prism.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { normalizeTimeline } from '../systems/temporalPlate.js';
-import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
+import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, applyPrismConfig, applyLaserConfig, applyPackageConfig, applyAbilityList, ABILITY_IDS, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -43,7 +44,8 @@ const ENTITY_LISTS = [
     ['cracks', 'crack'],
     ['robots', 'robot'],
     ['burrowers', 'burrower'],
-    ['gatekeepers', 'gatekeeper']
+    ['gatekeepers', 'gatekeeper'],
+    ['prisms', 'prism']
 ];
 
 const DEFAULT_EDITOR_META = () => ({
@@ -179,9 +181,9 @@ function parseDemoFromForm() {
 }
 
 function applyLevelConfigForm() {
-    const grants = [];
-    for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
-        if (document.getElementById('editor-meta-' + id)?.checked) grants.push(id);
+    let grants = [];
+    for (const id of ABILITY_IDS) {
+        grants = applyAbilityList(grants, id, !!document.getElementById('editor-meta-' + id)?.checked);
     }
     let demo;
     try {
@@ -216,8 +218,10 @@ function applyLevelConfigForm() {
     if (par != null) state.editorLevelMeta.par = par;
     const worldId = normalizeWorldId(document.getElementById('editor-meta-world')?.value);
     if (worldId != null) state.editorLevelMeta.world = worldId;
-    const unlocks = ['dash', 'toss', 'cloak', 'ghostShield']
-        .filter(id => document.getElementById('editor-meta-unlock-' + id)?.checked);
+    let unlocks = [];
+    for (const id of ABILITY_IDS) {
+        unlocks = applyAbilityList(unlocks, id, !!document.getElementById('editor-meta-unlock-' + id)?.checked);
+    }
     if (worldId != null || unlocks.length) state.editorLevelMeta.unlocks = unlocks;
     const val = id => document.getElementById(id)?.value?.trim() || '';
     copyBossMeta({
@@ -410,6 +414,7 @@ function pasteClipboard() {
     else if (clipboard.list === 'lasers') data.id = 'l_' + Date.now();
     else if (clipboard.list === 'burrowers') data.id = 'burrower_' + Date.now();
     else if (clipboard.list === 'gatekeepers') data.id = 'gk_' + Date.now();
+    else if (clipboard.list === 'prisms') data.id = 'prism_' + Date.now();
     const spawned = (deserializeLevel({ [clipboard.list]: [data] })[clipboard.list] || [])[0];
     if (!spawned) return;
     if (clipboard.list === 'cracks' && typeof spawned.setCrackSpeed === 'function') {
@@ -582,6 +587,11 @@ export function initEditor(canvas, ctx) {
             if (!state.gatekeepers) state.gatekeepers = [];
             state.gatekeepers.push(spawned);
         }
+        else if (type === 'prism') {
+            if (!state.prisms) state.prisms = [];
+            spawned = new Prism(cx, cy, { id: 'prism_' + id });
+            state.prisms.push(spawned);
+        }
         else if (type === 'player') {
             if (!state.player) state.player = new PlayerEntity(cx, cy, 30, 30, 'player');
             else { state.player.x = cx; state.player.y = cy; }
@@ -600,8 +610,8 @@ export function initEditor(canvas, ctx) {
     function deleteSelectedEntity() {
         if (!selectedEntity) return;
         pushUndo();
-        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','burrowers','drones','gatekeepers'].forEach(list => {
-            state[list] = state[list].filter(e => e !== selectedEntity);
+        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','burrowers','gatekeepers','prisms','drones'].forEach(list => {
+            state[list] = (state[list] || []).filter(e => e !== selectedEntity);
         });
         selectedEntity = null; updatePropertiesPanel();
     }
@@ -664,7 +674,7 @@ export function initEditor(canvas, ctx) {
         const world = screenToWorld(sx, sy);
         selectedEntity = null;
         
-        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...(state.burrowers||[]), ...(state.gatekeepers||[]), ...state.drones];
+        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...(state.burrowers||[]), ...(state.gatekeepers||[]), ...(state.prisms||[]), ...state.drones];
         
         for (let i = allEntities.length - 1; i >= 0; i--) {
             let ent = allEntities[i];
@@ -792,6 +802,7 @@ function updatePropertiesPanel() {
             html += `<option value="${opt}" ${pt===opt?'selected':''}>${opt}</option>`;
         }
         html += `</select></label><br>`;
+        html += `<label><input type="checkbox" id="prop-pkg-required" ${selectedEntity.requiredForDelivery !== false ? 'checked' : ''}> Required for delivery</label><br>`;
     }
     if (selectedEntity instanceof Door || selectedEntity instanceof AlarmDoor || selectedEntity instanceof TimerDoor) {
         const dt = selectedEntity instanceof AlarmDoor ? 'alarm' : selectedEntity instanceof TimerDoor ? 'timer' : 'standard';
@@ -812,6 +823,20 @@ function updatePropertiesPanel() {
         html += `<label>Emerge until path idx: <input type="number" min="0" id="prop-robot-emerge-idx" value="${selectedEntity.emergeUntilPathIndex||0}" style="width:60px"></label><br>`;
         html += `<label>HP: <input type="number" min="1" id="prop-robot-hp" value="${selectedEntity.hp??3}" style="width:60px"></label> `;
         html += `<label>Fire cooldown: <input type="number" min="0" id="prop-robot-cooldown" value="${selectedEntity.fireCooldown||0}" style="width:60px"></label><br>`;
+    }
+
+    if (selectedEntity instanceof Prism) {
+        const num = (v) => (Number.isFinite(v) ? v : '');
+        html += `<label>HP: <input type="number" min="1" id="prop-prism-hp" value="${selectedEntity.maxHp ?? selectedEntity.hp ?? 3}" style="width:60px"></label><br>`;
+        html += `<label>Sweep rad/s: <input type="number" step="0.01" id="prop-prism-sweep" value="${num(selectedEntity.sweepSpeed)}" style="width:80px"></label><br>`;
+        html += `<label>Beam arc (rad): <input type="number" step="0.01" id="prop-prism-arc" value="${num(selectedEntity.arc)}" style="width:80px"></label><br>`;
+        html += `<label>Range: <input type="number" step="1" id="prop-prism-range" value="${num(selectedEntity.range)}" style="width:70px"></label><br>`;
+        html += `<label>Telegraph (sec): <input type="number" step="0.05" id="prop-prism-telegraph" value="${num(selectedEntity.telegraphTime)}" style="width:70px"></label><br>`;
+        html += `<label>Receiver arc (rad): <input type="number" step="0.01" id="prop-prism-receiver-arc" value="${num(selectedEntity.receiverArc)}" style="width:80px"></label><br>`;
+        html += `<label>Receiver range: <input type="number" step="1" id="prop-prism-receiver-range" value="${num(selectedEntity.receiverRange)}" style="width:70px"></label><br>`;
+        html += `<label>Start angle (rad): <input type="number" step="0.01" id="prop-prism-start" value="${num(selectedEntity.startAngle)}" style="width:80px"></label><br>`;
+        html += `<label>Spin (+1/-1): <input type="number" step="1" id="prop-prism-spin" value="${selectedEntity.spin ?? 1}" style="width:60px"></label><br>`;
+        html += `<label>Defeat door id: <input type="text" id="prop-prism-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
     }
 
     if (selectedEntity instanceof Burrower) {
@@ -980,7 +1005,19 @@ function updatePropertiesPanel() {
         if (document.getElementById('prop-id') && !(selectedEntity instanceof Gatekeeper)) selectedEntity.id = document.getElementById('prop-id').value;
         if (selectedEntity instanceof Gatekeeper) applyGatekeeperEdits(selectedEntity, readGkEdits());
         if (linkSelect) selectedEntity.linkedIds = readLinkedIdsFromSelect(linkSelect);
-        if (document.getElementById('prop-pkg-type')) selectedEntity.type = document.getElementById('prop-pkg-type').value;
+        if (document.getElementById('prop-pkg-type')) {
+            applyPackageConfig(selectedEntity, {
+                type: document.getElementById('prop-pkg-type').value,
+                requiredForDelivery: document.getElementById('prop-pkg-required') ? document.getElementById('prop-pkg-required').checked : selectedEntity.requiredForDelivery
+            });
+        }
+        if (selectedEntity instanceof Laser) {
+            applyLaserConfig(selectedEntity, {
+                id: document.getElementById('prop-id')?.value,
+                w: document.getElementById('prop-w')?.value,
+                h: document.getElementById('prop-h')?.value
+            });
+        }
         if (document.getElementById('prop-openT')) selectedEntity.openT = parseInt(document.getElementById('prop-openT').value, 10) || 60;
         if (document.getElementById('prop-closedT')) selectedEntity.closedT = parseInt(document.getElementById('prop-closedT').value, 10) || 60;
         if (document.getElementById('prop-timeline')) selectedEntity.requiredTimeline = normalizeTimeline(document.getElementById('prop-timeline').value);
@@ -991,6 +1028,23 @@ function updatePropertiesPanel() {
             selectedEntity.emergeUntilPathIndex = Math.max(0, parseInt(document.getElementById('prop-robot-emerge-idx').value, 10) || 0);
             selectedEntity.hp = Math.max(1, parseInt(document.getElementById('prop-robot-hp').value, 10) || 3);
             selectedEntity.fireCooldown = Math.max(0, parseInt(document.getElementById('prop-robot-cooldown').value, 10) || 0);
+        }
+        if (document.getElementById('prop-prism-hp')) {
+            applyPrismConfig(selectedEntity, {
+                hp: document.getElementById('prop-prism-hp').value,
+                sweepSpeed: document.getElementById('prop-prism-sweep').value,
+                arc: document.getElementById('prop-prism-arc').value,
+                range: document.getElementById('prop-prism-range').value,
+                telegraphTime: document.getElementById('prop-prism-telegraph').value,
+                receiverArc: document.getElementById('prop-prism-receiver-arc').value,
+                receiverRange: document.getElementById('prop-prism-receiver-range').value,
+                startAngle: document.getElementById('prop-prism-start').value,
+                spin: document.getElementById('prop-prism-spin').value,
+                defeatDoorId: document.getElementById('prop-prism-door').value,
+                id: document.getElementById('prop-id')?.value,
+                w: document.getElementById('prop-w')?.value,
+                h: document.getElementById('prop-h')?.value
+            });
         }
         if (document.getElementById('prop-burrower-hp')) {
             applyBurrowerConfig(selectedEntity, {
