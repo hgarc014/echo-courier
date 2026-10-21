@@ -76,17 +76,21 @@
                 <br><br>
                 <label style="font-size: 1.05rem;">Dialog Volume: <span id="dialog-volume-value">80%</span></label>
                 <br>
-                <input type="range" id="dialog-volume-slider" min="0" max="100" step="5" style="width: 280px; margin-top: 12px;">
+                <input type="range" id="dialog-volume-slider" min="0" max="100" step="5" style="width: min(280px, calc(100vw - 64px)); margin-top: 12px;">
                 <br><br>
                 <label style="font-size: 1.05rem;">Music Volume: <span id="music-volume-value">80%</span></label>
                 <br>
-                <input type="range" id="music-volume-slider" min="0" max="100" step="5" style="width: 280px; margin-top: 12px;">
+                <input type="range" id="music-volume-slider" min="0" max="100" step="5" style="width: min(280px, calc(100vw - 64px)); margin-top: 12px;">
                 <br><br>
                 <div style="font-size: 0.95rem; color: #9fb0bd;">Voice Engine: <span id="voice-engine-status" style="color: #00f3ff; font-weight: 700;">Idle</span></div>
                 <br>
                 <button id="voice-test-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0;">TEST VOICE</button>
                 <br><br>
                 <button id="global-audio-toggle-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0;">MUTE ALL AUDIO</button>
+                <br><br>
+                <label style="font-size: 1.1rem;"><input type="checkbox" id="unlock-all-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Unlock All Levels (Dev/Testing)</label>
+                <br><br>
+                <button id="reset-save-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0; border-color: red; color: red;">WIPE PROGRESS</button>
                 <div id="dev-mode-controls" hidden>
                     <br><br><br>
                     <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-mode-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Developer Mode (Unlock All)</label>
@@ -94,8 +98,6 @@
                     <button id="open-editor-btn" class="primary-btn" style="padding: 10px 20px; border-color: #39ff14; color: #39ff14;">LAUNCH LEVEL EDITOR</button>
                     <br><br>
                     <button id="open-sandbox-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0; border-color: #ffdd00; color: #ffdd00;">OPEN DEV SANDBOX</button>
-                    <br><br><br>
-                    <button id="reset-save-btn" class="secondary-btn" style="padding: 10px 20px; border-color: red; color: red;">WIPE ALL SAVE DATA</button>
                 </div>
             </div>
             <button class="secondary-btn" style="margin-top: 40px;" onclick="showSubMenu('main')">BACK</button>

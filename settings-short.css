@@ -3,6 +3,8 @@
 
 #title-screen.settings-open {
     justify-content: flex-start;
+    max-height: 100vh;
+    max-height: 100dvh;
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -18,8 +20,15 @@
 }
 
 #title-screen.settings-open #sub-settings {
-    width: 100%;
-    max-width: 560px;
+    width: min(560px, calc(100vw - 32px));
+    max-width: 100%;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+    box-sizing: border-box;
     padding-bottom: 0;
 }
 
@@ -51,7 +60,8 @@
 
 #title-screen.settings-open #sub-settings .dev-mode-toggle input[type="range"] {
     margin-top: 2px !important;
-    width: min(280px, 70vw);
+    width: min(280px, calc(100vw - 64px)) !important;
+    max-width: 100%;
 }
 
 #title-screen.settings-open #sub-settings .dev-mode-toggle label {

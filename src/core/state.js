@@ -36,11 +36,11 @@ function loadAudioSettings() {
 }
 
 export const state = {
-    maxUnlockedLevel: parseInt(localStorage.getItem('echoCourier_maxLevel') || '0'),
+    maxUnlockedLevel: 0,
     playerColor: localStorage.getItem('echoCourier_suit') || '#ff7b00',
-    challengesCompleted: JSON.parse(localStorage.getItem('echoCourier_challenges') || '{}'),
-    abilitiesPurchased: JSON.parse(localStorage.getItem('echoCourier_abilities') || '{}'),
-    tutorialProgress: JSON.parse(localStorage.getItem('echoCourier_tutorials') || '{}'),
+    challengesCompleted: {},
+    abilitiesPurchased: {},
+    tutorialProgress: {},
     audioSettings: loadAudioSettings(),
     runStats: { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 },
     
@@ -149,6 +149,18 @@ export function getCredits() {
     return earned - spent;
 }
 
+export const PROGRESS_KEYS = [
+    'echoCourier_maxLevel',
+    'echoCourier_challenges',
+    'echoCourier_abilities',
+    'echoCourier_tutorials'
+];
+
+// Tutorial "seen" flags (echoCourier_demoSeen_*) are progress; only markDemoSeen writes them.
+export const DEMO_SEEN_KEY_PREFIX = 'echoCourier_demoSeen_';
+
+export const UNLOCK_ALL_KEY = 'echoCourier_unlockAll';
+
 export function isDevUrlEnabled() {
     try {
         return new URLSearchParams(location.search).get('dev') === '1';
@@ -157,13 +169,39 @@ export function isDevUrlEnabled() {
     }
 }
 
+export function isUnlockAll() {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+        return localStorage.getItem(UNLOCK_ALL_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+export function setUnlockAll(enabled) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(UNLOCK_ALL_KEY, enabled ? '1' : '0');
+    } catch {
+        /* private mode / quota */
+    }
+    if (!enabled) reloadProgressFromStorage();
+}
+
 export function isDevMode() {
+    if (isUnlockAll()) return true;
     if (!isDevUrlEnabled()) return false;
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false;
     const el = document.getElementById('dev-mode-checkbox');
     return !!(el && el.checked);
 }
 
+export function isLevelUnlocked(idx, lvl) {
+    return isDevMode() || idx <= state.maxUnlockedLevel || !!(lvl && lvl.isPendingCampaign);
+}
+
 export function applyDevModeUi() {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
     const allowed = isDevUrlEnabled();
     const box = document.getElementById('dev-mode-controls');
     if (box) box.hidden = !allowed;
@@ -204,11 +242,101 @@ export function getUnlockedAbilities() {
     return Array.from(unlocks);
 }
 
-export function saveState() {
+function readProgressObject(key) {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        return parsed;
+    } catch {
+        return {};
+    }
+}
+
+export function reloadProgressFromStorage() {
+    const maxLevel = parseInt(localStorage.getItem('echoCourier_maxLevel') || '0', 10);
+    state.maxUnlockedLevel = Number.isFinite(maxLevel) ? maxLevel : 0;
+    state.challengesCompleted = readProgressObject('echoCourier_challenges');
+    state.abilitiesPurchased = readProgressObject('echoCourier_abilities');
+    state.tutorialProgress = readProgressObject('echoCourier_tutorials');
+}
+
+function writeProgress() {
     localStorage.setItem('echoCourier_maxLevel', state.maxUnlockedLevel);
     localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
     localStorage.setItem('echoCourier_abilities', JSON.stringify(state.abilitiesPurchased));
     localStorage.setItem('echoCourier_tutorials', JSON.stringify(state.tutorialProgress));
+}
+
+// Persists campaign progress. No-op while dev mode is on so Unlock All / ?dev=1 cannot clobber a real save.
+export function saveProgress() {
+    if (isDevMode()) return;
+    writeProgress();
+}
+
+export function saveState() {
+    saveProgress();
     localStorage.setItem('echoCourier_audio', JSON.stringify(state.audioSettings));
     localStorage.setItem('echoCourier_suit', state.playerColor);
 }
+
+// idx is a campaign level index. campaignLevelCount caps the unlock bump (last level does not advance past itself).
+export function recordLevelClear(idx, options = {}) {
+    if (isDevMode()) return;
+    const levelIndex = Number(idx);
+    if (!Number.isInteger(levelIndex) || levelIndex < 0) return;
+    const cap = Number.isFinite(options.campaignLevelCount) ? options.campaignLevelCount : Infinity;
+    if (levelIndex >= state.maxUnlockedLevel && levelIndex < cap - 1) {
+        state.maxUnlockedLevel = levelIndex + 1;
+    }
+    if (options.challengePassed && !state.challengesCompleted[levelIndex]) {
+        state.challengesCompleted[levelIndex] = true;
+    }
+    saveProgress();
+}
+
+export function purchaseAbility(name) {
+    if (isDevMode() || !name) return false;
+    state.abilitiesPurchased[name] = true;
+    saveProgress();
+    return true;
+}
+
+export function markTutorialProgress(idx) {
+    if (isDevMode()) return;
+    if (idx === undefined || idx === null) return;
+    state.tutorialProgress[idx] = true;
+    saveProgress();
+}
+
+export function markDemoSeen(key) {
+    if (!key || isDevMode()) return;
+    try { localStorage.setItem(key, '1'); }
+    catch { /* ignore quota / private mode */ }
+}
+
+function removeDemoSeenKeys() {
+    if (typeof localStorage === 'undefined' || typeof localStorage.key !== 'function') return;
+    const count = localStorage.length;
+    if (typeof count !== 'number') return;
+    const doomed = [];
+    for (let i = 0; i < count; i++) {
+        const key = localStorage.key(i);
+        if (typeof key === 'string' && key.startsWith(DEMO_SEEN_KEY_PREFIX)) doomed.push(key);
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+}
+
+export function wipeProgress() {
+    if (typeof localStorage !== 'undefined') {
+        for (const key of PROGRESS_KEYS) {
+            try { localStorage.removeItem(key); } catch { /* private mode */ }
+        }
+        removeDemoSeenKeys();
+    }
+    state.maxUnlockedLevel = 0;
+    state.challengesCompleted = {};
+    state.abilitiesPurchased = {};
+    state.tutorialProgress = {};
+}
+
+reloadProgressFromStorage();
