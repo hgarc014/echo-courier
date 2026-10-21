@@ -1,4 +1,4 @@
-import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi } from './core/state.js';
+import { state, saveState, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
@@ -11,6 +11,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
+import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
@@ -856,6 +857,7 @@ export function startGame(levelIndex) {
     document.getElementById('mobile-controls')?.classList.remove('hidden');
     syncTouchUi();
     
+    beginRecording({ level: levelIndex, levelName: lv.name });
     if (lv.story) {
         state.gameState = 'DIALOG';
         showLevelDialog(lv.story.speaker, lv.story.text, '#39ff14', `level-${levelIndex}-story`);
@@ -898,6 +900,7 @@ function warnEchoesEndingOnCracks() {
 }
 
 export function resetRun() {
+    markLoopBoundary();
     const recorded = state.currentTick > 0;
     if (recorded) {
         const cap = loopRecordCap();
@@ -940,6 +943,9 @@ export function restartLevel() {
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.add('hidden');
     stopDialogSpeech();
     state.pendingBossIntro = lv.bossIntro || null;
+    beginRecording(state.playtesting
+        ? { level: null, levelName: lv.name, layout: state.editorReturnLayout, meta: editorMetaForRecording() }
+        : { level: state.currentLevelIndex, levelName: lv.name });
     if (lv.isBoss && state.pendingBossIntro) startBossIntro(lv);
     else state.gameState = 'PLAYING';
     updateHUD();
@@ -1019,6 +1025,7 @@ export function startPlaytestFromEditor() {
     document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
 
     applyLoadedLevel(deserializeLevel(layout));
+    beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
     updateHUD();
     state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
@@ -1094,6 +1101,7 @@ function update() {
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
 
+    recordFrame(keys);
     tickLoopFx();
     
     if (state.failTimer > 0) {
@@ -1869,6 +1877,24 @@ function draw() {
     }
 }
 
+function editorMetaForRecording() {
+    const em = state.editorLevelMeta || {};
+    return { name: em.name, maxGhosts: em.maxGhosts, grants: em.grants, crackSpeed: em.crackSpeed, loopTime: em.loopTime };
+}
+
+/** Headless seam: one fixed 60 Hz simulation tick, no rendering (used by tests/harness/replay.mjs). */
+export function stepSimulation() {
+    update();
+}
+
+/** Dev tool: current run's input log as a solution JSON (paste into tests/solutions/). */
+export function exportSolution() {
+    const recording = getRecording();
+    if (!recording) return null;
+    if (state.gameState === 'LEVEL_COMPLETE') recording.completedLoops = state.pastRuns.length + 1;
+    return JSON.stringify(recording);
+}
+
 let lastTime = 0;
 let accumulator = 0;
 const tickRate = 1000 / 60;
@@ -1966,6 +1992,25 @@ window.onload = () => {
     window.initMenu = initMenu;
     window.returnToMenu = returnToMenu;
     window.startPlaytestFromEditor = startPlaytestFromEditor;
+    window.exportSolution = () => {
+        const json = exportSolution();
+        if (!json) { console.warn('[solution] nothing recorded yet'); return null; }
+        console.log('[solution] copy into tests/solutions/<name>.json:\n' + json);
+        try { navigator.clipboard?.writeText(json); } catch (_) {}
+        return json;
+    };
+    window.exportSolutionToFile = () => {
+        const json = window.exportSolution();
+        if (!json) return;
+        const lvl = state.playtesting ? 'editor' : `level${state.currentLevelIndex + 1}`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([json + '\n'], { type: 'application/json' }));
+        a.download = `${lvl}.solution.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    const exportBtn = document.getElementById('export-solution-btn');
+    if (exportBtn) exportBtn.hidden = !isDevUrlEnabled();
     window.returnToEditor = returnToEditor;
     window.nextLevel = () => {
         if (state.playtesting || state.currentLevelMeta?.isPlaytest) { returnToEditor(); return; }
