@@ -6,6 +6,7 @@ import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package
 import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
+import { normalizeTimeline } from '../systems/temporalPlate.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -457,7 +458,10 @@ export function initEditor(canvas, ctx) {
         else if (type === 'door_timer') { spawned = new TimerDoor('d_'+id, cx, cy, 40, 80, 60, 60); state.doors.push(spawned); }
         else if (type === 'plate') { spawned = new PressurePlate('p_'+id, cx, cy, 'd_0'); state.plates.push(spawned); }
         else if (type === 'hint') { spawned = new HintPlate('hint_'+id, cx, cy, { demoId: 'intro', title: 'Hint Demo', autoOpen: false }); if (!state.hints) state.hints=[]; state.hints.push(spawned); }
-        else if (type === 'plate_temporal') { spawned = new TemporalPlate('p_'+id, cx, cy, 'd_0', 'present'); state.plates.push(spawned); }
+        else if (type === 'plate_temporal' || type === 'plate_temporal_first' || type === 'plate_temporal_last') {
+            const mode = type === 'plate_temporal_first' ? 'first' : type === 'plate_temporal_last' ? 'last' : 'present';
+            spawned = new TemporalPlate('p_'+id, cx, cy, 'd_0', mode); state.plates.push(spawned);
+        }
         else if (type === 'package') { spawned = new Package('pkg_'+id, cx, cy, 'standard'); state.packages.push(spawned); }
         else if (type === 'package_heavy') { spawned = new Package('pkg_'+id, cx, cy, 'heavy'); state.packages.push(spawned); }
         else if (type === 'package_fragile') { spawned = new Package('pkg_'+id, cx, cy, 'fragile'); state.packages.push(spawned); }
@@ -705,7 +709,12 @@ function updatePropertiesPanel() {
         html += `<option value="temporal" ${pt==='temporal'?'selected':''}>temporal</option>`;
         html += `</select></label><br>`;
         if (selectedEntity instanceof TemporalPlate) {
-            html += `<label>Timeline: <input type="text" id="prop-timeline" value="${selectedEntity.requiredTimeline||'present'}" style="width:100%"></label><br>`;
+            const tl = normalizeTimeline(selectedEntity.requiredTimeline);
+            html += `<label>Timeline (who can press): <select id="prop-timeline" style="width:100%; background:#000; color:var(--text-main); border:1px solid #444;">`;
+            for (const [v, lab] of [['present', '\u25B6 present (live courier)'], ['first', '1 first (oldest echo)'], ['last', 'L last (newest echo)']]) {
+                html += `<option value="${v}" ${tl===v?'selected':''}>${lab}</option>`;
+            }
+            html += `</select></label><br>`;
         }
     }
 
@@ -730,7 +739,7 @@ function updatePropertiesPanel() {
         if (document.getElementById('prop-pkg-type')) selectedEntity.type = document.getElementById('prop-pkg-type').value;
         if (document.getElementById('prop-openT')) selectedEntity.openT = parseInt(document.getElementById('prop-openT').value, 10) || 60;
         if (document.getElementById('prop-closedT')) selectedEntity.closedT = parseInt(document.getElementById('prop-closedT').value, 10) || 60;
-        if (document.getElementById('prop-timeline')) selectedEntity.requiredTimeline = document.getElementById('prop-timeline').value || 'present';
+        if (document.getElementById('prop-timeline')) selectedEntity.requiredTimeline = normalizeTimeline(document.getElementById('prop-timeline').value);
 
         if (document.getElementById('prop-hint-title')) selectedEntity.title = document.getElementById('prop-hint-title').value || 'Hint Demo';
         if (document.getElementById('prop-hint-demoId')) selectedEntity.demoId = document.getElementById('prop-hint-demoId').value || null;
