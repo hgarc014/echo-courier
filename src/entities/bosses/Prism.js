@@ -13,7 +13,7 @@ export const PRISM_DEFAULTS = {
     range: 240,
     hp: 3,
     receiverArc: Math.PI / 2,
-    telegraphTime: 0.75,
+    telegraphTime: 1.5,
     receiverRange: 78,
     startAngle: 0,
     spin: 1,

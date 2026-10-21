@@ -151,7 +151,7 @@ const W4_MB_LAYOUT = base({
         arc: Math.PI / 12,
         range: 240,
         receiverArc: Math.PI / 2,
-        telegraphTime: 0.75,
+        telegraphTime: 1.5,
         receiverRange: 78,
         startAngle: 0,
         spin: 1,

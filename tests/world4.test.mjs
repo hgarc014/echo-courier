@@ -102,7 +102,7 @@ for (const { level, index } of w4) {
             assert.equal(boss.arc, PRISM_DEFAULTS.arc);
             assert.equal(boss.range, 240);
             assert.equal(boss.receiverArc, PRISM_DEFAULTS.receiverArc);
-            assert.equal(boss.telegraphTime, 0.75);
+            assert.equal(boss.telegraphTime, 1.5);
             assert.equal(boss.defeatDoorId, 'boss_door');
             assert.equal(loaded.prisms[0].maxHp, 3);
             assert.equal(loaded.prisms[0].hp, 3);
@@ -160,6 +160,12 @@ check('beam sweeps 90 degrees in 3 seconds and telegraphs ahead', () => {
     const ahead = prism.startAngle + prism.sweepSpeed * 0.4;
     assert.equal(prism.telegraphCoversAngle(ahead, 0), true);
     assert.equal(prism.beamCoversAngle(ahead, 0), false);
+    assert.ok(prism.telegraphTime >= 1.5 && prism.telegraphTime <= 2, `warning ${prism.telegraphTime}s`);
+    const lead = prism.arc / 2;
+    const warned = prism.beamAngle(0) + lead + prism.sweepSpeed * 1.2;
+    const late = prism.beamAngle(0) + lead + prism.sweepSpeed * 1.6;
+    assert.equal(prism.telegraphCoversAngle(warned, 0), true);
+    assert.equal(prism.telegraphCoversAngle(late, 0), false);
 });
 
 check('shield slab and wall block the beam', () => {
