@@ -71,10 +71,11 @@ export const state = {
     alarmState: false,
     levelAbilityOverrides: [],
     worldUnlockedAbilities: null,
+    clearedLevels: {},
     currentLevelMeta: null,
     pendingBossIntro: null,
     
-    walls: [], doors: [], plates: [], hints: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], gatekeepers: [], projectiles: [], dashTrails: [],
+    walls: [], doors: [], plates: [], hints: [], packages: [], lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], burrowers: [], gatekeepers: [], prisms: [], projectiles: [], dashTrails: [],
     gatekeeperCheckpoint: {},
     deliveryZone: null, player: null,
     bossCheckpoint: null,
@@ -86,7 +87,7 @@ export const state = {
     editorReturnLayout: null,
     
     resetRunData: function() {
-        this.walls=[]; this.doors=[]; this.plates=[]; this.hints=[]; this.packages=[]; this.lasers=[]; this.guards=[]; this.cameras=[]; this.drones=[]; this.winds=[]; this.statics=[]; this.cracks=[]; this.robots=[]; this.burrowers=[]; this.gatekeepers=[]; this.projectiles=[]; this.dashTrails=[]; this.deliveryZone=null; this.player=null;
+        this.walls=[]; this.doors=[]; this.plates=[]; this.hints=[]; this.packages=[]; this.lasers=[]; this.guards=[]; this.cameras=[]; this.drones=[]; this.winds=[]; this.statics=[]; this.cracks=[]; this.robots=[]; this.burrowers=[]; this.gatekeepers=[]; this.prisms=[]; this.projectiles=[]; this.dashTrails=[]; this.deliveryZone=null; this.player=null;
         this.failTimer=0; this.failMessage=""; this.failFx=null; this.rewindFx=null; this.ghostFellFx=[]; this.shakeTimer=0; this.shakeMax=0; this.shakeMag=0; this.rewindFreeze=0;
         this.camX=0; this.camY=0;
     }
@@ -153,7 +154,8 @@ export const PROGRESS_KEYS = [
     'echoCourier_maxLevel',
     'echoCourier_challenges',
     'echoCourier_abilities',
-    'echoCourier_tutorials'
+    'echoCourier_tutorials',
+    'echoCourier_cleared'
 ];
 
 // Tutorial "seen" flags (echoCourier_demoSeen_*) are progress; only markDemoSeen writes them.
@@ -199,8 +201,27 @@ export function isDevMode() {
     return !!(el && el.checked);
 }
 
+// levels.js registers these after WORLDS is built. Null keeps the linear index rule
+// (settings tests import state.js alone).
+let worldUnlockProbe = null;
+let levelClearHandler = null;
+
+export function setWorldUnlockProbe(fn) {
+    worldUnlockProbe = typeof fn === 'function' ? fn : null;
+}
+
+export function setLevelClearHandler(fn) {
+    levelClearHandler = typeof fn === 'function' ? fn : null;
+}
+
 export function isLevelUnlocked(idx, lvl) {
-    return isDevMode() || idx <= state.maxUnlockedLevel || !!(lvl && lvl.isPendingCampaign);
+    if (isDevMode()) return true;
+    if (lvl && lvl.isPendingCampaign) return true;
+    if (worldUnlockProbe) {
+        const verdict = worldUnlockProbe(idx, lvl);
+        if (verdict === true || verdict === false) return verdict;
+    }
+    return idx <= state.maxUnlockedLevel;
 }
 
 export function applyDevModeUi() {
@@ -235,10 +256,19 @@ function applyDashProgression(set, level) {
     else if (flag === false) set.delete('dash');
 }
 
+// unlocks is a synonym of grants (GAME_REFERENCE) for dash, toss, and cloak.
+// ghostShield in unlocks only lets a purchase work on that level; grants still gives it.
+function abilitiesListedAsGrants(level) {
+    const granted = new Set(level?.grants || []);
+    for (const ability of level?.unlocks || []) {
+        if (ability !== 'ghostShield') granted.add(ability);
+    }
+    return granted;
+}
+
 export function applyLevelAbilityOverrides(level) {
-    // unlocks is a synonym of grants (GAME_REFERENCE): both turn the ability on for this level.
     // Dash itself follows dashUnlockedByProgression, so a copied world unlock list cannot grant it early.
-    const granted = new Set([...(level?.grants || []), ...(level?.unlocks || [])]);
+    const granted = abilitiesListedAsGrants(level);
     applyDashProgression(granted, level);
     state.levelAbilityOverrides = [...granted];
 }
@@ -259,15 +289,23 @@ export function getUnlockedAbilities() {
     if (state.abilitiesPurchased['dash'] && allowPurchased('dash')) unlocks.add('dash');
     if (state.abilitiesPurchased['toss'] && allowPurchased('toss')) unlocks.add('toss');
     if (state.abilitiesPurchased['cloak'] && allowPurchased('cloak')) unlocks.add('cloak');
-    if (state.abilitiesPurchased['ghostShield'] && allowPurchased('ghostShield')) unlocks.add('ghostShield');
+    // Shop Echo Shield only works on a level that lists it. World-chain inheritance
+    // (dash/toss/cloak) does not carry the shield into W4-L1/L2 or later worlds.
+    if (state.abilitiesPurchased['ghostShield'] && purchasedShieldAllowed(allowPurchased)) unlocks.add('ghostShield');
     for (let ability of state.levelAbilityOverrides) unlocks.add(ability);
     const meta = state.currentLevelMeta;
     if (meta) {
-        for (let ability of (meta.grants || [])) unlocks.add(ability);
-        for (let ability of (meta.unlocks || [])) unlocks.add(ability);
+        for (let ability of abilitiesListedAsGrants(meta)) unlocks.add(ability);
     }
     applyDashProgression(unlocks, meta);
     return Array.from(unlocks);
+}
+
+function purchasedShieldAllowed(allowPurchased) {
+    const meta = state.currentLevelMeta;
+    if (!meta) return allowPurchased('ghostShield');
+    if (Array.isArray(meta.unlocks)) return meta.unlocks.includes('ghostShield');
+    return allowPurchased('ghostShield');
 }
 
 function readProgressObject(key) {
@@ -286,6 +324,7 @@ export function reloadProgressFromStorage() {
     state.challengesCompleted = readProgressObject('echoCourier_challenges');
     state.abilitiesPurchased = readProgressObject('echoCourier_abilities');
     state.tutorialProgress = readProgressObject('echoCourier_tutorials');
+    state.clearedLevels = readProgressObject('echoCourier_cleared');
 }
 
 function writeProgress() {
@@ -293,6 +332,7 @@ function writeProgress() {
     localStorage.setItem('echoCourier_challenges', JSON.stringify(state.challengesCompleted));
     localStorage.setItem('echoCourier_abilities', JSON.stringify(state.abilitiesPurchased));
     localStorage.setItem('echoCourier_tutorials', JSON.stringify(state.tutorialProgress));
+    localStorage.setItem('echoCourier_cleared', JSON.stringify(state.clearedLevels || {}));
 }
 
 // Persists campaign progress. No-op while dev mode is on so Unlock All / ?dev=1 cannot clobber a real save.
@@ -313,7 +353,10 @@ export function recordLevelClear(idx, options = {}) {
     const levelIndex = Number(idx);
     if (!Number.isInteger(levelIndex) || levelIndex < 0) return;
     const cap = Number.isFinite(options.campaignLevelCount) ? options.campaignLevelCount : Infinity;
-    if (levelIndex >= state.maxUnlockedLevel && levelIndex < cap - 1) {
+    // Out-of-band worlds (W4 sits past the linear cursor) record their own clears
+    // so the cursor does not jump over every index in between.
+    const handled = levelClearHandler ? levelClearHandler(levelIndex, cap) === true : false;
+    if (!handled && levelIndex >= state.maxUnlockedLevel && levelIndex < cap - 1) {
         state.maxUnlockedLevel = levelIndex + 1;
     }
     if (options.challengePassed && !state.challengesCompleted[levelIndex]) {
@@ -365,6 +408,7 @@ export function wipeProgress() {
     state.challengesCompleted = {};
     state.abilitiesPurchased = {};
     state.tutorialProgress = {};
+    state.clearedLevels = {};
 }
 
 reloadProgressFromStorage();

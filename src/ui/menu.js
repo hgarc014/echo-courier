@@ -1,5 +1,5 @@
 import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi, isUnlockAll, isLevelUnlocked, purchaseAbility } from '../core/state.js';
-import { LEVELS, WORLDS, getShopUnlockedAbilities, formatParTooltip } from '../data/levels.js';
+import { LEVELS, WORLDS, getShopUnlockedAbilities, formatParTooltip, levelSelectEntries } from '../data/levels.js';
 import { DEV_PROGRESS_NOTE } from '../core/loopDisplay.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
@@ -46,7 +46,6 @@ export function refreshLevelSelectGrid() {
     if (!uiLevelGrid) return;
     uiLevelGrid.innerHTML = '';
 
-    const placed = new Set();
     const appendLevelButton = (lvl, idx) => {
         let unlocked = isLevelUnlocked(idx, lvl);
         let btn = document.createElement('button');
@@ -56,7 +55,7 @@ export function refreshLevelSelectGrid() {
 
         let hasGold = state.challengesCompleted[idx] === true;
         if (hasGold) btn.classList.add('gold-star');
-        const label = lvl.isPendingCampaign ? lvl.name : `Level ${idx + 1}`;
+        const label = (lvl.isPendingCampaign || String(lvl.name || '').startsWith('W4-')) ? lvl.name : `Level ${idx + 1}`;
         btn.innerHTML = `${levelSelectIconHtml(unlocked, hasGold)}<span class="level-num">${label}</span>`;
         btn.setAttribute('aria-label', hasGold
             ? `${label}, gold star challenge complete`
@@ -66,31 +65,21 @@ export function refreshLevelSelectGrid() {
         uiLevelGrid.appendChild(btn);
     };
 
-    for (const world of WORLDS) {
-        const header = document.createElement('div');
-        header.className = 'world-header';
-        header.textContent = `World ${world.id} — ${world.name}`;
-        uiLevelGrid.appendChild(header);
-        for (const idx of world.levels) {
-            const lvl = LEVELS[idx];
-            if (!lvl || lvl.isTutorial || lvl.isSandbox) continue;
-            placed.add(idx);
-            appendLevelButton(lvl, idx);
-        }
-    }
-
-    let pendingHeader = false;
-    LEVELS.forEach((lvl, idx) => {
-        if (lvl.isTutorial || lvl.isSandbox || placed.has(idx)) return;
-        if (lvl.isPendingCampaign && !pendingHeader) {
-            pendingHeader = true;
+    for (const entry of levelSelectEntries()) {
+        if (entry.type === 'world') {
+            const header = document.createElement('div');
+            header.className = 'world-header';
+            header.textContent = `World ${entry.world.id} — ${entry.world.name}`;
+            uiLevelGrid.appendChild(header);
+        } else if (entry.type === 'pending-header') {
             const header = document.createElement('div');
             header.className = 'world-header';
             header.textContent = 'Subfloor routes (pending campaign order)';
             uiLevelGrid.appendChild(header);
+        } else {
+            appendLevelButton(entry.lvl, entry.idx);
         }
-        appendLevelButton(lvl, idx);
-    });
+    }
 }
 
 export function initMenu() {

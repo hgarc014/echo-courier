@@ -3,7 +3,7 @@
 //    or: node tests/harness/recordW1.mjs all
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { main, state, keys, loadLevel } from './replay.mjs';
+import { main, state, keys, loadLevel, LEVELS } from './replay.mjs';
 import { displayedLoopNumber } from '../../src/core/loopDisplay.js';
 
 const FILES = {
@@ -13,6 +13,12 @@ const FILES = {
     3: 'tests/solutions/w1-l4.json',
     4: 'tests/solutions/w1-mb.json'
 };
+
+function levelByName(name) {
+    const idx = LEVELS.findIndex(level => level.name === name);
+    if (idx < 0) throw new Error(`missing level ${name}`);
+    return idx;
+}
 
 function tick(dir = {}, extra = []) {
     for (const k of ['w', 'a', 's', 'd', 'space', 'r']) keys[k] = false;
@@ -257,7 +263,7 @@ export function runNaive(which) {
         'l2-fetch-first': () => {
             // Real fetch-first: grab the package, walk it to the shaft plate, press R,
             // then try to deliver on the next loop while that echo holds the door.
-            loadLevel({ level: 1 });
+            loadLevel({ level: levelByName('Return Trip') });
             const pkg = state.packages.find(p => p.requiredForDelivery !== false);
             const plate = state.plates.find(p => p.id === 'p1');
             const zone = state.deliveryZone;
@@ -287,7 +293,7 @@ export function runNaive(which) {
             for (let i = 0; i < 240 && state.gameState === 'PLAYING' && state.pastRuns.length <= afterEcho; i++) tick();
         },
         'l3-leave-plate': () => {
-            loadLevel({ level: 2 });
+            loadLevel({ level: levelByName('Shift Change') });
             const plate = state.plates.find(p => p.id === 'p');
             standOn('p', plate.x + 8, plate.y + 8);
             wait(12);
@@ -303,7 +309,7 @@ export function runNaive(which) {
         'l3-first-window': () => {
             // Echo holds the plate (so the only miss is the timer). Sprint for gate T
             // and give up before its second opening.
-            loadLevel({ level: 2 });
+            loadLevel({ level: levelByName('Shift Change') });
             const plate = state.plates.find(p => p.id === 'p');
             const pkg = state.packages.find(p => p.requiredForDelivery !== false);
             const timer = state.doors.find(d => d.id === 't');
@@ -322,7 +328,7 @@ export function runNaive(which) {
             moveTo(timer.x - 90, 280, 4, 40, { allowBlocked: true });
         },
         'l4-two-loops': () => {
-            loadLevel({ level: 3 });
+            loadLevel({ level: levelByName('Airlock Relay') });
             // One echo can hold A or B, not both. Carry through with only A held.
             const plate = state.plates.find(p => p.id === 'a');
             const pkg = state.packages.find(p => p.requiredForDelivery !== false);
@@ -340,7 +346,7 @@ export function runNaive(which) {
         'mb-park-early': () => {
             // Stand on each plate as soon as it is reachable and hold through the audit.
             // An arrival before the fresh window fails the beat and locks the door.
-            loadLevel({ level: 4 });
+            loadLevel({ level: levelByName('Gatekeeper') });
             const gkEnt = state.gatekeepers[0];
             const ids = ['g1', 'g2', 'g3'];
             const corridorX = [null, 300, 520];
@@ -368,7 +374,7 @@ export function runNaive(which) {
             for (let i = 0; i < 200 && state.gameState === 'PLAYING'; i++) tick();
         },
         'mb-rush-vault': () => {
-            loadLevel({ level: 4 });
+            loadLevel({ level: levelByName('Gatekeeper') });
             const door = state.doors.find(d => d.id === 'd1');
             moveTo((door?.x ?? 220) - 40, 270, 4, 300, { allowBlocked: true });
             for (let i = 0; i < 1500 && state.gameState === 'PLAYING'; i++) tick();

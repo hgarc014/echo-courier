@@ -5,9 +5,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { replaySolution, loadLevel, main, state, keys } from './harness/replay.mjs';
-import { runNaive } from './harness/recordW1.mjs';
-import { getLevelSetup, serializeLevel } from '../src/data/levels.js';
+import { runNaive as runNaiveW1 } from './harness/recordW1.mjs';
+import { LEVELS, getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
+import { runNaive as runNaiveW4 } from './harness/recordW4.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'solutions');
 const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort();
@@ -27,7 +28,7 @@ for (const f of files) {
         assert.ok(r.completed, `level not completed after ${r.ticks} ticks, ${r.loopsUsed} loops; fails: ${r.failMessages.join(' | ') || 'none'}`);
         if (r.par != null) assert.ok(r.loopsUsed <= r.par, `over par: ${r.loopsUsed} loops > par ${r.par}`);
         if (sol.completedLoops != null) assert.equal(r.loopsUsed, sol.completedLoops, 'loop count drifted from recording');
-        if (String(sol.levelName || '').startsWith('W2-')) {
+        if (String(sol.levelName || '').startsWith('W2-') || String(sol.levelName || '').startsWith('W4-')) {
             const ends = (state.pastRuns || []).map((run, id) => {
                 const step = run && run.length ? run[run.length - 1] : {};
                 return { id, x: step.x, y: step.y, w: 30, h: 30 };
@@ -48,6 +49,22 @@ for (const f of w1Files) {
     });
 }
 
+const w4Files = ['w4-l1.json', 'w4-l2.json', 'w4-l3.json', 'w4-l4.json', 'w4-mb.json'];
+for (const f of w4Files) {
+    check(`truncated ${f} fails`, () => {
+        const sol = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+        const r = replaySolution({ ...sol, loops: sol.loops.slice(0, -1) }, { extraTicks: 90 });
+        assert.equal(r.completed, false, 'dropping the last loop still completed');
+    });
+}
+
+for (const plan of ['l1-grab-first', 'l2-one-plate', 'l3-no-shield', 'l4-crack-park', 'mb-no-shield']) {
+    check(`naive ${plan} fails`, () => {
+        const r = runNaiveW4(plan);
+        assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
+    });
+}
+
 check('truncated w2-l1 solution fails', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'w2-l1.json'), 'utf8'));
     const cut = [sol.loops[0].slice(0, 1).map(([k, n]) => [k, Math.min(n, 5)])];
@@ -57,7 +74,7 @@ check('truncated w2-l1 solution fails', () => {
 
 for (const plan of ['l2-fetch-first', 'l3-leave-plate', 'l3-first-window', 'l4-two-loops', 'mb-park-early', 'mb-rush-vault']) {
     check(`naive ${plan} fails`, () => {
-        const r = runNaive(plan);
+        const r = runNaiveW1(plan);
         if (plan === 'l2-fetch-first') {
             const withinPar = r.completed && (r.par == null || r.loops <= r.par);
             assert.equal(withinPar, false, `${plan} completed within par (${r.loops} loops, par ${r.par})`);
@@ -70,7 +87,7 @@ for (const plan of ['l2-fetch-first', 'l3-leave-plate', 'l3-first-window', 'l4-t
 // Editor playtest path: W1-L1 inputs against that level's layout loaded from the editor.
 check('w1-l1 inputs replay via editor-playtest path', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'w1-l1.json'), 'utf8'));
-    const setup = getLevelSetup(0);
+    const setup = getLevelSetup(LEVELS.findIndex(level => level.name === 'First Shift'));
     const layout = serializeLevel({ ...setup, width: setup.mapWidth, height: setup.mapHeight, meta: {} });
     const r = replaySolution({
         level: null,

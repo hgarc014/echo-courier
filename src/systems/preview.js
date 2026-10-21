@@ -1,5 +1,6 @@
 // Timeline preview: scrubber sampling + future hazard prediction for echoes.
 // Pure helpers (no DOM/state imports) so they are Node-testable.
+import { laserThreatens, shieldSlab } from './laserShield.js';
 
 export function sampleRun(run, t) {
     if (!run || !run.length) return null;
@@ -51,7 +52,9 @@ export function predictEchoHazards(ghosts, cameras, lasers, opts = {}) {
             const s = g.runData[t];
             if (!s || !Number.isFinite(s.x)) continue;
             let kind = null;
-            if (closed.some(l => aabb(s.x, s.y, w, h, l.x, l.y, l.w, l.h))) kind = 'laser';
+            const self = opts.shield ? shieldSlab({ x: s.x, y: s.y, w, h, facingX: s.facingX, facingY: s.facingY }) : null;
+            const slabs = self ? [self] : [];
+            if (closed.some(l => laserThreatens(l, { x: s.x, y: s.y, w, h }, slabs))) kind = 'laser';
             else if (sweep.some(k => inCone(k.c, k.c.baseAngle + k.p * k.c.sweepRange, s.x, s.y))) kind = 'camera';
             if (kind) { out.push({ ghostId: g.id, tick: t, x: s.x, y: s.y, kind }); break; }
         }

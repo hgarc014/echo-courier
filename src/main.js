@@ -1,9 +1,9 @@
-import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage } from './core/state.js';
+import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
@@ -16,6 +16,7 @@ import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
+import { collectShieldSlabs, laserThreatens } from './systems/laserShield.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -240,10 +241,7 @@ function getLevelDisplayLabel(levelIndex, levelDef) {
 }
 
 function getNextLevelIndex(levelIndex) {
-    const level = LEVELS[levelIndex];
-    if (!level) return null;
-    if (level.isSandbox || level.isPlaytest) return null;
-    return levelIndex < CAMPAIGN_LEVEL_COUNT - 1 ? levelIndex + 1 : null;
+    return nextCampaignLevelIndex(levelIndex);
 }
 
 function buildProjectedEchoPath(runData) {
@@ -253,7 +251,7 @@ function buildProjectedEchoPath(runData) {
     for (let i = 0; i < runData.length; i++) {
         const step = runData[i];
         if (!step) continue;
-        points.push({ x: step.x, y: step.y });
+        points.push({ x: step.x, y: step.y, facingX: step.facingX || 0, facingY: step.facingY || 0 });
     }
     if (points.length === 0) return null;
 
@@ -264,6 +262,35 @@ function buildProjectedEchoPath(runData) {
         points: visiblePoints,
         final: last
     };
+}
+
+function drawFacingChevron(target, x, y, w, h, facingX, facingY) {
+    const fx = facingX || 0;
+    const fy = facingY || 0;
+    if (fx === 0 && fy === 0 || !target) return;
+    const len = Math.hypot(fx, fy) || 1;
+    const ux = fx / len;
+    const uy = fy / len;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const tipX = cx + ux * (Math.max(w, h) * 0.72);
+    const tipY = cy + uy * (Math.max(w, h) * 0.72);
+    const bx = cx + ux * (Math.max(w, h) * 0.28);
+    const by = cy + uy * (Math.max(w, h) * 0.28);
+    const px = -uy * 6;
+    const py = ux * 6;
+    target.save();
+    target.fillStyle = '#ffdd00';
+    target.strokeStyle = '#041018';
+    target.lineWidth = 2;
+    target.beginPath();
+    target.moveTo(tipX, tipY);
+    target.lineTo(bx + px, by + py);
+    target.lineTo(bx - px, by - py);
+    target.closePath();
+    target.fill();
+    target.stroke();
+    target.restore();
 }
 
 function hasCompletedTutorialTrack() {
@@ -447,6 +474,7 @@ function applyLoadedLevel(setupData) {
     if (!Array.isArray(state.hints)) state.hints = [];
     if (!Array.isArray(state.burrowers)) state.burrowers = [];
     if (!Array.isArray(state.gatekeepers)) state.gatekeepers = [];
+    if (!Array.isArray(state.prisms)) state.prisms = [];
     setMapSize(setupData.mapWidth || DEFAULT_MAP_WIDTH, setupData.mapHeight || DEFAULT_MAP_HEIGHT);
     resetPlayerLoopState();
     if (state.gameState !== 'EDITOR' && state.player) {
@@ -922,7 +950,7 @@ export function startGame(levelIndex) {
     let lv = LEVELS[levelIndex];
     applyLevelAbilityOverrides(lv);
     state.worldUnlockedAbilities = getWorldUnlockedAbilities(levelIndex);
-    state.robots = []; state.burrowers = []; state.projectiles = [];
+    state.robots = []; state.burrowers = []; state.gatekeepers = []; state.prisms = []; state.projectiles = [];
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
     clearGatekeeperCheckpoint();
@@ -1393,15 +1421,25 @@ function update() {
         if (gCanMoveY) g.y += gDy;
     });
 
-    for(let l of state.lasers) {
-        if (!l.isOpen) {
-            if (state.player.cloakTimer <= 0 && AABB(state.player.x, state.player.y, state.player.w, state.player.h, l.x, l.y, l.w, l.h)) { levelFailed("Burned by Laser Grid!"); return; }
-            for(let p of state.packages) {
-                if (!p.isDestroyed && AABB(p.x, p.y, p.w, p.h, l.x, l.y, l.w, l.h)) {
-                    if (p.type === 'fragile') { p.breakApart('vapor'); SFX.break(); SFX.laserHit(); levelFailed("Fragile Package Destroyed!"); return; }
-                }
+    const shieldOn = getUnlockedAbilities().includes('ghostShield');
+    const slabs = collectShieldSlabs(state.player, state.activeGhosts, shieldOn);
+    for (const l of state.lasers) {
+        if (state.player.cloakTimer <= 0 && laserThreatens(l, state.player, slabs)) { levelFailed("Burned by Laser Grid!"); return; }
+        for (const p of state.packages) {
+            if (!p.isDestroyed && p.type === 'fragile' && laserThreatens(l, p, slabs)) {
+                p.breakApart('vapor'); SFX.break(); SFX.laserHit(); levelFailed("Fragile Package Destroyed!"); return;
             }
         }
+    }
+    for (const prism of state.prisms || []) {
+        const fail = prism.update({
+            player: state.player,
+            ghosts: state.activeGhosts,
+            packages: state.packages,
+            walls: state.walls,
+            slabs
+        });
+        if (fail) { levelFailed(fail); return; }
     }
 
     if (interactJustPressed) {
@@ -1642,6 +1680,7 @@ function drawEchoEndMarkers(target) {
             target.fillRect(end.x, end.y, w, h);
             target.restore();
         }
+        drawFacingChevron(target, end.x, end.y, w, h, facingX, facingY);
     }
 }
 
@@ -1709,7 +1748,12 @@ function currentEchoHazards() {
     if (state.gameState !== 'PLAYING') return [];
     const t = state.currentTick;
     if (echoHazardCache.tick < 0 || t < echoHazardCache.tick || t - echoHazardCache.tick >= 6) {
-        echoHazardCache = { tick: t, hits: predictEchoHazards(state.activeGhosts, state.cameras, state.lasers) };
+        echoHazardCache = {
+            tick: t,
+            hits: predictEchoHazards(state.activeGhosts, state.cameras, state.lasers, {
+                shield: getUnlockedAbilities().includes('ghostShield')
+            })
+        };
     }
     return echoHazardCache.hits;
 }
@@ -1789,6 +1833,7 @@ function drawScrubPreviewGhosts(target) {
         target.font = 'bold 12px "Space Grotesk", sans-serif';
         target.textAlign = 'center';
         target.fillText(String((g.id ?? 0) + 1), s.x + w / 2, s.y - 4);
+        drawFacingChevron(target, s.x, s.y, w, h, s.facingX, s.facingY);
     }
     target.restore();
 }
@@ -1911,6 +1956,7 @@ function draw() {
                 ctx.fillStyle = '#ffdd00';
                 ctx.fillRect(projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h);
             }
+            drawFacingChevron(ctx, projectedEcho.final.x, projectedEcho.final.y, state.player.w, state.player.h, projectedEcho.final.facingX, projectedEcho.final.facingY);
         } else {
             if (state.assets.player) {
                 drawSprite(ctx, state.assets.player, state.player.x, state.player.y, state.player.w, state.player.h, {
@@ -1932,7 +1978,7 @@ function draw() {
         ctx.stroke(); ctx.restore();
     });
     
-    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); (state.gatekeepers || []).forEach(g => g.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
+    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
     drawEchoHazardFlashes(ctx);
@@ -2038,7 +2084,7 @@ window.onload = () => {
     document.body.addEventListener('keydown', () => { unlockAudio(); });
     applyDevModeUi();
     window.startNextAvailableLevel = () => {
-        let lvl = isDevMode() ? 0 : Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
+        let lvl = isDevMode() ? 0 : firstSelectableLevel(state.maxUnlockedLevel, isLevelUnlocked);
         startGame(lvl);
     };
     window.startTutorialTrack = () => startGame(0);
@@ -2048,7 +2094,7 @@ window.onload = () => {
     };
     window.skipTutorialPrompt = () => {
         hideTutorialPrompt();
-        let lvl = Math.min(state.maxUnlockedLevel, CAMPAIGN_LEVEL_COUNT - 1);
+        let lvl = firstSelectableLevel(state.maxUnlockedLevel, isLevelUnlocked);
         startGame(lvl);
     };
     window.SANDBOX_LEVEL_INDEX = SANDBOX_LEVEL_INDEX;
