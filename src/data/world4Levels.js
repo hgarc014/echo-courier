@@ -198,8 +198,8 @@ export const W4_LEVELS = [
     ),
     level(
         'W4-L2: Two Beams, One Ghost',
-        'One echo shuts both lasers in sequence. Deliver the fragile package.',
-        'One timeline, two beams. Stand the echo on the first plate while you cross, then send it to the second.',
+        'Two live beams bar the haul. Glass dies in either, and a plate holds only while someone stands on it.',
+        'Both beams cut the lower hall. The plates that quiet them are not down there with the box. One recording is all this route allows, and an empty plate lets its beam return.',
         2, 1, 26, W4_L2_LAYOUT
     ),
     level(
@@ -211,8 +211,8 @@ export const W4_LEVELS = [
     ),
     level(
         'W4-L4: Prism Freight',
-        'Shield the beam from solid ground, hold the hall laser, then haul fragile cargo past the camera and the timer.',
-        'The shield has to stand on solid floor. Cracks will not hold it, so route the long way around and accept the slower arrival.',
+        'The wide beam has no plate. Cracked floor collapses under anyone who stays. Glass, a camera, and a timed gate are all live.',
+        'Nothing switches the wide beam off. Standing in it is not the same as passing through, and the cracked span gives way if anyone stays. A lens covers the northeast, the north gate keeps its own clock, and the glass still dies in a live beam. Another beam in the hall still listens for a plate.',
         3, 2, 36, W4_L4_LAYOUT,
         { ...SHIELD, flags: { crackSpeed: 'fast' } }
     ),
