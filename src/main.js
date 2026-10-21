@@ -1344,6 +1344,12 @@ function update() {
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
     for (const burrower of state.burrowers || []) burrower.update(allActors);
     for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
+    // The floor resolves after the strike decision. Drop a mark that the crack
+    // update just invalidated so the drawn telegraph is never a broken tile.
+    for (const burrower of state.burrowers || []) {
+        if (!burrower || burrower.defeated) continue;
+        if (burrower.phase === 'burrow' || burrower.phase === 'telegraph') burrower.ensureTarget(allActors);
+    }
     for (const g of state.activeGhosts) if (g.isActive) g._crackFell = false;
     
     let envVx = 0, envVy = 0;

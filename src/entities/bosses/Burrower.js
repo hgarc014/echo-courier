@@ -2,6 +2,13 @@
 // Times on the entity are seconds (60 Hz). Home is startX/startY; between strikes
 // it waits there (on or under the den) and slides to the victim's crack during the
 // dust telegraph so replays stay stable.
+//
+// A telegraphed tile is always an intact crack: not broken, not collapsing, and not
+// overlapping a plate. If the locked tile later breaks, the next tick retargets.
+// Cracks heal when the loop reloads (rewind). If none are left mid-loop, spent tiles
+// that no body is standing on are knitted back; if every spent tile is occupied, the
+// burrower surfaces at its den on the same timer instead of idling. Dormant (the
+// per-loop stun cap) is a countdown to that rewind, not a freeze.
 import { state } from '../../core/state.js';
 import { Entity } from '../base.js';
 import { AABB } from '../../core/physics.js';
@@ -143,6 +150,7 @@ export class Burrower extends Entity {
         this.aimX = null;
         this.aimY = null;
         this.previewTile = null;
+        this.homeFallback = false;
         const saved = state.bossCheckpointLive && state.bossCheckpoint ? state.bossCheckpoint[this.id] : null;
         if (saved && Number.isFinite(saved.hp)) this.hp = saved.hp;
         if (this.hp <= 0) {
@@ -166,17 +174,37 @@ export class Burrower extends Entity {
         return 0;
     }
 
+    loopClock() {
+        const seconds = Number(state.currentLevelMeta?.loopTime);
+        if (!Number.isFinite(seconds) || seconds <= 0) return null;
+        // Round to the sim rate. 1000 / (1000/60) is not always exactly 60, and a
+        // fractional tick would make Math.ceil jump the visible clock up a second.
+        const tps = Math.max(1, Math.round(ticksPerSecond()));
+        const cap = Math.round(seconds * tps);
+        if (cap <= 0) return null;
+        const ticks = Math.max(0, cap - (Number(state.currentTick) || 0));
+        return { ticks, seconds: ticks / tps, cap };
+    }
+
     getUiState() {
         const tps = ticksPerSecond();
         const stunTicksLeft = this.phase === 'stun' ? Math.max(0, this.stunTicks() - this.phaseTicks) : 0;
+        const clock = this.loopClock();
+        const dormant = this.phase === 'dormant';
         return {
             phase: this.phase,
-            dormant: this.phase === 'dormant',
+            dormant,
             stunTicksLeft,
             stunSeconds: stunTicksLeft / tps,
             targetKind: this.aimKind,
             targetId: this.aimId,
-            surfaceInTicks: this.surfaceInTicks()
+            surfaceInTicks: this.surfaceInTicks(),
+            homeFallback: !!this.homeFallback,
+            loopTicksLeft: clock ? clock.ticks : null,
+            loopSecondsLeft: clock ? clock.seconds : null,
+            statusText: dormant
+                ? ('DORMANT — wakes on rewind · ' + (clock ? `loop clock ${Math.ceil(clock.seconds)}s` : 'rewind to wake'))
+                : null
         };
     }
 
@@ -186,6 +214,7 @@ export class Burrower extends Entity {
         this.aimX = null;
         this.aimY = null;
         this.previewTile = null;
+        this.homeFallback = false;
     }
 
     noteAim(actor) {
@@ -240,15 +269,20 @@ export class Burrower extends Entity {
         return best;
     }
 
+    crackIsTargetable(crack) {
+        if (!crack || crack.broken || crack.collapsing) return false;
+        if (typeof crack.overlapsPlate === 'function' && crack.overlapsPlate()) return false;
+        return true;
+    }
+
     nearestCrack(actor) {
-        if (!actor) return null;
-        const aim = center(actor);
+        const aim = actor ? center(actor) : { x: this.startX + this.w / 2, y: this.startY + this.h / 2 };
         let best = null;
         let bestD = Infinity;
         let bestX = Infinity;
         let bestY = Infinity;
         for (const crack of state.cracks || []) {
-            if (!crack || crack.broken || crack.overlapsPlate?.()) continue;
+            if (!this.crackIsTargetable(crack)) continue;
             const c = center(crack);
             const d = Math.hypot(c.x - aim.x, c.y - aim.y);
             const tie = Math.abs(d - bestD) <= 1e-6;
@@ -261,6 +295,76 @@ export class Burrower extends Entity {
             }
         }
         return best ? tileOf(best) : null;
+    }
+
+    bodyCoversCrack(crack, actors) {
+        // Inactive too: a body that just fell is still on the tile. Knitting that
+        // hole would erase it under them. Targeting ignores inactive actors elsewhere.
+        for (const actor of actors || []) {
+            if (!actor) continue;
+            const c = center(actor);
+            if (c.x >= crack.x && c.x < crack.x + crack.w && c.y >= crack.y && c.y < crack.y + crack.h) return true;
+        }
+        return false;
+    }
+
+    // Knit spent cracks nobody is standing on, so a later telegraph has a real tile.
+    // Occupied tiles stay spent: restoring a hole under a body would drop them in.
+    restoreClearCracks(actors) {
+        let restored = 0;
+        for (const crack of state.cracks || []) {
+            if (!crack || crack.overlapsPlate?.()) continue;
+            if (!crack.broken && !crack.collapsing) continue;
+            if (this.bodyCoversCrack(crack, actors)) continue;
+            if (typeof crack.restoreIntact === 'function') crack.restoreIntact();
+            else {
+                crack.broken = false;
+                crack.collapsing = false;
+            }
+            restored++;
+        }
+        return restored;
+    }
+
+    // Keep the locked tile when it is still a legal crack. Otherwise pick another,
+    // knit clear tiles, or fall back to the den. Does not reset the countdown.
+    ensureTarget(actors) {
+        const current = this.findCrack(this.lockedTile);
+        if (this.crackIsTargetable(current)) {
+            this.homeFallback = false;
+            this.lockedTile = tileOf(current);
+            return;
+        }
+        const aimActor = this.aimKind != null ? this.actorMatchingAim(actors) : null;
+        const aim = aimActor || this.pickTarget(actors);
+        let tile = this.nearestCrack(aim || null);
+        if (!tile) {
+            this.restoreClearCracks(actors);
+            tile = this.nearestCrack(aim || null);
+        }
+        if (tile) {
+            const moved = !sameTile(tile, this.lockedTile);
+            this.lockedTile = tile;
+            this.previewTile = tile;
+            this.homeFallback = false;
+            if (moved && this.phase === 'telegraph') {
+                this.teleOriginX = this.x;
+                this.teleOriginY = this.y;
+            }
+            return;
+        }
+        this.lockedTile = null;
+        this.previewTile = null;
+        this.homeFallback = true;
+    }
+
+    actorMatchingAim(actors) {
+        if (this.aimKind == null) return null;
+        for (const actor of actors || []) {
+            const info = actorTargetInfo(actor);
+            if (info.kind === this.aimKind && info.id === this.aimId) return actor;
+        }
+        return null;
     }
 
     findCrack(tile) {
@@ -320,29 +424,45 @@ export class Burrower extends Entity {
     beginTelegraph() {
         this.phase = 'telegraph';
         this.phaseTicks = 0;
-        this.previewTile = this.lockedTile;
+        this.previewTile = this.homeFallback ? null : this.lockedTile;
         this.teleOriginX = this.x;
         this.teleOriginY = this.y;
         this.stunFlash = 0;
         this.cycleLocked = false;
-        this.markLockedWarning();
+        if (!this.homeFallback) this.markLockedWarning();
     }
 
     slideToTile() {
-        const tile = this.lockedTile;
-        if (!tile) return;
         const total = this.telegraphTicks();
         const t = Math.min(1, this.phaseTicks / total);
-        const destX = tile.x + tile.w / 2 - this.w / 2;
-        const destY = tile.y + tile.h / 2 - this.h / 2;
+        let destX = this.startX;
+        let destY = this.startY;
+        const tile = this.lockedTile;
+        if (tile && !this.homeFallback) {
+            destX = tile.x + tile.w / 2 - this.w / 2;
+            destY = tile.y + tile.h / 2 - this.h / 2;
+        }
         this.x = this.teleOriginX + (destX - this.teleOriginX) * t;
         this.y = this.teleOriginY + (destY - this.teleOriginY) * t;
     }
 
     strike(actors) {
+        if (this.homeFallback) {
+            this.phase = 'burrow';
+            this.phaseTicks = 0;
+            this.cycleTicks = 0;
+            this.cycleLocked = false;
+            this.lockedTile = null;
+            this.homeFallback = false;
+            this.goHome();
+            return;
+        }
         const tile = this.lockedTile;
         const crack = this.findCrack(tile);
-        if (crack && typeof crack.startCollapse === 'function') crack.startCollapse();
+        if (crack && this.crackIsTargetable(crack)) {
+            if (typeof crack.showWarningRing === 'function') crack.showWarningRing();
+            if (typeof crack.startCollapse === 'function') crack.startCollapse();
+        }
         if (this.tileStuns(tile, actors)) {
             this.hp -= 1;
             this.rememberCheckpoint();
@@ -367,6 +487,7 @@ export class Burrower extends Entity {
         this.cycleTicks = 0;
         this.cycleLocked = false;
         this.lockedTile = null;
+        this.homeFallback = false;
         this.goHome();
     }
 
@@ -408,29 +529,37 @@ export class Burrower extends Entity {
         if (this.phase === 'telegraph') {
             this.phaseTicks++;
             this.refreshAimPosition(actors);
+            this.ensureTarget(actors);
+            if (!this.homeFallback) this.markLockedWarning();
             this.slideToTile();
-            this.markLockedWarning();
             if (this.phaseTicks >= this.telegraphTicks()) this.strike(actors);
             return;
         }
-        // Lock the next strike once, when a target exists. Re-picking every tick
-        // moved the marker (and never let the watched tile reach 0).
+        // Lock the strike tile once. Later movement does not re-aim a tile that is
+        // still intact. A tile that breaks, collapses, or was never valid is replaced
+        // without resetting the countdown, so the boss cannot sit on a dead mark.
         if (!this.cycleLocked) {
             const target = this.pickTarget(actors);
-            if (!target) {
-                this.clearAim();
-                this.lockedTile = null;
-                this.cycleTicks = 0;
-                return;
-            }
-            this.lockCycle(target);
+            if (target) this.noteAim(target);
+            else this.clearAim();
+            this.ensureTarget(actors);
+            this.cycleLocked = true;
+            this.cycleTicks = 0;
+            if (!this.homeFallback) this.previewTile = this.lockedTile;
         } else {
-            this.refreshAimPosition(actors);
-            this.previewTile = this.lockedTile;
+            if (this.aimKind == null) {
+                const target = this.pickTarget(actors);
+                if (target) this.noteAim(target);
+            } else {
+                this.refreshAimPosition(actors);
+            }
+            this.ensureTarget(actors);
+            this.previewTile = this.homeFallback ? null : this.lockedTile;
         }
         this.cycleTicks++;
         if (this.cycleTicks >= this.intervalTicks()) {
             this.cycleTicks = 0;
+            this.ensureTarget(actors);
             this.beginTelegraph();
         }
     }
@@ -491,11 +620,21 @@ export class Burrower extends Entity {
     }
 
     drawSurfaceMark(ctx) {
-        const tile = this.aimedTile();
-        if (!tile || (this.phase !== 'burrow' && this.phase !== 'telegraph')) return;
+        if (this.phase !== 'burrow' && this.phase !== 'telegraph') return;
         const ui = this.getUiState();
         const total = this.intervalTicks() + this.telegraphTicks();
         const frac = total > 0 ? 1 - ui.surfaceInTicks / total : 0;
+        if (this.homeFallback) {
+            const den = { x: this.startX + this.w / 2 - 20, y: this.startY + this.h / 2 - 20, w: 40, h: 40 };
+            drawKillRing(ctx, den, undefined, 'rgba(180, 180, 170, 0.9)');
+            const cx = den.x + den.w / 2;
+            const cy = den.y + den.h / 2;
+            const secs = (ui.surfaceInTicks / ticksPerSecond());
+            paintLabel(ctx, 'DEN ' + secs.toFixed(1) + 's', cx, cy, { color: '#f2f2ea', h: 14, font: 'bold 11px "Space Grotesk", sans-serif' });
+            return;
+        }
+        const tile = this.aimedTile();
+        if (!tile) return;
         drawKillRing(ctx, tile, undefined, 'rgba(255, 196, 90, 0.95)');
         const z = killZone(tile);
         const cx = z.x + z.w / 2;
@@ -578,9 +717,19 @@ export class Burrower extends Entity {
         }
 
         if (dormant) {
-            const zBob = Math.sin(tick * 0.08) * 1.5;
-            paintLabel(ctx, 'Zzz', cx + 16, this.y - 36 + zBob, { color: '#d9d4cc', h: 14, font: 'bold 13px "Space Grotesk", sans-serif' });
-            paintLabel(ctx, 'dormant until rewind', cx, this.y - 22, { color: '#c8c2b8', h: 15, font: 'bold 11px "Space Grotesk", sans-serif' });
+            const ui = this.getUiState();
+            const clock = ui.loopSecondsLeft;
+            const frac = ui.loopTicksLeft == null ? 1 : (this.loopClock().cap > 0 ? ui.loopTicksLeft / this.loopClock().cap : 0);
+            ctx.save();
+            ctx.strokeStyle = '#c8c2b8';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(cx, cy, this.w * 0.7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, frac)));
+            ctx.stroke();
+            ctx.restore();
+            const clockText = clock == null ? 'rewind to wake' : `loop clock ${Math.ceil(clock)}s`;
+            paintLabel(ctx, 'DORMANT — wakes on rewind', cx, this.y - 40, { color: '#f3efe6', h: 16, font: 'bold 11px "Space Grotesk", sans-serif' });
+            paintLabel(ctx, clockText, cx, this.y - 22, { color: '#ffe7a3', h: 15, font: 'bold 12px "Space Grotesk", sans-serif' });
         }
 
         this.drawHpPips(ctx, cx);

@@ -973,6 +973,17 @@ export class CrackedFloor extends Entity {
         }
         return false;
     }
+    // Knit a spent tile back to intact floor. Used when the burrower has no legal target.
+    restoreIntact() {
+        this.ticks = 0;
+        this.stage = 0;
+        this.collapsing = false;
+        this.broken = false;
+        this.warningTicks = 0;
+        this.showingWarning = false;
+        this.warningCommitted = false;
+        this.ringShown = false;
+    }
     // Telegraph / dust ring. Does not by itself start the crumble timer.
     showWarningRing() {
         if (this.broken || this.collapsing || this.overlapsPlate()) return;

@@ -234,7 +234,12 @@ check('after stunTime the burrower goes home and surfaces again', () => {
     const plate = new PressurePlate('c1', 80, 80, []);
     plate.isPressed = true;
     state.plates = [plate];
-    state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast')];
+    // Two cracks. The actor stands on the south one, which collapses on the first
+    // stun, so the next cycle has to pick the east crack instead of the spent tile.
+    state.cracks = [
+        new CrackedFloor(80, 120, 40, 40, 'fast'),
+        new CrackedFloor(120, 80, 40, 40, 'fast')
+    ];
     state.doors = [new Door('boss_door', 0, 0, 40, 80)];
     const actor = { x: 85, y: 125, w: 30, h: 30 };
     const boss = fastBoss(10, 10, {
@@ -527,12 +532,23 @@ check('getUiState reports dormant, stun countdown, and player vs echo', () => {
         assert.equal(ui.stunSeconds, 0);
         assert.equal(ui.surfaceInTicks, 0);
         assert.equal(ui.targetKind, null);
+        assert.match(ui.statusText, /DORMANT — wakes on rewind/);
+        assert.match(ui.statusText, /rewind to wake/);
+        state.currentLevelMeta = { loopTime: 30 };
+        state.currentTick = 60;
+        ui = boss.getUiState();
+        assert.equal(ui.loopSecondsLeft, 29);
+        assert.match(ui.statusText, /loop clock 29s/);
+        state.currentTick = 120;
+        assert.equal(boss.getUiState().loopSecondsLeft, 28);
+        state.currentLevelMeta = null;
         assert.equal(dormantCues, 1);
         for (let i = 0; i < 10; i++) boss.update([actor]);
         assert.equal(boss.getUiState().dormant, true);
         assert.equal(dormantCues, 1);
     } finally {
         SFX.burrowerDormant = orig;
+        state.currentLevelMeta = null;
     }
 });
 
@@ -547,7 +563,12 @@ check('a locked target counts down to a surface on that tile', () => {
     const boss = fastBoss(10, 0, { surfaceInterval: 0.5, telegraphTime: 0.25 });
     boss.update([]);
     assert.equal(boss.phase, 'burrow');
-    assert.equal(boss.cycleTicks, 0);
+    // No actor is not a freeze: the cycle still starts, aimed at a real crack.
+    assert.equal(boss.cycleTicks, 1);
+    assert.equal(boss.cycleLocked, true);
+    assert.equal(boss.homeFallback, false);
+    assert.equal(boss.lockedTile.x, 0);
+    assert.equal(boss.lockedTile.y, 0);
     assert.equal(boss.getUiState().targetKind, null);
 
     boss.update([player, echo]);
@@ -604,6 +625,70 @@ check('hint line and a non-default pit fraction survive the editor round trip', 
     const again = JSON.parse(JSON.stringify(serializeLevel({ ...setup, meta: state.editorLevelMeta })));
     assert.equal(again.meta.pitKillFraction, undefined);
     assert.equal(again.meta.hintLine, mb.level.hintLine);
+});
+
+check('each Sinkhole core plate registers a standing player, glows, and clicks once', () => {
+    resetWorld();
+    const mb = w2.find(({ level }) => level.name.startsWith('W2-MB'));
+    const setup = getLevelSetup(mb.index);
+    state.plates = setup.plates;
+    state.cracks = setup.cracks;
+    state.burrowers = setup.burrowers;
+    state.doors = setup.doors;
+    const courier = setup.player;
+    assert.equal(courier.w, 30);
+    assert.equal(courier.h, 30);
+    const cores = state.plates.filter(p => setup.burrowers[0].corePlateIds.includes(p.id));
+    assert.deepStrictEqual(cores.map(p => p.id), ['c1', 'c2', 'c3']);
+    let clicks = 0;
+    const orig = SFX.platePress;
+    SFX.platePress = () => { clicks++; };
+    try {
+        for (const plate of cores) {
+            clicks = 0;
+            const player = {
+                x: plate.x + (plate.w - courier.w) / 2,
+                y: plate.y + (plate.h - courier.h) / 2,
+                w: courier.w,
+                h: courier.h,
+                id: 'player',
+                isActive: true
+            };
+            const area = player.w * player.h;
+            const overlapW = Math.min(player.x + player.w, plate.x + plate.w) - Math.max(player.x, plate.x);
+            const overlapH = Math.min(player.y + player.h, plate.y + plate.h) - Math.max(player.y, plate.y);
+            const fraction = (overlapW * overlapH) / area;
+            assert.ok(fraction >= PLATE_PRESS_FRACTION, `${plate.id} overlap ${fraction}`);
+            assert.equal(actorPressesPlate(player, plate), true, plate.id);
+            plate.update([player], []);
+            plate.update([player], []);
+            assert.equal(plate.isPressed, true, plate.id);
+            assert.equal(clicks, 1, `${plate.id} click per press, not per tick`);
+            const vis = plate.pressVisual();
+            assert.equal(vis.pressed, true, plate.id);
+            assert.equal(vis.core, true, plate.id);
+            assert.equal(vis.label, 'HELD', plate.id);
+            assert.equal(vis.glow, '#ffe14a', plate.id);
+            for (let t = 0; t < 60; t++) {
+                for (const crack of state.cracks) crack.update([player]);
+                plate.update([player], []);
+            }
+            assert.equal(plate.isPressed, true, `${plate.id} stayed pressed`);
+            assert.equal(clicks, 1, plate.id);
+            const boss = state.burrowers[0];
+            boss.phase = 'dormant';
+            plate.isPressed = false;
+            plate.update([player], []);
+            assert.equal(plate.isPressed, true, `${plate.id} still presses while the burrower is dormant`);
+            assert.equal(plate.pressVisual().label, 'HELD');
+            plate.update([], []);
+            assert.equal(plate.isPressed, false, plate.id);
+            assert.equal(plate.pressVisual().pressed, false, plate.id);
+            assert.equal(plate.pressVisual().label, 'CORE', plate.id);
+        }
+    } finally {
+        SFX.platePress = orig;
+    }
 });
 
 process.exit(failures ? 1 : 0);
