@@ -783,7 +783,7 @@ export function deserializeLevel(data) {
     walls = (data.walls||[]).map(w => new Wall(w.x, w.y, w.w, w.h));
     doors = (data.doors||[]).map(d => {
         if (d.type === 'alarm') return new AlarmDoor(d.id, d.x, d.y, d.w, d.h);
-        if (d.type === 'timer') return new TimerDoor(d.id, d.x, d.y, d.w, d.h, d.openT || 60, d.closedT || 60);
+        if (d.type === 'timer') return new TimerDoor(d.id, d.x, d.y, d.w, d.h, d.openT ?? 60, d.closedT ?? 60);
         return new Door(d.id, d.x, d.y, d.w, d.h);
     });
     plates = (data.plates||[]).map(p => {
@@ -802,7 +802,7 @@ export function deserializeLevel(data) {
         const path = g.path || g.points || [{ x: g.x, y: g.y }];
         return new Guard(path.length ? path : [{ x: 50, y: 50 }]);
     });
-    cameras = (data.cameras||[]).map(c => new SweepCamera(c.x, c.y, c.baseAngle || 0, c.sweepRange || Math.PI/2));
+    cameras = (data.cameras||[]).map(c => new SweepCamera(c.x, c.y, c.baseAngle ?? 0, c.sweepRange ?? Math.PI/2));
     drones = (data.drones||[]).map(d => {
         const path = d.path || d.points || [{ x: d.x, y: d.y }];
         return new Drone(path.length ? path : [{ x: 50, y: 50 }]);
