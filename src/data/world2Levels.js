@@ -209,7 +209,7 @@ export const W2_LEVELS = [
         'Heavy cargo cannot beat the crack. Dash to the plate; your echo holds the door while you haul.',
         'Dash implants are live on this route. The crack is too wide to walk, and the heavy crate will not survive it. Put an echo on the plate and drag the crate through the door.',
         2, 1, 30, W2_L3_LAYOUT,
-        { unlocks: ['dash'], grants: ['dash'] }
+        { unlocks: ['dash'], grants: ['dash'], flags: { dashFrom: true } }
     ),
     level(
         'W2-L4: Sinking Freight',
@@ -227,9 +227,10 @@ export const W2_LEVELS = [
             unlocks: ['dash'],
             flags: {
                 isBoss: true,
+                hintLine: 'A surfacing on a crack touching a pressed core plate stuns it once per loop. Hold the plate — do not stand on the crack. When the loop timer runs out, that run becomes an echo.',
                 bossIntro: {
                     speaker: 'BURROWER',
-                    text: 'The floor shifts. Dust rings mark where it will surface. Stand a core plate and make it come to you.'
+                    text: 'Dust marks the crack where I surface. Hold a core plate beside that crack. I stun only when the crack touches the plate you are holding.'
                 }
             }
         }

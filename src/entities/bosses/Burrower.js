@@ -6,6 +6,8 @@ import { state } from '../../core/state.js';
 import { Entity } from '../base.js';
 import { AABB } from '../../core/physics.js';
 import { SFX } from '../../core/audio.js';
+import { actorPressesPlate, killZone } from '../../core/hitZones.js';
+import { drawKillRing } from '../hazards.js';
 
 const TICKS_PER_SECOND = 60;
 
@@ -14,6 +16,10 @@ export function burrowerTicks(seconds) {
     if (!Number.isFinite(n) || n <= 0) return 0;
     const tps = state.TICK_RATE > 0 ? (1000 / state.TICK_RATE) : TICKS_PER_SECOND;
     return Math.max(1, Math.round(n * tps));
+}
+
+function ticksPerSecond() {
+    return state.TICK_RATE > 0 ? (1000 / state.TICK_RATE) : TICKS_PER_SECOND;
 }
 
 // null = unlimited. Non-positive / blank values are unlimited so an empty inspector field
@@ -33,6 +39,15 @@ function center(a) {
     };
 }
 
+// Ghosts carry a numeric id (and runData). The live courier does not.
+export function actorTargetInfo(actor) {
+    if (!actor) return { kind: null, id: null };
+    if (typeof actor.id === 'number' || Array.isArray(actor.runData)) {
+        return { kind: 'echo', id: actor.id ?? null };
+    }
+    return { kind: 'player', id: actor.id != null ? actor.id : 'player' };
+}
+
 export function orthoAdjacent(a, b, eps = 2) {
     if (!a || !b) return false;
     const overlapX = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
@@ -48,6 +63,53 @@ function tileOf(crack) {
 
 function sameTile(a, b) {
     return a && b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+}
+
+function paintLabel(ctx, text, x, y, opts = {}) {
+    ctx.save();
+    ctx.font = opts.font || 'bold 12px "Space Grotesk", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(text).width;
+    const padX = 5;
+    const h = opts.h || 16;
+    ctx.fillStyle = opts.bg || 'rgba(4, 8, 12, 0.82)';
+    ctx.fillRect(x - w / 2 - padX, y - h / 2, w + padX * 2, h);
+    ctx.fillStyle = opts.color || '#fff';
+    ctx.fillText(text, x, y + 0.5);
+    ctx.restore();
+}
+
+function drawStar(ctx, x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + i * (Math.PI * 2 / 5);
+        const b = a + Math.PI / 5;
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+        ctx.lineTo(x + Math.cos(b) * r * 0.4, y + Math.sin(b) * r * 0.4);
+    }
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    const ah = 11;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - ah * Math.cos(ang - 0.45), y2 - ah * Math.sin(ang - 0.45));
+    ctx.lineTo(x2 - ah * Math.cos(ang + 0.45), y2 - ah * Math.sin(ang + 0.45));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
 }
 
 export class Burrower extends Entity {
@@ -70,11 +132,17 @@ export class Burrower extends Entity {
         this.phase = 'burrow'; // burrow | telegraph | stun | dormant | defeated
         this.phaseTicks = 0;
         this.cycleTicks = 0;
+        this.cycleLocked = false;
         this.lockedTile = null;
         this.teleOriginX = x;
         this.teleOriginY = y;
         this.defeated = false;
         this.stunFlash = 0;
+        this.aimKind = null;
+        this.aimId = null;
+        this.aimX = null;
+        this.aimY = null;
+        this.previewTile = null;
         const saved = state.bossCheckpointLive && state.bossCheckpoint ? state.bossCheckpoint[this.id] : null;
         if (saved && Number.isFinite(saved.hp)) this.hp = saved.hp;
         if (this.hp <= 0) {
@@ -87,6 +155,67 @@ export class Burrower extends Entity {
     intervalTicks() { return Math.max(1, burrowerTicks(this.surfaceInterval)); }
     telegraphTicks() { return Math.max(1, burrowerTicks(this.telegraphTime)); }
     stunTicks() { return burrowerTicks(this.stunTime); }
+
+    surfaceInTicks() {
+        if (this.phase === 'burrow') {
+            return Math.max(0, this.intervalTicks() - this.cycleTicks) + this.telegraphTicks();
+        }
+        if (this.phase === 'telegraph') {
+            return Math.max(0, this.telegraphTicks() - this.phaseTicks);
+        }
+        return 0;
+    }
+
+    getUiState() {
+        const tps = ticksPerSecond();
+        const stunTicksLeft = this.phase === 'stun' ? Math.max(0, this.stunTicks() - this.phaseTicks) : 0;
+        return {
+            phase: this.phase,
+            dormant: this.phase === 'dormant',
+            stunTicksLeft,
+            stunSeconds: stunTicksLeft / tps,
+            targetKind: this.aimKind,
+            targetId: this.aimId,
+            surfaceInTicks: this.surfaceInTicks()
+        };
+    }
+
+    clearAim() {
+        this.aimKind = null;
+        this.aimId = null;
+        this.aimX = null;
+        this.aimY = null;
+        this.previewTile = null;
+    }
+
+    noteAim(actor) {
+        const info = actorTargetInfo(actor);
+        this.aimKind = info.kind;
+        this.aimId = info.id;
+        if (!actor) {
+            this.aimX = null;
+            this.aimY = null;
+            this.previewTile = null;
+            return;
+        }
+        const c = center(actor);
+        this.aimX = c.x;
+        this.aimY = c.y;
+        this.previewTile = this.nearestCrack(actor);
+    }
+
+    refreshAimPosition(actors) {
+        if (this.aimKind == null) return;
+        for (const actor of actors || []) {
+            const info = actorTargetInfo(actor);
+            if (info.kind === this.aimKind && info.id === this.aimId) {
+                const c = center(actor);
+                this.aimX = c.x;
+                this.aimY = c.y;
+                return;
+            }
+        }
+    }
 
     rememberCheckpoint() {
         if (!state.bossCheckpoint || typeof state.bossCheckpoint !== 'object') state.bossCheckpoint = {};
@@ -119,7 +248,7 @@ export class Burrower extends Entity {
         let bestX = Infinity;
         let bestY = Infinity;
         for (const crack of state.cracks || []) {
-            if (!crack || crack.broken) continue;
+            if (!crack || crack.broken || crack.overlapsPlate?.()) continue;
             const c = center(crack);
             const d = Math.hypot(c.x - aim.x, c.y - aim.y);
             const tie = Math.abs(d - bestD) <= 1e-6;
@@ -144,11 +273,11 @@ export class Burrower extends Entity {
         if (plate.isPressed) return true;
         for (const actor of actors || []) {
             if (!actor || actor.isActive === false) continue;
-            if (AABB(plate.x, plate.y, plate.w, plate.h, actor.x, actor.y, actor.w || 30, actor.h || 30)) return true;
+            if (actorPressesPlate(actor, plate)) return true;
         }
         for (const pkg of state.packages || []) {
             if (!pkg || pkg.isDestroyed || pkg.carriedBy) continue;
-            if (AABB(plate.x, plate.y, plate.w, plate.h, pkg.x, pkg.y, pkg.w, pkg.h)) return true;
+            if (actorPressesPlate(pkg, plate)) return true;
         }
         return false;
     }
@@ -175,13 +304,28 @@ export class Burrower extends Entity {
         this.y = this.startY;
     }
 
-    beginTelegraph(actor) {
+    markLockedWarning() {
+        const crack = this.findCrack(this.lockedTile);
+        if (crack && typeof crack.showWarningRing === 'function') crack.showWarningRing();
+    }
+
+    // The tile (and actor) chosen when the countdown starts. Later movement does not re-aim.
+    lockCycle(actor) {
+        this.noteAim(actor);
+        this.lockedTile = this.previewTile;
+        this.cycleLocked = true;
+        this.cycleTicks = 0;
+    }
+
+    beginTelegraph() {
         this.phase = 'telegraph';
         this.phaseTicks = 0;
-        this.lockedTile = this.nearestCrack(actor);
+        this.previewTile = this.lockedTile;
         this.teleOriginX = this.x;
         this.teleOriginY = this.y;
         this.stunFlash = 0;
+        this.cycleLocked = false;
+        this.markLockedWarning();
     }
 
     slideToTile() {
@@ -208,6 +352,7 @@ export class Burrower extends Entity {
                 this.defeated = true;
                 this.phase = 'defeated';
                 this.phaseTicks = 0;
+                this.clearAim();
                 this.openDefeatDoor();
                 SFX.bossPhase();
             } else {
@@ -220,6 +365,7 @@ export class Burrower extends Entity {
         this.phase = 'burrow';
         this.phaseTicks = 0;
         this.cycleTicks = 0;
+        this.cycleLocked = false;
         this.lockedTile = null;
         this.goHome();
     }
@@ -229,11 +375,15 @@ export class Burrower extends Entity {
     recoverFromStun() {
         this.stunsThisLoop += 1;
         this.phaseTicks = 0;
+        this.cycleTicks = 0;
+        this.cycleLocked = false;
         this.lockedTile = null;
         this.goHome();
         const cap = this.maxStunsPerLoop;
         if (cap != null && this.stunsThisLoop >= cap) {
             this.phase = 'dormant';
+            this.clearAim();
+            SFX.burrowerDormant();
             return;
         }
         this.phase = 'burrow';
@@ -245,6 +395,7 @@ export class Burrower extends Entity {
         if (this.defeated || this.hp <= 0) {
             this.defeated = true;
             this.phase = 'defeated';
+            this.clearAim();
             this.openDefeatDoor();
             return;
         }
@@ -256,65 +407,183 @@ export class Burrower extends Entity {
         if (this.phase === 'dormant') return;
         if (this.phase === 'telegraph') {
             this.phaseTicks++;
+            this.refreshAimPosition(actors);
             this.slideToTile();
+            this.markLockedWarning();
             if (this.phaseTicks >= this.telegraphTicks()) this.strike(actors);
             return;
+        }
+        // Lock the next strike once, when a target exists. Re-picking every tick
+        // moved the marker (and never let the watched tile reach 0).
+        if (!this.cycleLocked) {
+            const target = this.pickTarget(actors);
+            if (!target) {
+                this.clearAim();
+                this.lockedTile = null;
+                this.cycleTicks = 0;
+                return;
+            }
+            this.lockCycle(target);
+        } else {
+            this.refreshAimPosition(actors);
+            this.previewTile = this.lockedTile;
         }
         this.cycleTicks++;
         if (this.cycleTicks >= this.intervalTicks()) {
             this.cycleTicks = 0;
-            const target = this.pickTarget(actors);
-            if (target) this.beginTelegraph(target);
+            this.beginTelegraph();
         }
+    }
+
+    aimedTile() {
+        if (this.phase === 'telegraph' || this.phase === 'stun') return this.lockedTile;
+        if (this.phase === 'burrow') return this.previewTile;
+        return null;
+    }
+
+    drawHpPips(ctx, cx) {
+        const dormant = this.phase === 'dormant';
+        const pips = Math.max(this.maxHp, 1);
+        const pipW = 8;
+        const gap = 3;
+        const total = pips * pipW + (pips - 1) * gap;
+        let px = cx - total / 2;
+        const py = this.y - 10;
+        ctx.save();
+        ctx.font = '9px "Space Grotesk", sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = dormant ? '#9a958c' : '#ffb080';
+        ctx.fillText('HP', px - 3, py + 2);
+        for (let i = 0; i < pips; i++) {
+            const filled = i < this.hp;
+            ctx.fillStyle = !filled ? 'rgba(255,255,255,0.18)' : (dormant ? '#8a847c' : '#ff8844');
+            ctx.fillRect(px, py, pipW, 4);
+            px += pipW + gap;
+        }
+        ctx.restore();
+    }
+
+    drawTargetMark(ctx) {
+        if (this.aimX == null || this.aimKind == null) return;
+        if (this.phase !== 'burrow' && this.phase !== 'telegraph') return;
+        const color = this.aimKind === 'echo' ? '#e070ff' : '#3ee0ff';
+        const label = this.aimKind === 'echo'
+            ? `ECHO ${typeof this.aimId === 'number' ? this.aimId + 1 : this.aimId}`
+            : 'PLAYER';
+        drawArrow(ctx, this.x + this.w / 2, this.y + this.h / 2, this.aimX, this.aimY, color);
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.aimX, this.aimY, 16, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(this.aimX - 8, this.aimY);
+        ctx.lineTo(this.aimX + 8, this.aimY);
+        ctx.moveTo(this.aimX, this.aimY - 8);
+        ctx.lineTo(this.aimX, this.aimY + 8);
+        ctx.stroke();
+        ctx.restore();
+        // The echo end-badge sits above the actor (filled disc, r=11). Keep the
+        // words to the side of that disc so "ECHO 1" is not drawn underneath it.
+        paintLabel(ctx, label, this.aimX + 54, this.aimY - 6, { color, h: 15 });
+    }
+
+    drawSurfaceMark(ctx) {
+        const tile = this.aimedTile();
+        if (!tile || (this.phase !== 'burrow' && this.phase !== 'telegraph')) return;
+        const ui = this.getUiState();
+        const total = this.intervalTicks() + this.telegraphTicks();
+        const frac = total > 0 ? 1 - ui.surfaceInTicks / total : 0;
+        drawKillRing(ctx, tile, undefined, 'rgba(255, 196, 90, 0.95)');
+        const z = killZone(tile);
+        const cx = z.x + z.w / 2;
+        const cy = z.y + z.h / 2;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 244, 210, 0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(4, Math.min(z.w, z.h) / 2 - 2), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, frac)));
+        ctx.stroke();
+        ctx.restore();
+        const secs = (ui.surfaceInTicks / ticksPerSecond());
+        paintLabel(ctx, secs.toFixed(1) + 's', cx, cy, { color: '#fff6d8', h: 14, font: 'bold 11px "Space Grotesk", sans-serif' });
     }
 
     render(ctx) {
         const cx = this.x + this.w / 2;
         const cy = this.y + this.h / 2;
         const tick = state.currentTick || 0;
+        const dormant = this.phase === 'dormant';
         ctx.save();
-        if (this.phase === 'telegraph' && this.lockedTile) {
-            const tcx = this.lockedTile.x + this.lockedTile.w / 2;
-            const tcy = this.lockedTile.y + this.lockedTile.h / 2;
-            const u = this.phaseTicks / Math.max(1, this.telegraphTicks());
-            for (let i = 0; i < 3; i++) {
-                const radius = 8 + u * (18 + i * 10);
-                ctx.beginPath();
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = `rgba(210, 180, 120, ${0.85 - i * 0.22})`;
-                ctx.arc(tcx, tcy, radius, 0, Math.PI * 2);
-                ctx.stroke();
-            }
-            ctx.fillStyle = `rgba(90, 60, 30, ${0.25 + 0.2 * Math.sin(tick * 0.4)})`;
+        this.drawSurfaceMark(ctx);
+        this.drawTargetMark(ctx);
+
+        if (this.phase === 'stun' || this.stunFlash > 0) {
+            const flash = 0.35 + 0.45 * Math.abs(Math.sin(tick * 0.7));
+            ctx.fillStyle = `rgba(255, 230, 90, ${this.phase === 'stun' ? flash : 0.35})`;
             ctx.beginPath();
-            ctx.arc(tcx, tcy, 10 + u * 6, 0, Math.PI * 2);
+            ctx.arc(cx, cy, this.w * 0.62, 0, Math.PI * 2);
             ctx.fill();
         }
-        const bob = this.phase === 'burrow' ? Math.sin(tick * 0.15) * 2 : 0;
-        ctx.fillStyle = this.defeated ? 'rgba(80, 70, 60, 0.7)' : 'rgba(40, 28, 18, 0.92)';
+
+        const bob = this.phase === 'burrow' ? Math.sin(tick * 0.15) * 3 : 0;
+        const sink = dormant ? 10 : 0;
+        ctx.fillStyle = this.defeated ? 'rgba(80, 70, 60, 0.7)' : dormant ? 'rgba(72, 70, 66, 0.95)' : 'rgba(40, 28, 18, 0.92)';
         ctx.beginPath();
-        ctx.ellipse(cx, cy + bob, this.w * 0.46, this.h * 0.32, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy + bob + sink, this.w * (dormant ? 0.52 : 0.46), this.h * (dormant ? 0.16 : 0.32), 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = this.phase === 'stun' ? '#ffdd00' : '#e6c27a';
+        ctx.strokeStyle = dormant ? '#6e6a64' : this.phase === 'stun' ? '#ffdd00' : '#e6c27a';
         ctx.lineWidth = this.phase === 'stun' ? 3 : 1.5;
         ctx.stroke();
-        if (this.phase === 'stun' || this.stunFlash > 0) {
-            ctx.strokeStyle = `rgba(255, 220, 80, ${0.4 + 0.4 * Math.sin(tick * 0.6)})`;
+
+        if (this.phase === 'burrow') {
+            for (let i = 0; i < 3; i++) {
+                const rise = (tick * 0.65 + i * 14) % 26;
+                const alpha = Math.max(0, 1 - rise / 26);
+                const bx = cx + Math.sin(tick * 0.11 + i * 2.1) * 9;
+                const by = cy + 6 - rise;
+                ctx.beginPath();
+                ctx.fillStyle = `rgba(150, 110, 60, ${0.45 * alpha})`;
+                ctx.arc(bx, by, 2.2 + (i % 2), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        if (this.phase === 'stun') {
+            const ui = this.getUiState();
+            const total = Math.max(1, this.stunTicks());
+            const frac = ui.stunTicksLeft / total;
+            ctx.save();
+            ctx.strokeStyle = '#ffe14a';
+            ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.arc(cx, cy, this.w * 0.7, 0, Math.PI * 2);
+            ctx.arc(cx, cy, this.w * 0.78, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
             ctx.stroke();
+            ctx.fillStyle = '#ffe14a';
+            for (let i = 0; i < 3; i++) {
+                const a = tick * 0.18 + i * (Math.PI * 2 / 3);
+                drawStar(ctx, cx + Math.cos(a) * (this.w * 0.85), cy - 18 + Math.sin(a) * 7, 5);
+            }
+            ctx.restore();
+            const barW = 36;
+            const barX = cx - barW / 2;
+            const barY = this.y - 28;
+            ctx.fillStyle = 'rgba(0,0,0,0.65)';
+            ctx.fillRect(barX, barY, barW, 5);
+            ctx.fillStyle = '#ffe14a';
+            ctx.fillRect(barX, barY, barW * frac, 5);
+            paintLabel(ctx, `STUN ${ui.stunSeconds.toFixed(1)}s`, cx, this.y - 40, { color: '#fff3a8', h: 15 });
         }
-        const pips = Math.max(this.maxHp, this.hp);
-        const pipW = 8;
-        const gap = 3;
-        const total = pips * pipW + (pips - 1) * gap;
-        let px = cx - total / 2;
-        const py = this.y - 10;
-        for (let i = 0; i < pips; i++) {
-            ctx.fillStyle = i < this.hp ? '#ff8844' : 'rgba(255,255,255,0.2)';
-            ctx.fillRect(px, py, pipW, 4);
-            px += pipW + gap;
+
+        if (dormant) {
+            const zBob = Math.sin(tick * 0.08) * 1.5;
+            paintLabel(ctx, 'Zzz', cx + 16, this.y - 36 + zBob, { color: '#d9d4cc', h: 14, font: 'bold 13px "Space Grotesk", sans-serif' });
+            paintLabel(ctx, 'dormant until rewind', cx, this.y - 22, { color: '#c8c2b8', h: 15, font: 'bold 11px "Space Grotesk", sans-serif' });
         }
+
+        this.drawHpPips(ctx, cx);
         ctx.restore();
     }
 }

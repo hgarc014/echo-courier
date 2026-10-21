@@ -7,6 +7,27 @@ export function displayedLoopNumber(loopNumber) {
     return n;
 }
 
+// Planned budget for the HUD "Loop N of B". One more than the echo cap: the live
+// run plus the echoes you meant to keep. Extra rewinds still happen; this is not a cap.
+// Non-finite maxGhosts (unlimited echoes) has no planned total.
+export function plannedLoopBudget(maxGhosts) {
+    if (maxGhosts == null || maxGhosts === '') return null;
+    const n = Number(maxGhosts);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.floor(n) + 1;
+}
+
+// HUD phrase for the live loop. "N of B" is only used while N is within the planned
+// budget. Extra rewinds still happen (the oldest echo is dropped); past that the
+// line keeps the real loop index and names the budget as par, so it never reads
+// "5 of 3".
+export function loopHudState(loopNumber, maxGhosts) {
+    const n = displayedLoopNumber(loopNumber);
+    const budget = plannedLoopBudget(maxGhosts);
+    if (budget == null) return { n, budget: null, over: false };
+    return { n, budget, over: n > budget };
+}
+
 /** True when the live loop is within a 1-based par ("finish in maxLoops loops"). */
 export function finishedWithinLoops(loopNumber, maxLoops) {
     const max = Math.floor(Number(maxLoops));

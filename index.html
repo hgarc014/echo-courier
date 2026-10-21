@@ -112,9 +112,10 @@
                 <h1 class="logo">ECHO COURIER</h1>
             </div>
             <div class="hud-center">
-                <div class="stat-box"><span class="loop-stat">Loop&nbsp;<span id="loop-count">1</span>&nbsp;·&nbsp;Echoes&nbsp;<span id="echo-count">0</span>/<span id="max-echoes">∞</span></span></div>
+                <div class="stat-box"><span class="loop-stat">Loop&nbsp;<span id="loop-count">1</span><span id="loop-of" class="hidden">&nbsp;of&nbsp;<span id="loop-budget"></span></span><span id="loop-over" class="hidden">&nbsp;·&nbsp;over par (<span id="loop-par"></span>)</span>&nbsp;·&nbsp;Echoes&nbsp;<span id="echo-count">0</span>/<span id="max-echoes">∞</span></span></div>
                 <div class="stat-box hidden" id="delivery-progress-box">Delivery <span id="delivery-progress">0 / 0</span></div>
                 <div class="objective" id="objective-text">Deliver the package safely to the green zone.</div>
+                <div class="level-hint hidden" id="level-hint"></div>
                 <span id="level-display" style="display:none;">1</span>
                 <div class="objective challenge-hud" id="challenge-text">☆ Challenge: None</div>
                 <button id="playtest-return-btn" class="secondary-btn hidden" type="button" style="margin-top:0; padding:8px 14px; font-size:0.8rem; border-color:#ffdd00; color:#ffdd00;">Return to Editor</button>
@@ -273,6 +274,8 @@
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Speaker <input id="editor-meta-speaker" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Briefing<textarea id="editor-meta-text" rows="3" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></textarea></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Objective <input id="editor-meta-obj" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Hint line (HUD, not a hint plate)<textarea id="editor-meta-hint" rows="2" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></textarea></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Pit kill fraction (0.60–0.70, blank = 0.65) <input id="editor-meta-pitfraction" type="number" min="0.6" max="0.7" step="0.01" placeholder="0.65" style="width:88px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Max Ghosts <input id="editor-meta-maxghosts" type="number" min="0" max="8" value="3" style="width:72px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Loop Time (sec) <input id="editor-meta-looptime" type="number" min="0" step="0.1" placeholder="unset" style="width:72px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Par (loops) <input id="editor-meta-par" type="number" min="1" step="1" placeholder="unset" style="width:72px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>

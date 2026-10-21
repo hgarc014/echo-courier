@@ -189,6 +189,9 @@ export function setUnlockAll(enabled) {
 }
 
 export function isDevMode() {
+    // Settings "Unlock All Levels (Dev/Testing)" is full dev mode, same as ?dev=1
+    // with the dev checkbox: every level, rank 4, and the shop. Toss, cloak, and
+    // ghost shield stay granted. Dash does not: Heavy Going still applies last.
     if (isUnlockAll()) return true;
     if (!isDevUrlEnabled()) return false;
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false;
@@ -220,14 +223,37 @@ export function getPlayerRank() {
     return 0;
 }
 
+// levels.js registers this after WORLDS exists. state.js must not import levels.js (that import is already the other way).
+let dashUnlockedByProgression = () => null;
+export function registerDashProgression(fn) {
+    if (typeof fn === 'function') dashUnlockedByProgression = fn;
+}
+
+function applyDashProgression(set, level) {
+    const flag = dashUnlockedByProgression(level);
+    if (flag === true) set.add('dash');
+    else if (flag === false) set.delete('dash');
+}
+
 export function applyLevelAbilityOverrides(level) {
-    const granted = [...(level?.grants || [])];
-    state.levelAbilityOverrides = [...new Set(granted)];
+    // unlocks is a synonym of grants (GAME_REFERENCE): both turn the ability on for this level.
+    // Dash itself follows dashUnlockedByProgression, so a copied world unlock list cannot grant it early.
+    const granted = new Set([...(level?.grants || []), ...(level?.unlocks || [])]);
+    applyDashProgression(granted, level);
+    state.levelAbilityOverrides = [...granted];
 }
 
 export function getUnlockedAbilities() {
-    if (isDevMode()) return ['dash', 'toss', 'cloak', 'ghostShield'];
+    // Dev mode (Unlock All, or ?dev=1 with the checkbox) grants toss, cloak, and
+    // ghost shield. There is no within-world gate for those three — only the shop's
+    // world list, which dev mode still bypasses. Dash is applied last by
+    // dashUnlockedByProgression, so W1 and W2 before Heavy Going never have it.
     let unlocks = new Set();
+    if (isDevMode()) {
+        unlocks.add('toss');
+        unlocks.add('cloak');
+        unlocks.add('ghostShield');
+    }
     const gate = state.worldUnlockedAbilities;
     const allowPurchased = (ability) => gate == null || gate.includes(ability);
     if (state.abilitiesPurchased['dash'] && allowPurchased('dash')) unlocks.add('dash');
@@ -238,7 +264,9 @@ export function getUnlockedAbilities() {
     const meta = state.currentLevelMeta;
     if (meta) {
         for (let ability of (meta.grants || [])) unlocks.add(ability);
+        for (let ability of (meta.unlocks || [])) unlocks.add(ability);
     }
+    applyDashProgression(unlocks, meta);
     return Array.from(unlocks);
 }
 

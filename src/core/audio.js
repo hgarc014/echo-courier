@@ -37,6 +37,11 @@ export const SFX = {
         setTimeout(() => playTone(420, 'triangle', 0.22, 0.3, 180), 140);
         setTimeout(() => playTone(720, 'square', 0.16, 0.2, 260), 230);
     },
+    // Falling tone when the burrower gives up the rest of the loop. Distinct from the stun hit.
+    burrowerDormant: () => {
+        playTone(180, 'triangle', 0.24, 0.32, 80);
+        setTimeout(() => playTone(70, 'sine', 0.42, 0.24, 36), 120);
+    },
     fail: () => {
         playTone(240, 'sawtooth', 0.28, 0.42, 90);
         setTimeout(() => playTone(150, 'square', 0.35, 0.3, 55), 80);

@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB } from '../core/physics.js';
+import { PLATE_PRESS_FRACTION, actorPressesPlate } from '../core/hitZones.js';
 import { SFX } from '../core/audio.js';
 import { drawSprite, drawTiled } from '../core/sprites.js';
 import { resolveSprite } from '../core/atlas.js';
@@ -306,7 +307,7 @@ export class PressurePlate extends Entity {
         const prev = this._occupantArrivals || new Map();
         const next = new Map();
         const consider = (key, box) => {
-            if (!box || !AABB(this.x, this.y, this.w, this.h, box.x, box.y, box.w || 0, box.h || 0)) return;
+            if (!actorPressesPlate(box, this, PLATE_PRESS_FRACTION)) return;
             next.set(key, prev.has(key) ? prev.get(key) : now);
         };
         (actors || []).forEach((a, i) => {
@@ -321,9 +322,46 @@ export class PressurePlate extends Entity {
         this.isPressed = next.size > 0;
         this.arrivalTicks = [...next.values()];
     }
+    isCorePlate() {
+        const id = this.id;
+        if (id == null) return false;
+        for (const boss of state.burrowers || []) {
+            if ((boss.corePlateIds || []).includes(id)) return true;
+        }
+        return false;
+    }
     render(ctx) {
         const pulse = this.isPressed ? 1 : 0.88 + 0.08 * Math.sin(state.currentTick * 0.12);
         const img = (this.isPressed && resolveSprite(state, 'platePressed')) || resolveSprite(state, 'plate');
+        if (this.isCorePlate()) {
+            // The atlas pad is a wide slab. Contain-fit left a short bar in the
+            // middle of the 40×40 cell, so the neighboring crack tiles read as the
+            // plates. Cover-fit, clipped to this rect, paints the pad on the plate.
+            ctx.save();
+            ctx.fillStyle = this.isPressed ? '#4a3208' : '#2a1c08';
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.beginPath();
+            ctx.rect(this.x, this.y, this.w, this.h);
+            ctx.clip();
+            if (img) drawSprite(ctx, img, this.x, this.y, this.w, this.h, { fit: 'cover', valign: 'center', alpha: pulse });
+            ctx.restore();
+            ctx.save();
+            ctx.strokeStyle = this.isPressed ? '#ffe14a' : '#ffb000';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(this.x + 2, this.y + 2, this.w - 4, this.h - 4);
+            const cx = this.x + this.w / 2;
+            const cy = this.y + this.h / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - 7);
+            ctx.lineTo(cx + 7, cy);
+            ctx.lineTo(cx, cy + 7);
+            ctx.lineTo(cx - 7, cy);
+            ctx.closePath();
+            ctx.fillStyle = this.isPressed ? '#ffe14a' : '#ffcc33';
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
         if (img) drawSprite(ctx, img, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
         else super.render(ctx);
         if (this.isPressed) { ctx.strokeStyle='#ffdd00'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
@@ -340,7 +378,7 @@ export class TemporalPlate extends PressurePlate {
         // `last` resolves to the newest surviving echo id after maxGhosts pruning.
         const validActor = pickTemporalActor(this.requiredTimeline, actors, state.activeGhosts);
         
-        if (validActor && AABB(this.x, this.y, this.w, this.h, validActor.x, validActor.y, validActor.w, validActor.h)) this.isPressed = true;
+        if (validActor && actorPressesPlate(validActor, this, PLATE_PRESS_FRACTION)) this.isPressed = true;
     }
     render(ctx) {
         const tintKey = this.requiredTimeline === 'present' ? 'platePresent'

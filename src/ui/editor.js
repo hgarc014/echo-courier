@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizePar, normalizeWorldId, WORLDS, copyBossMeta } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizePar, normalizeWorldId, WORLDS, copyBossMeta, normalizeHintLine, normalizePitKillFraction } from '../data/levels.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
@@ -97,6 +97,10 @@ export function setEditorLevelMetaFromLevel(level) {
     const worldId = normalizeWorldId(level.world);
     if (worldId != null) state.editorLevelMeta.world = worldId;
     if (Array.isArray(level.unlocks)) state.editorLevelMeta.unlocks = [...level.unlocks];
+    const hintLine = normalizeHintLine(level.hintLine);
+    if (hintLine) state.editorLevelMeta.hintLine = hintLine;
+    const pitKillFraction = normalizePitKillFraction(level.pitKillFraction);
+    if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
     copyBossMeta(level, state.editorLevelMeta);
     if (level.challenge && !level.isPlaytest) state.editorLevelMeta.challengeRef = level.name;
     return state.editorLevelMeta;
@@ -119,6 +123,10 @@ function syncLevelConfigForm() {
     if (speaker) speaker.value = meta.story?.speaker || '';
     if (text) text.value = meta.story?.text || '';
     if (obj) obj.value = meta.obj || '';
+    const hintEl = document.getElementById('editor-meta-hint');
+    if (hintEl) hintEl.value = meta.hintLine || '';
+    const pitEl = document.getElementById('editor-meta-pitfraction');
+    if (pitEl) pitEl.value = meta.pitKillFraction != null ? String(meta.pitKillFraction) : '';
     if (maxG) maxG.value = meta.maxGhosts ?? 3;
     if (loopEl) loopEl.value = meta.loopTime != null ? String(meta.loopTime) : '';
     const parEl = document.getElementById('editor-meta-par');
@@ -180,7 +188,7 @@ function applyLevelConfigForm() {
         demo = parseDemoFromForm();
     } catch (err) {
         setSaveStatus(err.message || 'Demo JSON invalid', false);
-        return;
+        return false;
     }
     const loopTime = normalizeLoopTime(document.getElementById('editor-meta-looptime')?.value);
     const loopEl = document.getElementById('editor-meta-looptime');
@@ -201,6 +209,10 @@ function applyLevelConfigForm() {
         demo
     };
     if (loopTime != null) state.editorLevelMeta.loopTime = loopTime;
+    const hintLine = normalizeHintLine(document.getElementById('editor-meta-hint')?.value);
+    if (hintLine) state.editorLevelMeta.hintLine = hintLine;
+    const pitKillFraction = normalizePitKillFraction(document.getElementById('editor-meta-pitfraction')?.value);
+    if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
     if (par != null) state.editorLevelMeta.par = par;
     const worldId = normalizeWorldId(document.getElementById('editor-meta-world')?.value);
     if (worldId != null) state.editorLevelMeta.world = worldId;
@@ -215,6 +227,33 @@ function applyLevelConfigForm() {
         challengeRef: val('editor-meta-challenge')
     }, state.editorLevelMeta);
     setSaveStatus('Level config applied');
+    return true;
+}
+
+// Hint edits land in editorLevelMeta as they are typed. Apply Level Config is
+// not required, and save/playtest flush the field again in case input did not fire.
+export function commitEditorHintLine(raw) {
+    const meta = ensureEditorLevelMeta();
+    const hintLine = normalizeHintLine(raw);
+    if (hintLine) meta.hintLine = hintLine;
+    else delete meta.hintLine;
+    return meta.hintLine || '';
+}
+
+export function flushEditorLevelConfig() {
+    const hintEl = document.getElementById('editor-meta-hint');
+    if (hintEl && typeof hintEl.value === 'string') commitEditorHintLine(hintEl.value);
+    return applyLevelConfigForm();
+}
+
+let hintAutosaveBound = false;
+export function bindEditorHintAutosave() {
+    const hintEl = document.getElementById('editor-meta-hint');
+    if (!hintEl || hintAutosaveBound) return;
+    hintAutosaveBound = true;
+    const write = () => commitEditorHintLine(hintEl.value);
+    hintEl.addEventListener('input', write);
+    hintEl.addEventListener('change', write);
 }
 
 let crackSpeedControlBound = false;
@@ -404,6 +443,7 @@ export function syncEditorUi() {
     if (applyBtn) applyBtn.onclick = () => applyLevelConfigForm();
     ensureEditorLevelMeta();
     syncLevelConfigForm();
+    bindEditorHintAutosave();
     bindCrackSpeedControl();
     window.refreshEditorLevelConfigForm = syncLevelConfigForm;
 
@@ -465,10 +505,12 @@ export function initEditor(canvas, ctx) {
     });
 
     document.getElementById('editor-play-btn')?.addEventListener('click', () => {
+        if (flushEditorLevelConfig() === false) return;
         window.startPlaytestFromEditor();
     });
 
     document.getElementById('editor-save-btn')?.addEventListener('click', () => {
+        if (flushEditorLevelConfig() === false) return;
         const name = sanitizeSlotName(document.getElementById('editor-save-name')?.value);
         const nameEl = document.getElementById('editor-save-name');
         if (nameEl) nameEl.value = name;

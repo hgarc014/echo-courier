@@ -46,13 +46,14 @@ function snapLayout(setup) {
     for (const k of ENTITY_KEYS) out[k] = (setup[k] || []).map(snapEntity);
     return out;
 }
-const META_FIELDS = ['name', 'obj', 'maxGhosts', 'world', 'unlocks', 'grants', 'loopTime', 'par', 'isBoss', 'bossIntro', 'bossIntroDoorId'];
+const META_FIELDS = ['name', 'obj', 'hintLine', 'maxGhosts', 'world', 'unlocks', 'grants', 'loopTime', 'par', 'isBoss', 'bossIntro', 'bossIntroDoorId'];
 function expectedMeta(level) {
     return {
         name: level.name, obj: level.obj || '', maxGhosts: level.maxGhosts ?? 3,
         story: { speaker: level.story?.speaker || '', text: level.story?.text || '' },
         world: level.world, unlocks: level.unlocks, grants: level.grants || [],
         loopTime: normalizeLoopTime(level.loopTime) ?? undefined,
+        hintLine: level.hintLine || undefined,
         par: normalizePar(level.par) ?? undefined,
         isBoss: level.isBoss || undefined, bossIntro: level.bossIntro, bossIntroDoorId: level.bossIntroDoorId
     };

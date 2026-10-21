@@ -1,4 +1,4 @@
-import { state } from '../core/state.js';
+import { state, registerDashProgression } from '../core/state.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
@@ -8,6 +8,7 @@ import { Gatekeeper, normalizeFreshTicks } from '../entities/bosses/gatekeeper.j
 import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
+import { PIT_KILL_FRACTION, clampKillFraction } from '../core/hitZones.js';
 
 // W1 Dispatch is 0–4. W2 Subfloor (#47) is 5–9. Older campaign levels follow, shifted
 // past both. Provisional Subfloor slots (originally indices 2–4) sit at the front of Panopticon.
@@ -710,6 +711,43 @@ for (const world of WORLDS) {
     }
 }
 
+// Dash starts at the level marked dashFrom (W2-L3 Heavy Going) and stays on for every
+// later campaign level. Order is world id, then that world's own level list — not a LEVELS index.
+// true / false when the level sits in that order. null when it does not (sandbox, unnamed playtest).
+export function dashUnlockedByProgression(level) {
+    if (!level || typeof level !== 'object') return null;
+    const worlds = [...WORLDS].sort((a, b) => a.id - b.id);
+    let passed = false;
+    for (const world of worlds) {
+        for (const idx of world.levels) {
+            const lv = LEVELS[idx];
+            if (!lv) continue;
+            const marker = lv.dashFrom === true;
+            if (lv === level) return marker || passed;
+            if (marker) passed = true;
+        }
+    }
+    if (level.dashFrom === true) return true;
+    const worldId = normalizeWorldId(level.world);
+    if (worldId == null) return null;
+    if (worldId < 2) return false;
+    if (worldId > 2) return true;
+    const w2 = worlds.find(w => w.id === 2);
+    if (!w2) return null;
+    let markerAt = -1;
+    const names = w2.levels.map((idx, pos) => {
+        const lv = LEVELS[idx];
+        if (lv?.dashFrom === true) markerAt = pos;
+        return lv?.name;
+    });
+    if (markerAt < 0 || level.name == null) return null;
+    const pos = names.indexOf(level.name);
+    if (pos < 0) return null;
+    return pos >= markerAt;
+}
+
+registerDashProgression(dashUnlockedByProgression);
+
 export function getWorldForLevel(idx) {
     return WORLDS.find(world => world.levels.includes(idx)) || null;
 }
@@ -867,6 +905,23 @@ function crackSpeedFromMeta(meta, fallback) {
     return raw === 'fast' ? 'fast' : 'normal';
 }
 
+// HUD hint. Empty / whitespace is omitted so levels without one stay identical in JSON.
+export function normalizeHintLine(value) {
+    if (value == null) return '';
+    return String(value).trim();
+}
+
+// null means "use PIT_KILL_FRACTION and do not write the key".
+// A finite number is clamped to 0.60–0.70; the default 0.65 is omitted.
+export function normalizePitKillFraction(value) {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const clamped = clampKillFraction(n);
+    if (Math.abs(clamped - PIT_KILL_FRACTION) < 1e-9) return null;
+    return clamped;
+}
+
 export function serializeLevel(src = state) {
     const size = layoutMapSize(src, src);
     const m = src.meta || src.editorLevelMeta || (typeof state !== 'undefined' ? state.editorLevelMeta : null);
@@ -939,6 +994,10 @@ export function serializeLevel(src = state) {
         const worldId = normalizeWorldId(m.world);
         if (worldId != null) payload.meta.world = worldId;
         if (Array.isArray(m.unlocks)) payload.meta.unlocks = [...m.unlocks];
+        const hintLine = normalizeHintLine(m.hintLine);
+        if (hintLine) payload.meta.hintLine = hintLine;
+        const pitKillFraction = normalizePitKillFraction(m.pitKillFraction);
+        if (pitKillFraction != null) payload.meta.pitKillFraction = pitKillFraction;
         copyBossMeta(m, payload.meta);
         if (demo) payload.meta.demo = demo;
     }
@@ -1006,6 +1065,10 @@ export function deserializeLevel(data) {
             const worldId = normalizeWorldId(data.meta.world);
             if (worldId != null) state.editorLevelMeta.world = worldId;
             if (Array.isArray(data.meta.unlocks)) state.editorLevelMeta.unlocks = [...data.meta.unlocks];
+            const hintLine = normalizeHintLine(data.meta.hintLine);
+            if (hintLine) state.editorLevelMeta.hintLine = hintLine;
+            const pitKillFraction = normalizePitKillFraction(data.meta.pitKillFraction);
+            if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
             copyBossMeta(data.meta, state.editorLevelMeta);
         } else if (demo || crackSpeed) {
             if (!state.editorLevelMeta) {

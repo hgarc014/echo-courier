@@ -4,6 +4,16 @@ import { AABB, checkWallCollision, lineOfSightBlocked } from '../core/physics.js
 import { SFX } from '../core/audio.js';
 import { drawSprite, drawTiled } from '../core/sprites.js';
 import { resolveSprite } from '../core/atlas.js';
+import {
+    CRUMBLE_MIN_TICKS,
+    WARNING_RING_TICKS,
+    actorCenter,
+    centerInKillZone,
+    clampKillFraction,
+    killZone,
+    overlapArea,
+    pointInRect
+} from '../core/hitZones.js';
 
 function isPresentPlayer(actor) {
     return actor && actor.id === undefined && actor.assetName === 'player';
@@ -788,26 +798,74 @@ export class StaticZone extends Entity {
     }
 }
 
+function currentKillFraction() {
+    const raw = state.currentLevelMeta?.pitKillFraction ?? state.editorLevelMeta?.pitKillFraction;
+    return clampKillFraction(raw);
+}
+
+function centerOnPlate(actor) {
+    const c = actorCenter(actor);
+    for (const plate of state.plates || []) {
+        if (plate && pointInRect(c.x, c.y, plate)) return true;
+    }
+    return false;
+}
+
+function holeKills(actor, tile) {
+    if (!actor || centerOnPlate(actor)) return false;
+    return centerInKillZone(actor, tile, currentKillFraction());
+}
+
+/** Stroke the exact kill rect (and the circle inscribed in it) so the warning matches the hole. */
+export function drawKillRing(ctx, tile, fraction = currentKillFraction(), color = 'rgba(255, 186, 70, 0.95)') {
+    const z = killZone(tile, fraction);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(z.x + 1.5, z.y + 1.5, Math.max(0, z.w - 3), Math.max(0, z.h - 3));
+    const cx = z.x + z.w / 2;
+    const cy = z.y + z.h / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(1, Math.min(z.w, z.h) / 2 - 1), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    return z;
+}
+
+function drawKillHole(ctx, tile, fraction = currentKillFraction()) {
+    const z = killZone(tile, fraction);
+    ctx.save();
+    ctx.fillStyle = '#07080c';
+    ctx.fillRect(z.x, z.y, z.w, z.h);
+    ctx.strokeStyle = '#f2e2c4';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(z.x + 1.5, z.y + 1.5, Math.max(0, z.w - 3), Math.max(0, z.h - 3));
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(z.x + 4, z.y + 4, Math.max(0, z.w - 8), Math.max(0, z.h - 8));
+    ctx.restore();
+    return z;
+}
+
 export class Pit extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'pit'); }
     update(actors) {
-        for(let a of actors) {
-            if (!AABB(a.x,a.y,a.w,a.h, this.x,this.y,this.w,this.h)) continue;
+        for (let a of actors) {
+            if (!holeKills(a, this)) continue;
             if (isPresentPlayer(a)) return "Fell into pit!";
             if (a.id !== undefined) a.isActive = false;
         }
         return null;
     }
     render(ctx) {
-        const img = resolveSprite(state, 'pit');
-        if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 1);
-        else { ctx.fillStyle='#000'; ctx.fillRect(this.x,this.y,this.w,this.h); }
-        ctx.strokeStyle='#111'; ctx.strokeRect(this.x,this.y,this.w,this.h);
+        ctx.fillStyle = '#3a2a1c';
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        drawKillHole(ctx, this);
     }
 }
 
 export const CRACK_STAGE_TICKS = 60;
-export const CRACK_FAST_STAGE_TICKS = 12; // 3 stages × 12 = 36 ticks (~0.6s at 60fps)
+export const CRACK_FAST_STAGE_TICKS = 12; // later stages; stage 1 lasts at least CRUMBLE_MIN_TICKS (0.5s)
 export const CRACK_STAGES = 3;
 
 export function crackStageTicksFor(speed) {
@@ -896,30 +954,77 @@ export class CrackedFloor extends Entity {
         this.stage = 0;
         this.collapsing = false;
         this.broken = false;
+        this.warningTicks = 0;
+        this.showingWarning = false;
+        this.warningCommitted = false;
+        this.ringShown = false;
         this.setCrackSpeed(crackSpeed);
     }
     setCrackSpeed(speed) {
         this.crackSpeed = speed === 'fast' ? 'fast' : 'normal';
         this.stageTicks = crackStageTicksFor(this.crackSpeed);
     }
+    killFraction() { return currentKillFraction(); }
+    killZoneRect() { return killZone(this, this.killFraction()); }
+    // A crack that shares area with a plate is floor, not a pit. Edge contact (area 0) does not count.
+    overlapsPlate() {
+        for (const plate of state.plates || []) {
+            if (plate && overlapArea(this, plate) > 0) return true;
+        }
+        return false;
+    }
+    // Telegraph / dust ring. Does not by itself start the crumble timer.
+    showWarningRing() {
+        if (this.broken || this.collapsing || this.overlapsPlate()) return;
+        this.showingWarning = true;
+        this.ringShown = true;
+    }
+    // Weight or ortho cascade: the ring must play out before crumble.
+    commitWarning() {
+        if (this.broken || this.collapsing || this.overlapsPlate()) return;
+        this.showingWarning = true;
+        this.ringShown = true;
+        this.warningCommitted = true;
+    }
+    stage1Ticks() {
+        const step = this.stageTicks || CRACK_STAGE_TICKS;
+        return Math.max(step, CRUMBLE_MIN_TICKS);
+    }
     startCollapse() {
-        if (this.broken || this.collapsing) return;
+        if (this.broken || this.collapsing || this.overlapsPlate()) return;
+        // No ring yet: queue the warning instead of opening a hole.
+        if (!this.ringShown && (this.warningTicks || 0) < 1) {
+            this.commitWarning();
+            return;
+        }
         this.collapsing = true;
+        this.warningCommitted = false;
         this.ticks = 0;
         this.stage = 1;
+        this.showingWarning = true;
         SFX.crack();
     }
     cascadeNeighbors() {
         for (const other of state.cracks || []) {
             if (other === this || other.broken || other.collapsing) continue;
-            if (isOrthoCrackNeighbor(this, other)) other.startCollapse();
+            if (!isOrthoCrackNeighbor(this, other)) continue;
+            other.commitWarning();
         }
     }
     update(actors) {
+        if (this.overlapsPlate()) {
+            this.collapsing = false;
+            this.broken = false;
+            this.warningTicks = 0;
+            this.showingWarning = false;
+            this.warningCommitted = false;
+            this.stage = 0;
+            return null;
+        }
         if (this.broken) {
             let playerFell = false;
             for (let a of actors) {
-                if (!AABB(a.x, a.y, a.w, a.h, this.x, this.y, this.w, this.h)) continue;
+                if (!holeKills(a, this)) continue;
                 if (isPresentPlayer(a)) { playerFell = true; continue; }
                 if (a.id !== undefined && a.isActive) {
                     spawnEchoFellPuff(a);
@@ -929,23 +1034,34 @@ export class CrackedFloor extends Entity {
             return playerFell ? "Fell into pit!" : null;
         }
         if (!this.collapsing) {
-            for (let a of actors) {
-                if (AABB(a.x, a.y, a.w, a.h, this.x, this.y, this.w, this.h)) {
-                    this.startCollapse();
+            for (let a of actors || []) {
+                if (!a || a.isActive === false) continue;
+                if (AABB(a.x, a.y, a.w || 30, a.h || 30, this.x, this.y, this.w, this.h)) {
+                    this.commitWarning();
                     break;
                 }
             }
         }
+        if (this.warningCommitted && !this.collapsing) {
+            this.warningTicks++;
+            this.showingWarning = true;
+            this.ringShown = true;
+            if (this.warningTicks >= WARNING_RING_TICKS) this.startCollapse();
+        }
         if (this.collapsing && !this.broken) {
             this.ticks++;
             const step = this.stageTicks || CRACK_STAGE_TICKS;
-            if (this.ticks >= step * CRACK_STAGES) {
+            const stage1 = this.stage1Ticks();
+            const breakAt = stage1 + step * (CRACK_STAGES - 1);
+            if (this.ticks >= breakAt) {
                 this.broken = true;
                 this.stage = CRACK_STAGES + 1;
+                this.showingWarning = false;
                 SFX.break();
                 this.cascadeNeighbors();
             } else {
-                const next = 1 + Math.floor(this.ticks / step);
+                let next = 1;
+                if (this.ticks > stage1) next = Math.min(CRACK_STAGES, 1 + Math.ceil((this.ticks - stage1) / step));
                 if (next !== this.stage) {
                     this.stage = next;
                     SFX.crack();
@@ -975,9 +1091,8 @@ export class CrackedFloor extends Entity {
         ctx.restore();
     }
     renderPit(ctx) {
-        const img = resolveSprite(state, 'pit');
-        if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, 1);
-        else { ctx.fillStyle = '#000'; ctx.fillRect(this.x, this.y, this.w, this.h); }
+        this.renderFloor(ctx, 0, '#5a3d28');
+        drawKillHole(ctx, this, this.killFraction());
     }
     renderFloor(ctx, inset, fallback) {
         const img = resolveSprite(state, 'crack');
@@ -990,6 +1105,9 @@ export class CrackedFloor extends Entity {
         if (this.broken) {
             this.renderPit(ctx);
             return;
+        }
+        if (this.showingWarning || (this.collapsing && this.stage === 1)) {
+            drawKillRing(ctx, this, this.killFraction());
         }
         const stage = this.collapsing ? this.stage : 0;
         if (stage === 0) {
