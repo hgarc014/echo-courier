@@ -1,4 +1,4 @@
-import { state, getPlayerRank } from '../core/state.js';
+import { state, getPlayerRank, getUnlockedAbilities } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB, resolveDashFacing } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
@@ -209,7 +209,7 @@ export class Ghost extends Entity {
             ctx.fillStyle = '#00f3ff'; ctx.fillRect(this.x, this.y, this.w, this.h);
         }
 
-        if (state.abilitiesPurchased.ghostShield || state.levelAbilityOverrides.includes('ghostShield')) {
+        if (getUnlockedAbilities().includes('ghostShield')) {
             const cx = this.x + this.w / 2;
             const cy = this.y + this.h / 2;
             const facingX = this.facingX || 1;

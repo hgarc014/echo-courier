@@ -3,9 +3,9 @@ import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, sy
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo } from './data/levels.js';
+import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
-import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid } from './ui/menu.js';
+import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
@@ -745,6 +745,7 @@ export function startGame(levelIndex) {
     document.getElementById('max-loops').innerText = maxLoops;
     let lv = LEVELS[levelIndex];
     state.levelAbilityOverrides = [...(lv.grants || [])];
+    state.worldUnlockedAbilities = getWorldUnlockedAbilities(levelIndex);
     state.robots = []; state.projectiles = [];
     state.playtesting = false;
     state.customLayout = null;
@@ -799,6 +800,7 @@ export function restartLevel() {
     if (!lv) return;
     state.currentLevelMeta = lv;
     state.levelAbilityOverrides = [...(lv.grants || [])];
+    state.worldUnlockedAbilities = state.playtesting ? null : getWorldUnlockedAbilities(state.currentLevelIndex);
     applyLoadedLevel(loadCurrentEntities());
     state.pastRuns = []; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
@@ -869,6 +871,7 @@ export function startPlaytestFromEditor() {
         demo: cloneDemo(em.demo)
     };
     state.levelAbilityOverrides = [...state.currentLevelMeta.grants];
+    state.worldUnlockedAbilities = null;
     state.pendingBossIntro = null;
     document.getElementById('max-loops').innerText = state.currentLevelMeta.maxGhosts + 1;
     document.getElementById('level-display').innerText = getLevelDisplayLabel(0, state.currentLevelMeta);
@@ -1551,7 +1554,7 @@ window.onload = () => {
         startGame(typeof SANDBOX_LEVEL_INDEX === 'number' ? SANDBOX_LEVEL_INDEX : LEVELS.findIndex(l => l.isSandbox));
     });
     document.getElementById('playtest-return-btn')?.addEventListener('click', () => returnToEditor());
-    document.getElementById('dev-mode-checkbox').onchange = () => { refreshLevelSelectGrid(); };
+    document.getElementById('dev-mode-checkbox').onchange = () => { refreshLevelSelectGrid(); refreshShopButtons(); };
     
     document.getElementById('next-level-btn').onclick = () => window.nextLevel();
     document.getElementById('menu-btn')?.addEventListener('click', (e) => {

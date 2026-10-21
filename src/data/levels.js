@@ -5,6 +5,15 @@ import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor,
 import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 
+// ==== PROVISIONAL WORLD MAPPING (PR2) — replace when world content PRs land ====
+export const WORLDS = [
+  { id: 1, name: 'Dispatch',   unlocks: [],                 levels: [0, 1] },
+  { id: 2, name: 'Subfloor',   unlocks: ['dash'],           levels: [2, 3, 4] },
+  { id: 3, name: 'Panopticon', unlocks: ['toss', 'cloak'],  levels: [5, 6, 7] },
+  { id: 4, name: 'Beamworks',  unlocks: ['ghostShield'],    levels: [8, 9] },
+  { id: 5, name: 'Overclock',  unlocks: [],                 levels: [10, 11] },
+];
+
 let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, projectiles;
 
 export function createBoundWalls(w, h, t = 20) {
@@ -93,7 +102,7 @@ const LEVEL1_LAYOUT = {
     plates: [{ x: 300, y: 250, linkedIds: ["d1"], id: "p1", type: "standard" }],
     packages: [{ x: 600, y: 280, id: "pkg1", packageType: "standard", requiredForDelivery: true }],
     lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [],
-    hints: [{ id: "hint_intro", x: 220, y: 290, demoId: "intro", autoOpen: false, title: "Ghost Hold" }]
+    hints: [{ id: "hint_intro", x: 220, y: 290, demoId: "intro", autoOpen: true, title: "Ghost Hold" }]
 };
 
 const LEVEL2_LAYOUT = {
@@ -538,6 +547,44 @@ export const LEVELS = [
     { name: "Level 12: Danger Courier", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => state.pastRuns.length === 0 }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; } },
     { name: "Dev Sandbox", isSandbox: true, mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, setup: setupDevSandbox }
 ];
+
+for (const world of WORLDS) {
+    for (const idx of world.levels) {
+        const level = LEVELS[idx];
+        if (!level) continue;
+        level.world = world.id;
+        level.unlocks = [...world.unlocks];
+    }
+}
+
+export function getWorldForLevel(idx) {
+    return WORLDS.find(world => world.levels.includes(idx)) || null;
+}
+
+export function getWorldUnlockedAbilities(idx) {
+    const world = getWorldForLevel(idx);
+    if (!world) return null;
+    const unlocked = [];
+    for (const entry of WORLDS) {
+        if (entry.id > world.id) continue;
+        for (const ability of entry.unlocks) {
+            if (!unlocked.includes(ability)) unlocked.push(ability);
+        }
+    }
+    return unlocked;
+}
+
+export function getShopUnlockedAbilities(maxUnlockedLevel) {
+    const unlocked = [];
+    for (const entry of WORLDS) {
+        const first = entry.levels[0];
+        if (first === undefined || first > maxUnlockedLevel) continue;
+        for (const ability of entry.unlocks) {
+            if (!unlocked.includes(ability)) unlocked.push(ability);
+        }
+    }
+    return unlocked;
+}
 
 export const CAMPAIGN_LEVEL_COUNT = LEVELS.filter(level => !level.isSandbox && !level.isPlaytest).length;
 export const SANDBOX_LEVEL_INDEX = LEVELS.findIndex(level => level.isSandbox);
