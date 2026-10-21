@@ -900,7 +900,7 @@ function swallowPackages(hazard) {
 function playerCarriedFragileInto(hazard, actors) {
     const player = (actors || []).find(isPresentPlayer);
     if (!player || player !== state.player) return false;
-    if (!AABB(player.x, player.y, player.w, player.h, hazard.x, hazard.y, hazard.w, hazard.h)) return false;
+    if (!holeKills(player, hazard)) return false;
     for (const pkg of state.packages || []) {
         if (!pkg || pkg.isDestroyed || pkg.type !== 'fragile' || pkg.carriedBy !== 'player') continue;
         if (packageTouches(pkg, hazard)) return true;

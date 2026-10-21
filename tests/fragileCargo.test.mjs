@@ -186,8 +186,10 @@ check('sim: dropped fragile and normal cargo fail, then the run resets', () => {
     crack.broken = true;
     const pkg = state.packages[0];
     pkg.type = 'fragile';
-    pkg.x = crack.x;
-    pkg.y = crack.y;
+    // W2-L1 cracks are taller than a package. The kill hole is the inner fraction,
+    // so the package has to sit with its center in that hole, not on the tile corner.
+    pkg.x = crack.x + (crack.w - pkg.w) / 2;
+    pkg.y = crack.y + (crack.h - pkg.h) / 2;
     pkg.carriedBy = null;
     main.stepSimulation();
     assert.equal(state.failMessage, 'Fragile Package Destroyed!');
@@ -205,8 +207,8 @@ check('sim: dropped fragile and normal cargo fail, then the run resets', () => {
     const crack2 = state.cracks.find(c => c.x >= 280);
     crack2.broken = true;
     const normal = state.packages[0];
-    normal.x = crack2.x + 2;
-    normal.y = crack2.y + 2;
+    normal.x = crack2.x + (crack2.w - normal.w) / 2 + 2;
+    normal.y = crack2.y + (crack2.h - normal.h) / 2 + 2;
     normal.carriedBy = null;
     main.stepSimulation();
     assert.equal(state.failMessage, 'Package lost!');

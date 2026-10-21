@@ -256,10 +256,19 @@ function applyDashProgression(set, level) {
     else if (flag === false) set.delete('dash');
 }
 
+// unlocks is a synonym of grants (GAME_REFERENCE) for dash, toss, and cloak.
+// ghostShield in unlocks only lets a purchase work on that level; grants still gives it.
+function abilitiesListedAsGrants(level) {
+    const granted = new Set(level?.grants || []);
+    for (const ability of level?.unlocks || []) {
+        if (ability !== 'ghostShield') granted.add(ability);
+    }
+    return granted;
+}
+
 export function applyLevelAbilityOverrides(level) {
-    // unlocks is a synonym of grants (GAME_REFERENCE): both turn the ability on for this level.
     // Dash itself follows dashUnlockedByProgression, so a copied world unlock list cannot grant it early.
-    const granted = new Set([...(level?.grants || []), ...(level?.unlocks || [])]);
+    const granted = abilitiesListedAsGrants(level);
     applyDashProgression(granted, level);
     state.levelAbilityOverrides = [...granted];
 }
@@ -286,8 +295,7 @@ export function getUnlockedAbilities() {
     for (let ability of state.levelAbilityOverrides) unlocks.add(ability);
     const meta = state.currentLevelMeta;
     if (meta) {
-        for (let ability of (meta.grants || [])) unlocks.add(ability);
-        for (let ability of (meta.unlocks || [])) unlocks.add(ability);
+        for (let ability of abilitiesListedAsGrants(meta)) unlocks.add(ability);
     }
     applyDashProgression(unlocks, meta);
     return Array.from(unlocks);
