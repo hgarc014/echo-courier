@@ -613,6 +613,40 @@ export function getShopUnlockedAbilities(maxUnlockedLevel) {
 export const CAMPAIGN_LEVEL_COUNT = LEVELS.filter(level => !level.isSandbox && !level.isPlaytest).length;
 export const SANDBOX_LEVEL_INDEX = LEVELS.findIndex(level => level.isSandbox);
 
+// Robot config that differs from ShooterRobot defaults (only written when non-default).
+const ROBOT_DEFAULTS = { engaged: true, isEmerging: false, emergeUntilPathIndex: 0, fireCooldown: 0, hp: 3 };
+function serializeRobot(r) {
+    const out = { path: r.path || [{ x: r.x, y: r.y }] };
+    for (const [k, def] of Object.entries(ROBOT_DEFAULTS)) {
+        if (r[k] !== undefined && r[k] !== def) out[k] = r[k];
+    }
+    return out;
+}
+function deserializeRobot(r) {
+    const path = r.path || [{ x: r.x, y: r.y }];
+    const robot = new ShooterRobot(path.length ? path : [{ x: 50, y: 50 }]);
+    for (const k of Object.keys(ROBOT_DEFAULTS)) {
+        if (r[k] !== undefined) robot[k] = r[k];
+    }
+    return robot;
+}
+
+// Boss/challenge level config shared by serialize, deserialize and the editor.
+// challengeRef names the campaign level whose code-defined challenge applies (challenges are functions).
+export const BOSS_META_KEYS = ['isBoss', 'bossIntro', 'bossIntroDoorId', 'challengeRef'];
+export function copyBossMeta(from, to) {
+    if (from?.isBoss) to.isBoss = true;
+    if (from?.bossIntro && (from.bossIntro.speaker || from.bossIntro.text)) {
+        to.bossIntro = { speaker: from.bossIntro.speaker || '', text: from.bossIntro.text || '' };
+    }
+    if (from?.bossIntroDoorId) to.bossIntroDoorId = String(from.bossIntroDoorId);
+    if (from?.challengeRef) to.challengeRef = String(from.challengeRef);
+    return to;
+}
+export function getChallengeByRef(ref) {
+    return LEVELS.find(l => l.name === ref && l.challenge)?.challenge || null;
+}
+
 function withMapSize(entities, size) {
     return { ...entities, mapWidth: size.mapWidth, mapHeight: size.mapHeight };
 }
@@ -672,7 +706,7 @@ export function serializeLevel(src = state) {
         winds: (src.winds || []).map(w => ({ x: w.x, y: w.y, w: w.w, h: w.h, vx: w.vx, vy: w.vy })),
         statics: (src.statics || []).map(s => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
         cracks: (src.cracks || []).map(c => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
-        robots: (src.robots || []).map(r => ({ path: r.path || [{ x: r.x, y: r.y }] })),
+        robots: (src.robots || []).map(serializeRobot),
         crackSpeed: crackSpeedFromMeta(m, src.crackSpeed)
     };
     if (demo) payload.demo = demo;
@@ -699,6 +733,7 @@ export function serializeLevel(src = state) {
         const worldId = normalizeWorldId(m.world);
         if (worldId != null) payload.meta.world = worldId;
         if (Array.isArray(m.unlocks)) payload.meta.unlocks = [...m.unlocks];
+        copyBossMeta(m, payload.meta);
         if (demo) payload.meta.demo = demo;
     }
     return payload;
@@ -741,10 +776,7 @@ export function deserializeLevel(data) {
     statics = (data.statics||[]).map(s => new StaticZone(s.x, s.y, s.w, s.h));
     const crackSpeed = specifiedCrackSpeed(data);
     cracks = (data.cracks||[]).map(c => new CrackedFloor(c.x, c.y, c.w, c.h, crackSpeed || undefined));
-    robots = (data.robots||[]).map(r => {
-        const path = r.path || [{ x: r.x, y: r.y }];
-        return new ShooterRobot(path.length ? path : [{ x: 50, y: 50 }]);
-    });
+    robots = (data.robots||[]).map(deserializeRobot);
     projectiles = [];
 
     const demo = cloneDemo(data.demo || data.meta?.demo);
@@ -764,6 +796,7 @@ export function deserializeLevel(data) {
             const worldId = normalizeWorldId(data.meta.world);
             if (worldId != null) state.editorLevelMeta.world = worldId;
             if (Array.isArray(data.meta.unlocks)) state.editorLevelMeta.unlocks = [...data.meta.unlocks];
+            copyBossMeta(data.meta, state.editorLevelMeta);
         } else if (demo || crackSpeed) {
             if (!state.editorLevelMeta) {
                 state.editorLevelMeta = {

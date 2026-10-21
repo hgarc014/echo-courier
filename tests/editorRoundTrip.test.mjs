@@ -28,34 +28,70 @@ const { state } = await import('../src/core/state.js');
 const { LEVELS, getLevelSetup, serializeLevel, deserializeLevel, normalizeLoopTime } = await import('../src/data/levels.js');
 const { setEditorLevelMetaFromLevel } = await import('../src/ui/editor.js');
 
+const ENTITY_KEYS = ['walls', 'doors', 'plates', 'hints', 'packages', 'lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots'];
+// Runtime-only props reset every run; anything else must survive the editor round-trip.
+const IGNORE = new Set(['projectiles']);
+
+// Snapshot an entity's own data props (functions dropped) plus its class name.
+function snapEntity(e) {
+    const out = { __type: e?.constructor?.name };
+    for (const [k, v] of Object.entries(e || {})) {
+        if (typeof v === 'function' || IGNORE.has(k)) continue;
+        out[k] = v;
+    }
+    return JSON.parse(JSON.stringify(out));
+}
+function snapLayout(setup) {
+    const out = { mapWidth: setup.mapWidth, mapHeight: setup.mapHeight, player: snapEntity(setup.player), deliveryZone: snapEntity(setup.deliveryZone) };
+    for (const k of ENTITY_KEYS) out[k] = (setup[k] || []).map(snapEntity);
+    return out;
+}
+const META_FIELDS = ['name', 'obj', 'maxGhosts', 'world', 'unlocks', 'grants', 'loopTime', 'isBoss', 'bossIntro', 'bossIntroDoorId'];
+function expectedMeta(level) {
+    return {
+        name: level.name, obj: level.obj || '', maxGhosts: level.maxGhosts ?? 3,
+        story: { speaker: level.story?.speaker || '', text: level.story?.text || '' },
+        world: level.world, unlocks: level.unlocks, grants: level.grants || [],
+        loopTime: normalizeLoopTime(level.loopTime) ?? undefined,
+        isBoss: level.isBoss || undefined, bossIntro: level.bossIntro, bossIntroDoorId: level.bossIntroDoorId
+    };
+}
+function pickMeta(m) {
+    const out = { story: m.story };
+    for (const k of META_FIELDS) out[k] = m[k] ?? undefined;
+    if (!out.isBoss) out.isBoss = undefined;
+    return JSON.parse(JSON.stringify(out));
+}
+
 let failures = 0;
 for (let i = 0; i < LEVELS.length; i++) {
     const level = LEVELS[i];
     try {
         // Same path as "load campaign level into editor".
         const setup = getLevelSetup(i);
+        const original = snapLayout(setup);
         setEditorLevelMetaFromLevel(level);
         const first = serializeLevel({ ...setup, meta: state.editorLevelMeta });
         const json = JSON.parse(JSON.stringify(first));
-        const data = deserializeLevel(json);
-        const second = serializeLevel({ ...data, meta: state.editorLevelMeta });
-        assert.deepStrictEqual(JSON.parse(JSON.stringify(second)), json, 'serialize/deserialize not idempotent');
 
-        const m = second.meta;
-        assert.equal(m.world, level.world, 'world');
-        assert.deepEqual(m.unlocks, level.unlocks, 'unlocks');
-        assert.deepEqual(m.grants, level.grants || [], 'grants');
-        assert.equal(m.loopTime, normalizeLoopTime(level.loopTime) ?? undefined, 'loopTime');
-        assert.equal(m.maxGhosts, level.maxGhosts ?? 3, 'maxGhosts');
-        assert.equal(second.mapWidth, setup.mapWidth, 'mapWidth');
-        assert.equal(second.mapHeight, setup.mapHeight, 'mapHeight');
-        for (const k of ['walls', 'doors', 'plates', 'packages', 'lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots']) {
-            assert.equal(second[k].length, (setup[k] || []).length, `${k} count`);
+        state.editorLevelMeta = null; // nothing may leak from the pre-export meta
+        const data = deserializeLevel(json);
+        const loadedMeta = state.editorLevelMeta;
+
+        // 1. Loaded entities match the ORIGINAL campaign entities (type, position, config).
+        const loaded = snapLayout(data);
+        for (const k of ['mapWidth', 'mapHeight', 'player', 'deliveryZone', ...ENTITY_KEYS]) {
+            assert.deepStrictEqual(loaded[k], original[k], `entities "${k}" differ from original`);
         }
+        // 2. Level config matches the original level definition.
+        assert.deepStrictEqual(pickMeta(loadedMeta), JSON.parse(JSON.stringify(expectedMeta(level))), 'meta differs from original');
+        // 3. Re-export is identical.
+        const second = serializeLevel({ ...data, meta: loadedMeta });
+        assert.deepStrictEqual(JSON.parse(JSON.stringify(second)), json, 're-export not identical');
         console.log(`ok   ${i} ${level.name}`);
     } catch (err) {
         failures++;
-        console.log(`FAIL ${i} ${level.name}: ${err.message}`);
+        console.log(`FAIL ${i} ${level.name}: ${err.message.split('\n').slice(0, 12).join('\n')}`);
     }
 }
 console.log(`\n${LEVELS.length - failures}/${LEVELS.length} levels round-trip`);
