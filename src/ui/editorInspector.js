@@ -9,6 +9,7 @@ export const MIN_WAYPOINTS = 2;
 /** The live waypoint array for guards/drones (points) or robots (path), else null. */
 export function getWaypoints(ent) {
     if (!ent) return null;
+    if (ent.isWarden) return null;
     if (Array.isArray(ent.points)) return ent.points;
     if (Array.isArray(ent.path)) return ent.path;
     return null;
@@ -231,5 +232,38 @@ export function applyPrismConfig(ent, cfg = {}) {
     if (cfg.w != null && cfg.w !== '') ent.w = params.w;
     if (cfg.h != null && cfg.h !== '') ent.h = params.h;
     if (cfg.id != null && String(cfg.id).trim()) ent.id = String(cfg.id).trim();
+    return ent;
+}
+
+function applyPositive(ent, key, raw, min) {
+    if (raw == null || raw === '') return;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    ent[key] = Math.max(min, n);
+}
+
+/** Inspector fields for a Warden. Angles and turn speed are degrees. */
+export function applyWardenConfig(ent, cfg = {}) {
+    if (!ent || !cfg) return ent;
+    applyPositive(ent, 'coneLength', cfg.coneLength, 1);
+    applyPositive(ent, 'coneAngle', cfg.coneAngle, 1);
+    applyPositive(ent, 'turnSpeed', cfg.turnSpeed, 0);
+    applyPositive(ent, 'hearRange', cfg.hearRange, 0);
+    if (cfg.homeAngle != null && cfg.homeAngle !== '') {
+        const n = Number(cfg.homeAngle);
+        if (Number.isFinite(n)) {
+            ent.homeAngle = n;
+            ent.facingAngle = n * Math.PI / 180;
+            ent.targetAngle = ent.facingAngle;
+        }
+    }
+    if (cfg.relayIds != null) {
+        const raw = Array.isArray(cfg.relayIds) ? cfg.relayIds : String(cfg.relayIds).split(',');
+        ent.relayIds = raw.map(s => String(s).trim()).filter(Boolean);
+    }
+    if (cfg.defeatDoorId != null && String(cfg.defeatDoorId).trim()) {
+        ent.defeatDoorId = String(cfg.defeatDoorId).trim();
+    }
+    if (typeof ent.setPost === 'function' && ent.startX !== undefined) ent.setPost(ent.x, ent.y);
     return ent;
 }

@@ -5,12 +5,13 @@ import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
 import { Laser, SweepCamera, Guard, Drone, WindTunnel, StaticZone, CrackedFloor, ShooterRobot } from '../entities/hazards.js';
 import { Burrower } from '../entities/bosses/Burrower.js';
+import { Warden, WARDEN_DEFAULTS } from '../entities/bosses/Warden.js';
 import { Gatekeeper } from '../entities/bosses/gatekeeper.js';
 import { Prism } from '../entities/bosses/Prism.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { normalizeTimeline } from '../systems/temporalPlate.js';
-import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, applyPrismConfig, applyLaserConfig, applyPackageConfig, applyAbilityList, ABILITY_IDS, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
+import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, applyWardenConfig, applyPrismConfig, applyLaserConfig, applyPackageConfig, applyAbilityList, ABILITY_IDS, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -45,7 +46,8 @@ const ENTITY_LISTS = [
     ['robots', 'robot'],
     ['burrowers', 'burrower'],
     ['gatekeepers', 'gatekeeper'],
-    ['prisms', 'prism']
+    ['prisms', 'prism'],
+    ['wardens', 'warden']
 ];
 
 const DEFAULT_EDITOR_META = () => ({
@@ -439,6 +441,7 @@ function pasteClipboard() {
     else if (clipboard.list === 'burrowers') data.id = 'burrower_' + Date.now();
     else if (clipboard.list === 'gatekeepers') data.id = 'gk_' + Date.now();
     else if (clipboard.list === 'prisms') data.id = 'prism_' + Date.now();
+    else if (clipboard.list === 'wardens') data.id = 'warden_' + Date.now();
     const spawned = (deserializeLevel({ [clipboard.list]: [data] })[clipboard.list] || [])[0];
     if (!spawned) return;
     if (clipboard.list === 'cracks' && typeof spawned.setCrackSpeed === 'function') {
@@ -617,6 +620,11 @@ export function initEditor(canvas, ctx) {
             spawned = new Prism(cx, cy, { id: 'prism_' + id });
             state.prisms.push(spawned);
         }
+        else if (type === 'warden') {
+            if (!state.wardens) state.wardens = [];
+            spawned = new Warden(cx, cy, { id: 'warden_' + id, ...WARDEN_DEFAULTS, relayIds: ['r1', 'r2', 'r3'] });
+            state.wardens.push(spawned);
+        }
         else if (type === 'player') {
             if (!state.player) state.player = new PlayerEntity(cx, cy, 30, 30, 'player');
             else { state.player.x = cx; state.player.y = cy; }
@@ -635,7 +643,7 @@ export function initEditor(canvas, ctx) {
     function deleteSelectedEntity() {
         if (!selectedEntity) return;
         pushUndo();
-        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','burrowers','gatekeepers','prisms','drones'].forEach(list => {
+        ['walls','doors','plates','hints','lasers','packages','guards','cameras','winds','statics','cracks','robots','burrowers','wardens','gatekeepers','prisms','drones'].forEach(list => {
             state[list] = (state[list] || []).filter(e => e !== selectedEntity);
         });
         selectedEntity = null; updatePropertiesPanel();
@@ -699,7 +707,7 @@ export function initEditor(canvas, ctx) {
         const world = screenToWorld(sx, sy);
         selectedEntity = null;
         
-        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...(state.burrowers||[]), ...(state.gatekeepers||[]), ...(state.prisms||[]), ...state.drones];
+        let allEntities = [state.player, state.deliveryZone, ...state.walls, ...state.doors, ...state.plates, ...(state.hints||[]), ...state.packages, ...state.lasers, ...state.guards, ...state.cameras, ...state.winds, ...state.statics, ...state.cracks, ...state.robots, ...(state.burrowers||[]), ...(state.wardens||[]), ...(state.gatekeepers||[]), ...(state.prisms||[]), ...state.drones];
         
         for (let i = allEntities.length - 1; i >= 0; i--) {
             let ent = allEntities[i];
@@ -730,6 +738,7 @@ export function initEditor(canvas, ctx) {
         const nx = Math.round((world.x - dragX)/10)*10;
         const ny = Math.round((world.y - dragY)/10)*10;
         if (getWaypoints(selectedEntity)) moveEntityTo(selectedEntity, nx, ny);
+        else if (typeof selectedEntity.setPost === 'function') selectedEntity.setPost(nx, ny);
         else {
             selectedEntity.x = nx; selectedEntity.y = ny;
             if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
@@ -872,6 +881,16 @@ function updatePropertiesPanel() {
         html += `<label title="Blank = unlimited. After this many stuns the burrower stays down until rewind.">Max stuns / loop: <input type="number" min="1" step="1" id="prop-burrower-maxstuns" placeholder="unlimited" value="${selectedEntity.maxStunsPerLoop ?? ''}" style="width:70px"></label><br>`;
         html += `<label>Core plate ids: <input type="text" id="prop-burrower-cores" value="${escapeAttr((selectedEntity.corePlateIds || []).join(', '))}" style="width:100%"></label><br>`;
         html += `<label>Defeat door id: <input type="text" id="prop-burrower-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
+    }
+
+    if (selectedEntity instanceof Warden) {
+        html += `<label>Cone length: <input type="number" min="1" id="prop-warden-length" value="${selectedEntity.coneLength ?? 340}" style="width:70px"></label><br>`;
+        html += `<label>Cone angle°: <input type="number" min="1" step="1" id="prop-warden-angle" value="${selectedEntity.coneAngle ?? 80}" style="width:70px"></label><br>`;
+        html += `<label>Turn speed °/s: <input type="number" min="0" step="1" id="prop-warden-turn" value="${selectedEntity.turnSpeed ?? 160}" style="width:70px"></label><br>`;
+        html += `<label>Hear range: <input type="number" min="0" id="prop-warden-hear" value="${selectedEntity.hearRange ?? 1000}" style="width:70px"></label><br>`;
+        html += `<label>Home facing°: <input type="number" step="1" id="prop-warden-home" value="${selectedEntity.homeAngle ?? -90}" style="width:70px"></label><br>`;
+        html += `<label>Relay ids: <input type="text" id="prop-warden-relays" value="${escapeAttr((selectedEntity.relayIds || []).join(', '))}" style="width:100%"></label><br>`;
+        html += `<label>Defeat door id: <input type="text" id="prop-warden-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
     }
 
     if (selectedEntity instanceof HintPlate) {
@@ -1082,6 +1101,17 @@ function updatePropertiesPanel() {
                 defeatDoorId: document.getElementById('prop-burrower-door').value
             });
         }
+        if (document.getElementById('prop-warden-length')) {
+            applyWardenConfig(selectedEntity, {
+                coneLength: document.getElementById('prop-warden-length').value,
+                coneAngle: document.getElementById('prop-warden-angle').value,
+                turnSpeed: document.getElementById('prop-warden-turn').value,
+                hearRange: document.getElementById('prop-warden-hear').value,
+                homeAngle: document.getElementById('prop-warden-home').value,
+                relayIds: document.getElementById('prop-warden-relays').value,
+                defeatDoorId: document.getElementById('prop-warden-door').value
+            });
+        }
         if (document.getElementById('prop-hint-title')) selectedEntity.title = document.getElementById('prop-hint-title').value || 'Hint Demo';
         if (document.getElementById('prop-hint-demoId')) selectedEntity.demoId = document.getElementById('prop-hint-demoId').value || null;
         if (document.getElementById('prop-hint-autoOpen')) selectedEntity.autoOpen = document.getElementById('prop-hint-autoOpen').checked;
@@ -1124,7 +1154,8 @@ function updatePropertiesPanel() {
                 selectedEntity = replacement;
             }
         }
-        if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
+        if (typeof selectedEntity.setPost === 'function' && !getWaypoints(selectedEntity)) selectedEntity.setPost(selectedEntity.x, selectedEntity.y);
+        else if (selectedEntity.startX !== undefined) { selectedEntity.startX = selectedEntity.x; selectedEntity.startY = selectedEntity.y; }
         updatePropertiesPanel();
     };
 }
