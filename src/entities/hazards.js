@@ -374,6 +374,23 @@ export class ShooterRobot extends Entity {
         if (!state.bossCheckpoint || typeof state.bossCheckpoint !== 'object') state.bossCheckpoint = {};
         state.bossCheckpoint[this.id] = { hp: this.hp };
     }
+    /** What XR-9's readout shows this frame (pure; used by render and tests). */
+    renderState(player, ghosts = []) {
+        const live = ghosts.filter(g => g && g.isActive && !g.vaporized);
+        const visible = live.filter(g => !g.cloakActive && this._targetVisible(g));
+        let t = this.lockTarget && (this.lockTarget === player || visible.includes(this.lockTarget)) ? this.lockTarget : null;
+        if (!t && player && player.cloakTimer <= 0 && this._targetVisible(player) && !visible.length) t = player;
+        const back = this.facingAngle + Math.PI;
+        const arc = this.backArc ?? Math.PI / 3;
+        return {
+            facing: this.facingAngle,
+            backFrom: back - arc,
+            backTo: back + arc,
+            panelOpen: this.backTouch ? this.backPanelOpen(player) : false,
+            sightTarget: t ? { x: t.x + (t.w || 30) / 2, y: t.y + (t.h || 30) / 2, isPlayer: t === player } : null,
+            echoOutOfSight: live.length > 0 && visible.length === 0,
+        };
+    }
     /** XR-9's back panel is exposed only while its attention is on an echo, once per loop. */
     backPanelOpen(player) {
         if (this.hitThisLoop) return false;
@@ -591,7 +608,11 @@ export class ShooterRobot extends Entity {
             ctx.font = 'bold 10px "Space Grotesk", sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('BACK PANEL OPEN', cx + Math.cos(back) * 44, cy + Math.sin(back) * 40);
+            // Below the cage's south wall so door/wall tiles never clip it (B7).
+            const ly = this.y + this.h + 74;
+            ctx.fillStyle = 'rgba(5,7,10,0.85)'; ctx.fillRect(cx - 50, ly - 7, 100, 14);
+            ctx.fillStyle = '#39ff8c';
+            ctx.fillText('BACK PANEL OPEN', cx, ly + 0.5);
             ctx.restore();
         }
 
@@ -713,20 +734,36 @@ export class ShooterRobot extends Entity {
         ctx.lineWidth = phasing ? 2 : 1;
         ctx.strokeRect(barX, barY, barW, 6);
 
-        // XR-9 in-world labels: name over the bar, BACK on the weak arc.
+        // XR-9 live readout: facing arrow, back arc, sight line to its target.
         if (this.backArc != null) {
-            const back = this.facingAngle + Math.PI;
+            const rs = this.renderState(state.player, state.activeGhosts || []);
             ctx.save();
-            ctx.strokeStyle = 'rgba(57, 255, 20, 0.85)';
+            if (rs.sightTarget) {
+                ctx.strokeStyle = rs.sightTarget.isPlayer ? 'rgba(255,60,60,0.75)' : 'rgba(255,221,0,0.7)';
+                ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
+                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(rs.sightTarget.x, rs.sightTarget.y); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            const f = rs.facing;
+            ctx.fillStyle = 'rgba(255,90,40,0.9)';
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(f) * 32, cy + Math.sin(f) * 32);
+            ctx.lineTo(cx + Math.cos(f + 0.35) * 22, cy + Math.sin(f + 0.35) * 22);
+            ctx.lineTo(cx + Math.cos(f - 0.35) * 22, cy + Math.sin(f - 0.35) * 22);
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = rs.panelOpen ? 'rgba(57,255,20,0.95)' : 'rgba(57,255,20,0.35)';
             ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.arc(cx, cy, 24, back - this.backArc, back + this.backArc);
+            ctx.arc(cx, cy, 24, rs.backFrom, rs.backTo);
             ctx.stroke();
-            ctx.fillStyle = '#39ff14';
-            ctx.font = 'bold 10px "Space Grotesk", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('BACK', cx + Math.cos(back) * 36, cy + Math.sin(back) * 36);
+            if (rs.echoOutOfSight) {
+                const text = 'ECHO OUT OF SIGHT';
+                ctx.font = 'bold 10px "Space Grotesk", sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                const ty = this.y - 34;
+                ctx.fillStyle = 'rgba(5,7,10,0.85)'; ctx.fillRect(cx - 56, ty - 7, 112, 14);
+                ctx.fillStyle = '#ffdd00'; ctx.fillText(text, cx, ty + 0.5);
+            }
             ctx.restore();
         }
         if (this.label) {

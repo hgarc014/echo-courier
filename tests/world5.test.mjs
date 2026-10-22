@@ -176,7 +176,15 @@ check('clarity: XR-9 draws a labelled glow on its open back panel', () => {
     const calls = [];
     const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => { calls.push([k, ...a]); return { addColorStop() {} }; }), set: (t, k, v) => { t[k] = v; return true; } });
     r.render(ctx);
-    assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'BACK PANEL OPEN'));
+    const lbl = calls.find(c => c[0] === 'fillText' && c[1] === 'BACK PANEL OPEN');
+    assert.ok(lbl);
+    // B7: on the real boss layout the label box must clear every wall and door tile.
+    const boss = byName('W5-BOSS').layout;
+    const rb = boss.robots[0].path[0];
+    const dx = rb.x - 400, dy = rb.y - 300;
+    const box = { x: lbl[2] + dx - 50, y: lbl[3] + dy - 7, w: 100, h: 14 };
+    const hit = [...boss.walls, ...boss.doors].filter(w => box.x < w.x + w.w && box.x + box.w > w.x && box.y < w.y + w.h && box.y + box.h > w.y);
+    assert.deepEqual(hit, [], 'BACK PANEL OPEN label overlaps tiles');
 });
 
 const { levelButtonLabel } = await import('../src/ui/menu.js');

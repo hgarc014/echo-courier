@@ -104,6 +104,34 @@ check('B2: with nothing in sight XR-9 holds a stable facing (no 2-tick jitter on
     state.robots = [];
 });
 
+check('r2: readout follows live facing, draws a sight line to the target, flags an out-of-sight decoy', () => {
+    reset();
+    const r = xr9();
+    const p = player(r.x + 2000, r.y);
+    const g = ghost('g1', r.x + 150, r.y);
+    r.facingAngle = 0; r.lockTarget = g;
+    let rs = r.renderState(p, [g]);
+    assert.ok(Math.abs(rs.backFrom - (Math.PI - Math.PI / 3)) < 1e-9 && Math.abs(rs.backTo - (Math.PI + Math.PI / 3)) < 1e-9);
+    assert.equal(rs.sightTarget.isPlayer, false);
+    assert.equal(rs.sightTarget.x, g.x + 15);
+    assert.equal(rs.echoOutOfSight, false);
+    r.facingAngle = Math.PI / 2;
+    rs = r.renderState(p, [g]);
+    assert.ok(Math.abs(rs.backFrom - (Math.PI * 1.5 - Math.PI / 3)) < 1e-9, 'back arc turns with facing');
+    state.walls = [{ x: r.x + 80, y: r.y - 100, w: 20, h: 250 }];
+    rs = r.renderState(p, [g]);
+    assert.equal(rs.echoOutOfSight, true);
+    assert.equal(rs.sightTarget, null);
+    const calls = [];
+    const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => { calls.push([k, ...a]); return { addColorStop() {} }; }), set: (t, k, v) => { t[k] = v; return true; } });
+    state.player = p; state.activeGhosts = [g];
+    r.render(ctx);
+    const texts = calls.filter(c => c[0] === 'fillText').map(c => c[1]);
+    assert.ok(texts.includes('ECHO OUT OF SIGHT'));
+    assert.ok(!texts.includes('BACK'), 'static BACK label is gone');
+    state.walls = []; state.activeGhosts = [];
+});
+
 check('telegraph is 1.5s of locked aim, and the shot follows the warned lane', () => {
     reset();
     const r = xr9();
