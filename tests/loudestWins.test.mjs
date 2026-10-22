@@ -622,3 +622,9 @@ check("echo steps off during the cue: HOLD/STAMP NOW drop at once and it says 'E
 
 if (failures) { console.log(`${failures} failed`); process.exit(1); }
 console.log('loudest wins checks passed');
+
+check('holding the lit plate + echo ring stamp stuns even when the strike was locked elsewhere', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../src/entities/bosses/Burrower.js', import.meta.url), 'utf8');
+    assert.match(src, /const ringStamp = this\.playerModeStampCrack\(actors\)/);
+    assert.match(src, /this\.playerMode \|\| this\.playerHoldsLivePlate\(\)/);
+});

@@ -754,6 +754,14 @@ export class Burrower extends Entity {
             this.endCycle();
             return;
         }
+        // Courier on the lit plate + an echo stamping its ring in the window stuns,
+        // wherever the strike was locked: the cue (HOLD / STAMP NOW) promises exactly this.
+        const ringStamp = this.playerModeStampCrack(actors);
+        if (ringStamp && !(crack && this.crackIsTargetable(crack))) {
+            this.say('STAMP OK', ringStamp, '#9dffb0');
+            this.applyStun();
+            return;
+        }
         if (crack && this.crackIsTargetable(crack)) {
             if (typeof crack.showWarningRing === 'function') crack.showWarningRing();
             if (typeof crack.startCollapse === 'function') crack.startCollapse();
@@ -1006,6 +1014,7 @@ export class Burrower extends Entity {
         const ptr = this.targetPointers();
         if (!ptr.targetTile) return null;
         if (this.echoLeft && this.phase === 'telegraph') return 'ECHO LEFT — step off!';
+        if (!this.playerMode && this.phase === 'telegraph' && this.playerHoldsLivePlate()) return 'HOLD — echo stamps now';
         if (this.playerMode) {
             if (this.playerHoldsLivePlate()) return this.phase === 'telegraph' ? 'HOLD — echo stamps now' : 'HOLD the lit plate';
             return this.phase === 'telegraph' ? 'STRIKES HERE · MOVE!' : 'STRIKES YOUR TILE';
@@ -1212,7 +1221,7 @@ export class Burrower extends Entity {
         const left = this.ticksToStrike();
         if (this.phase !== 'telegraph' || this.echoLeft || left == null || left < 1 || left > STAMP_WINDOW_TICKS) return false;
         // Any strike on or beside the lit plate cues the stamp, not only player-mode.
-        if (this.playerMode) return true;
+        if (this.playerMode || this.playerHoldsLivePlate()) return true;
         const t = this.lockedTile;
         return !!t && this.liveRingCracks().some(c => c.x === t.x && c.y === t.y);
     }
@@ -1233,7 +1242,7 @@ export class Burrower extends Entity {
             }
             const core = plates[0];
             if (core || plates.length) {
-                for (const p of plates) paintLabel(ctx, this.phase === 'dormant' ? 'STAMP NOW · for next loop' : 'STAMP NOW', p.x + p.w / 2, p.y + p.h + 52, { color: '#9dffb0', h: 16, font: 'bold 12px "Space Grotesk", sans-serif' });
+                for (const p of plates) paintLabel(ctx, this.phase === 'dormant' ? 'STAMP NOW · for next loop' : 'STAMP NOW', p.x + p.w / 2, this.phase === 'dormant' ? p.y - 52 : p.y + p.h + 52, { color: '#9dffb0', h: 16, font: 'bold 12px "Space Grotesk", sans-serif' });
             }
         }
         const pred = this.predictedStamp();
