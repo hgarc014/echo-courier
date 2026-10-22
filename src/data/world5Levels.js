@@ -201,6 +201,8 @@ const W5_BOSS_LAYOUT = base({
         backArc: Math.PI / 3,
         backTouch: true,
         telegraphTime: 1.5,
+        sweepPeriod: 11,
+        sweepWidth: 40,
         checkpoint: true,
         defeatDoorId: 'boss_door'
     }]

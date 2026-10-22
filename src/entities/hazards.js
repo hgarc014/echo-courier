@@ -219,8 +219,11 @@ export const ROBOT_XR9_DEFAULTS = {
     telegraphTime: null,     // seconds of locked aim before a shot; null = legacy ticks
     checkpoint: false,       // remember hp across rewinds (phase checkpoints)
     label: '',               // in-world name drawn above the robot
-    defeatDoorId: 'boss_door'
+    defeatDoorId: 'boss_door',
+    sweepPeriod: null,       // seconds between perimeter sweeps; null = no sweep
+    sweepWidth: null         // px depth of each perimeter lane; null = 60 when sweeping
 };
+const SWEEP_ACTIVE_TICKS = 8;
 
 export function normalizeRobotParams(o = {}) {
     const d = ROBOT_XR9_DEFAULTS;
@@ -235,7 +238,9 @@ export function normalizeRobotParams(o = {}) {
         telegraphTime: tele == null ? null : Math.max(0.1, Math.min(5, tele)),
         checkpoint: o.checkpoint === true,
         label: typeof o.label === 'string' ? o.label.slice(0, 32) : '',
-        defeatDoorId: typeof o.defeatDoorId === 'string' && o.defeatDoorId ? o.defeatDoorId : d.defeatDoorId
+        defeatDoorId: typeof o.defeatDoorId === 'string' && o.defeatDoorId ? o.defeatDoorId : d.defeatDoorId,
+        sweepPeriod: num(o.sweepPeriod) == null ? null : Math.max(2, Math.min(60, num(o.sweepPeriod))),
+        sweepWidth: num(o.sweepWidth) == null ? null : Math.max(20, Math.min(200, num(o.sweepWidth)))
     };
 }
 
@@ -356,6 +361,8 @@ export class ShooterRobot extends Entity {
         this.lockTimer = 0;
         this.maxHp = 3;
         this.aimLocked = false;
+        this.sweepTick = 0;
+        this.sweepFail = null;
         Object.assign(this, normalizeRobotParams({}));
     }
     /** Apply XR-9 params (deserialize / editor). */
@@ -474,8 +481,54 @@ export class ShooterRobot extends Entity {
             SFX.laserHit();
         }
     }
+    /** Ticks between perimeter sweeps (0 = off). The telegraph uses telegraphTime (default 1.5s). */
+    sweepPeriodTicks() { return this.sweepPeriod != null ? Math.round(this.sweepPeriod * 60) : 0; }
+    sweepTelegraphTicks() { return Math.round((this.telegraphTime ?? 1.5) * 60); }
+    /** 'idle' | 'warn' (charge 0..1) | 'fire' for the perimeter sweep at this tick. */
+    sweepPhase(tick = this.sweepTick) {
+        const period = this.sweepPeriodTicks();
+        if (!period || tick <= 0) return { phase: 'idle', charge: 0 };
+        const t = tick % period;
+        const tele = this.sweepTelegraphTicks();
+        if (t < SWEEP_ACTIVE_TICKS && tick >= period) return { phase: 'fire', charge: 1 };
+        if (t >= period - tele) return { phase: 'warn', charge: (t - (period - tele)) / tele };
+        return { phase: 'idle', charge: 0 };
+    }
+    /**
+     * Perimeter sweep lanes: two along each border, each starting in a corner and
+     * stopping at the first wall or closed door on its centre line. Together they
+     * cover all four corners, so a courier can not idle out of XR-9's reach.
+     */
+    sweepLanes() {
+        const W = state.mapWidth || 800; const H = state.mapHeight || 600;
+        const b = 20; const depth = this.sweepWidth ?? 60; const half = depth / 2;
+        const max = Math.max(W, H);
+        const lane = (x, y, ang, horiz) => {
+            const len = wallRayDistance(x, y, ang, max);
+            if (horiz) return { x: Math.min(x, x + Math.cos(ang) * len), y: y - half, w: len, h: depth };
+            return { x: x - half, y: Math.min(y, y + Math.sin(ang) * len), w: depth, h: len };
+        };
+        return [
+            lane(b + 2, b + half, 0, true),                    // top, NW corner -> east
+            lane(W - b - 2, b + half, Math.PI, true),          // top, NE corner -> west
+            lane(b + 2, H - b - half, 0, true),                // bottom, SW corner -> east
+            lane(W - b - 2, H - b - half, Math.PI, true),      // bottom, SE corner -> west
+            lane(b + half, b + 2, Math.PI / 2, false),         // west, NW corner -> south
+            lane(b + half, H - b - 2, -Math.PI / 2, false),    // west, SW corner -> north
+            lane(W - b - half, b + 2, Math.PI / 2, false),     // east, NE corner -> south
+            lane(W - b - half, H - b - 2, -Math.PI / 2, false) // east, SE corner -> north
+        ];
+    }
     update(player, activeGhosts, walls) {
+        this.sweepFail = null;
         if (this.hp <= 0) return;
+        if (this.sweepPeriodTicks()) {
+            this.sweepTick++;
+            if (player && this.sweepPhase().phase === 'fire'
+                && this.sweepLanes().some(l => AABB(player.x, player.y, player.w, player.h, l.x, l.y, l.w, l.h))) {
+                this.sweepFail = 'Caught in XR-9\'s perimeter sweep!';
+            }
+        }
         if (this.muzzleFlash > 0) this.muzzleFlash--;
         if (this.phaseChangeTimer > 0) this.phaseChangeTimer--;
         if (!this.engaged && !this.isEmerging) return;
@@ -632,6 +685,21 @@ export class ShooterRobot extends Entity {
                 ctx.beginPath();
                 ctx.arc(cx, cy, 14 + pulse * 3, 0, Math.PI * 2);
                 ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        const sw = this.sweepPhase();
+        if (sw.phase !== 'idle') {
+            ctx.save();
+            for (const l of this.sweepLanes()) {
+                if (sw.phase === 'fire') { ctx.fillStyle = 'rgba(255,0,68,0.55)'; ctx.fillRect(l.x, l.y, l.w, l.h); }
+                else {
+                    ctx.fillStyle = `rgba(255,0,68,${0.08 + 0.22 * sw.charge})`;
+                    ctx.fillRect(l.x, l.y, l.w, l.h);
+                    ctx.strokeStyle = 'rgba(255,80,120,0.9)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+                    ctx.strokeRect(l.x, l.y, l.w, l.h);
+                }
             }
             ctx.restore();
         }
