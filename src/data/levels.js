@@ -1,7 +1,7 @@
 import { state, registerDashProgression, setWorldUnlockProbe, setLevelClearHandler } from '../core/state.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall, HintPlate } from '../entities/interactables.js';
-import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
+import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit, normalizeRobotParams, ROBOT_XR9_DEFAULTS } from '../entities/hazards.js';
 import { Burrower, normalizeMaxStunsPerLoop } from '../entities/bosses/Burrower.js';
 import { Prism, serializePrism, normalizePrismParams } from '../entities/bosses/Prism.js';
 import { finishedWithinLoops } from '../core/loopDisplay.js';
@@ -946,6 +946,12 @@ function serializeRobot(r) {
     for (const [k, def] of Object.entries(ROBOT_DEFAULTS)) {
         if (r[k] !== undefined && r[k] !== def) out[k] = r[k];
     }
+    if (Number.isFinite(r.maxHp) && r.maxHp !== (out.hp ?? 3)) out.maxHp = r.maxHp;
+    // XR-9 params: only written when they differ from the legacy defaults.
+    const xr = normalizeRobotParams(r);
+    for (const [k, def] of Object.entries(ROBOT_XR9_DEFAULTS)) {
+        if (xr[k] !== def) out[k] = xr[k];
+    }
     return out;
 }
 function deserializeRobot(r) {
@@ -954,6 +960,9 @@ function deserializeRobot(r) {
     for (const k of Object.keys(ROBOT_DEFAULTS)) {
         if (r[k] !== undefined) robot[k] = r[k];
     }
+    robot.maxHp = Number.isFinite(r.maxHp) ? r.maxHp : robot.hp;
+    robot.configure(r);
+    robot.applyCheckpoint();
     return robot;
 }
 

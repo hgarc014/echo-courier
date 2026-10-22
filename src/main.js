@@ -1574,11 +1574,18 @@ function update() {
         if (!p.carriedBy && p.tossTicks > 0) {
             for (let r of state.robots) {
                 if (r.hp > 0 && AABB(p.x, p.y, p.w, p.h, r.x, r.y, r.w, r.h)) {
+                    // XR-9 armour: a crate from the front stops dead where it hit.
+                    const pcx = p.x + p.w / 2 - (p.vx || 0) * 2;
+                    const pcy = p.y + p.h / 2 - (p.vy || 0) * 2;
+                    if (typeof r.isBehind === 'function' && !r.isBehind(pcx, pcy)) {
+                        p.tossTicks = 0; p.vx = 0; p.vy = 0;
+                        break;
+                    }
                     r.takeHit();
                     if (p.requiredForDelivery !== false) p.reset();
                     else p.breakApart('shatter');
                     if (r.hp <= 0) {
-                        let bossDoor = state.doors.find(d => d.id === 'boss_door');
+                        let bossDoor = state.doors.find(d => d.id === (r.defeatDoorId || 'boss_door'));
                         if (bossDoor) bossDoor.isOpen = true;
                     }
                     break;
