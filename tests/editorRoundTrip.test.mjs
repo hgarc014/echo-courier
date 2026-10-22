@@ -28,7 +28,7 @@ const { state } = await import('../src/core/state.js');
 const { LEVELS, getLevelSetup, serializeLevel, deserializeLevel, normalizeLoopTime, normalizePar, installParChallenge, formatParTooltip } = await import('../src/data/levels.js');
 const { setEditorLevelMetaFromLevel, refreshEditorLevelConfigForm } = await import('../src/ui/editor.js');
 
-const ENTITY_KEYS = ['walls', 'doors', 'plates', 'hints', 'packages', 'lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'burrowers', 'gatekeepers'];
+const ENTITY_KEYS = ['walls', 'doors', 'plates', 'hints', 'packages', 'lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'burrowers', 'gatekeepers', 'prisms'];
 // Runtime-only props reset every run; anything else must survive the editor round-trip.
 const IGNORE = new Set(['projectiles']);
 

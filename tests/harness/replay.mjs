@@ -12,6 +12,16 @@ const { RECORDED_KEYS } = await import('../../src/systems/inputRecorder.js');
 
 export { main, state, keys, LEVELS };
 
+/** Prefer the recorded level name so a world inserted earlier does not stale the index. */
+export function levelIndexForSolution(solution) {
+    const name = solution && solution.levelName;
+    if (typeof name === 'string' && name) {
+        const idx = LEVELS.findIndex(level => level.name === name);
+        if (idx >= 0) return idx;
+    }
+    return solution ? solution.level : undefined;
+}
+
 function setKeys(frameKey) {
     const on = new Set(frameKey ? frameKey.split('+') : []);
     for (const k of RECORDED_KEYS) keys[k] = on.has(k);
@@ -26,7 +36,7 @@ export function loadLevel(solution) {
         Object.assign(state, deserializeLevel(solution.layout));
         main.startPlaytestFromEditor();
     } else {
-        main.startGame(solution.level);
+        main.startGame(levelIndexForSolution(solution));
     }
     for (let guard = 0; guard < 10 && state.gameState !== 'PLAYING'; guard++) {
         if (state.gameState !== 'DIALOG' && state.gameState !== 'BOSS_INTRO') break;
@@ -58,7 +68,7 @@ export function replaySolution(solution, { extraTicks = 600 } = {}) {
     }
     setKeys('');
     for (let i = 0; i < extraTicks && state.gameState === 'PLAYING'; i++) { main.stepSimulation(); ticks++; observe(); }
-    const level = solution.layout ? null : LEVELS[solution.level];
+    const level = solution.layout ? null : LEVELS[levelIndexForSolution(solution)];
     return {
         completed: state.gameState === 'LEVEL_COMPLETE',
         loopsUsed: displayedLoopNumber(state.loopNumber),

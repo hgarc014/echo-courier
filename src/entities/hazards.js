@@ -1,4 +1,4 @@
-import { state } from '../core/state.js';
+import { state, getUnlockedAbilities } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB, checkWallCollision, lineOfSightBlocked } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
@@ -14,6 +14,7 @@ import {
     overlapArea,
     pointInRect
 } from '../core/hitZones.js';
+import { collectShieldSlabs, laserHotRects } from '../systems/laserShield.js';
 
 function isPresentPlayer(actor) {
     return actor && actor.id === undefined && actor.assetName === 'player';
@@ -21,18 +22,30 @@ function isPresentPlayer(actor) {
 
 export class Laser extends Entity {
     constructor(id, x, y, w, h) { super(x, y, w, h, 'laser'); this.id=id; this.isOpen=false; }
+    hotRects() {
+        if (this.isOpen) return [];
+        const enabled = getUnlockedAbilities().includes('ghostShield');
+        const slabs = collectShieldSlabs(state.player, state.activeGhosts, enabled);
+        return laserHotRects(this, slabs);
+    }
     render(ctx) {
-        if (!this.isOpen) {
-            const pulse = 0.78 + 0.22 * Math.abs(Math.sin(state.currentTick * 0.18));
-            const img = resolveSprite(state, 'laser');
+        if (this.isOpen) return;
+        const rects = this.hotRects();
+        if (!rects.length) return;
+        const pulse = 0.78 + 0.22 * Math.abs(Math.sin(state.currentTick * 0.18));
+        const img = resolveSprite(state, 'laser');
+        for (const r of rects) {
             if (img) {
-                ctx.save(); ctx.beginPath(); ctx.rect(this.x, this.y, this.w, this.h); ctx.clip();
+                ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
                 ctx.globalAlpha = pulse;
                 const tile = 40;
-                for(let i=0; i<this.h; i+=tile) ctx.drawImage(img, this.x+(this.w/2 - 20), this.y+i, tile, tile);
-                for(let i=0; i<this.w; i+=tile) ctx.drawImage(img, this.x+i, this.y+(this.h/2 - 20), tile, tile);
+                for (let i = 0; i < r.h; i += tile) ctx.drawImage(img, r.x + (r.w / 2 - 20), r.y + i, tile, tile);
+                for (let i = 0; i < r.w; i += tile) ctx.drawImage(img, r.x + i, r.y + (r.h / 2 - 20), tile, tile);
                 ctx.restore();
-            } else { ctx.fillStyle=`rgba(255,0,0,${0.35 * pulse})`; ctx.fillRect(this.x, this.y, this.w, this.h); }
+            } else {
+                ctx.fillStyle = `rgba(255,0,0,${0.35 * pulse})`;
+                ctx.fillRect(r.x, r.y, r.w, r.h);
+            }
         }
     }
 }
@@ -847,15 +860,68 @@ function drawKillHole(ctx, tile, fraction = currentKillFraction()) {
     return z;
 }
 
+function rectsForPackage(pkg) {
+    if (!pkg || pkg.isDestroyed) return [];
+    const rects = [pkg];
+    if (pkg.carriedBy === 'player' && state.player) rects.push(state.player);
+    else if (typeof pkg.carriedBy === 'string' && pkg.carriedBy.startsWith('ghost_')) {
+        const id = Number(pkg.carriedBy.slice(6));
+        const ghost = (state.activeGhosts || []).find(g => g && g.id === id);
+        if (ghost) rects.push(ghost);
+    }
+    return rects;
+}
+
+// Same forgiving hole as a courier: center inside the kill zone, and a center
+// standing on a plate is floor. Edge overlap with the tile does not count.
+function packageTouches(pkg, hazard) {
+    return rectsForPackage(pkg).some(r => holeKills(r, hazard));
+}
+
+// Fragile cargo shatters. Anything else is lost and the run fails like a pit fall.
+function swallowPackages(hazard) {
+    let fail = null;
+    for (const pkg of state.packages || []) {
+        if (!packageTouches(pkg, hazard)) continue;
+        if (pkg.type === 'fragile') {
+            if (typeof pkg.breakApart === 'function') pkg.breakApart('shatter');
+            else pkg.isDestroyed = true;
+            SFX.break();
+            if (!fail) fail = 'Fragile Package Destroyed!';
+        } else {
+            pkg.isDestroyed = true;
+            pkg.carriedBy = null;
+            if (!fail) fail = 'Package lost!';
+        }
+    }
+    return fail;
+}
+
+function playerCarriedFragileInto(hazard, actors) {
+    const player = (actors || []).find(isPresentPlayer);
+    if (!player || player !== state.player) return false;
+    if (!holeKills(player, hazard)) return false;
+    for (const pkg of state.packages || []) {
+        if (!pkg || pkg.isDestroyed || pkg.type !== 'fragile' || pkg.carriedBy !== 'player') continue;
+        if (packageTouches(pkg, hazard)) return true;
+    }
+    return false;
+}
+
 export class Pit extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'pit'); }
     update(actors) {
-        for (let a of actors) {
+        let playerFell = false;
+        for (let a of actors || []) {
             if (!holeKills(a, this)) continue;
-            if (isPresentPlayer(a)) return "Fell into pit!";
+            if (isPresentPlayer(a)) { playerFell = true; continue; }
             if (a.id !== undefined) a.isActive = false;
         }
-        return null;
+        const carriedFragile = playerFell && playerCarriedFragileInto(this, actors);
+        const cargoFail = swallowPackages(this);
+        if (carriedFragile) return 'Fragile Package Destroyed!';
+        if (playerFell) return 'Fell into pit!';
+        return cargoFail;
     }
     render(ctx) {
         ctx.fillStyle = '#3a2a1c';
@@ -1034,7 +1100,7 @@ export class CrackedFloor extends Entity {
         }
         if (this.broken) {
             let playerFell = false;
-            for (let a of actors) {
+            for (let a of actors || []) {
                 if (!holeKills(a, this)) continue;
                 if (isPresentPlayer(a)) { playerFell = true; continue; }
                 if (a.id !== undefined && a.isActive) {
@@ -1042,7 +1108,11 @@ export class CrackedFloor extends Entity {
                     a.isActive = false;
                 }
             }
-            return playerFell ? "Fell into pit!" : null;
+            const carriedFragile = playerFell && playerCarriedFragileInto(this, actors);
+            const cargoFail = swallowPackages(this);
+            if (carriedFragile) return 'Fragile Package Destroyed!';
+            if (playerFell) return 'Fell into pit!';
+            return cargoFail;
         }
         if (!this.collapsing) {
             for (let a of actors || []) {

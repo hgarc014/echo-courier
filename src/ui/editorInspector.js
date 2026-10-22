@@ -1,5 +1,8 @@
-// Pure inspector helpers (no DOM) so path/camera/gatekeeper edits are testable in Node.
+// Inspector helpers (no DOM) so path/camera/gatekeeper/prism edits are testable in Node.
 import { normalizeFreshTicks } from '../entities/bosses/gatekeeper.js';
+import { normalizePrismParams } from '../entities/bosses/Prism.js';
+
+export const ABILITY_IDS = ['dash', 'toss', 'cloak', 'ghostShield'];
 
 export const MIN_WAYPOINTS = 2;
 
@@ -165,5 +168,68 @@ export function applyBurrowerConfig(ent, cfg = {}) {
     if (cfg.defeatDoorId != null && String(cfg.defeatDoorId).trim()) {
         ent.defeatDoorId = String(cfg.defeatDoorId).trim();
     }
+    return ent;
+}
+
+/** Laser id / size. isOpen stays simulation state and is not an inspector field. */
+export function applyLaserConfig(ent, cfg = {}) {
+    if (!ent || !cfg) return ent;
+    if (cfg.id != null && String(cfg.id).trim()) ent.id = String(cfg.id).trim();
+    if (cfg.w != null && cfg.w !== '' && Number(cfg.w) > 0) ent.w = Number(cfg.w);
+    if (cfg.h != null && cfg.h !== '' && Number(cfg.h) > 0) ent.h = Number(cfg.h);
+    return ent;
+}
+
+/** Package type plus whether delivery requires this crate. Fragile is a type, not a flag. */
+export function applyPackageConfig(ent, cfg = {}) {
+    if (!ent || !cfg) return ent;
+    const type = cfg.packageType || cfg.type;
+    if (type) ent.type = String(type);
+    if (Object.prototype.hasOwnProperty.call(cfg, 'requiredForDelivery')) {
+        ent.requiredForDelivery = cfg.requiredForDelivery !== false && cfg.requiredForDelivery !== 'false';
+    }
+    return ent;
+}
+
+/** Toggle one ability on a grants or unlocks list. Unknown ids are ignored. */
+export function applyAbilityList(list, id, on) {
+    if (!ABILITY_IDS.includes(id)) return Array.isArray(list) ? [...list] : [];
+    const next = Array.isArray(list) ? list.filter(x => x !== id) : [];
+    if (on) next.push(id);
+    return next;
+}
+
+/** Prism params. hp sets both hp and maxHp. Angles are radians, telegraph is seconds. */
+export function applyPrismConfig(ent, cfg = {}) {
+    if (!ent || !cfg) return ent;
+    const merged = {
+        sweepSpeed: cfg.sweepSpeed != null && cfg.sweepSpeed !== '' ? cfg.sweepSpeed : ent.sweepSpeed,
+        arc: cfg.arc != null && cfg.arc !== '' ? cfg.arc : ent.arc,
+        range: cfg.range != null && cfg.range !== '' ? cfg.range : ent.range,
+        hp: cfg.hp != null && cfg.hp !== '' ? cfg.hp : (ent.maxHp ?? ent.hp),
+        receiverArc: cfg.receiverArc != null && cfg.receiverArc !== '' ? cfg.receiverArc : ent.receiverArc,
+        telegraphTime: cfg.telegraphTime != null && cfg.telegraphTime !== '' ? cfg.telegraphTime : ent.telegraphTime,
+        receiverRange: cfg.receiverRange != null && cfg.receiverRange !== '' ? cfg.receiverRange : ent.receiverRange,
+        startAngle: cfg.startAngle != null && cfg.startAngle !== '' ? cfg.startAngle : ent.startAngle,
+        spin: cfg.spin != null && cfg.spin !== '' ? cfg.spin : ent.spin,
+        defeatDoorId: cfg.defeatDoorId != null && String(cfg.defeatDoorId).trim() ? cfg.defeatDoorId : ent.defeatDoorId,
+        w: cfg.w != null && cfg.w !== '' ? cfg.w : ent.w,
+        h: cfg.h != null && cfg.h !== '' ? cfg.h : ent.h
+    };
+    const params = normalizePrismParams(merged);
+    ent.sweepSpeed = params.sweepSpeed;
+    ent.arc = params.arc;
+    ent.range = params.range;
+    ent.hp = params.hp;
+    ent.maxHp = params.hp;
+    ent.receiverArc = params.receiverArc;
+    ent.telegraphTime = params.telegraphTime;
+    ent.receiverRange = params.receiverRange;
+    ent.startAngle = params.startAngle;
+    ent.spin = params.spin;
+    ent.defeatDoorId = params.defeatDoorId;
+    if (cfg.w != null && cfg.w !== '') ent.w = params.w;
+    if (cfg.h != null && cfg.h !== '') ent.h = params.h;
+    if (cfg.id != null && String(cfg.id).trim()) ent.id = String(cfg.id).trim();
     return ent;
 }

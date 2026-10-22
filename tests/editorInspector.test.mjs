@@ -11,7 +11,8 @@ globalThis.Audio = class { play() { return Promise.resolve(); } };
 globalThis.AudioContext = globalThis.webkitAudioContext = class { constructor() { return noopEl(); } };
 
 const { serializeLevel, deserializeLevel } = await import('../src/data/levels.js');
-const { applyInspectorEdits, addWaypoint, removeWaypoint, degToRad, setAudits, addAudit, removeAudit, applyGatekeeperEdits } = await import('../src/ui/editorInspector.js');
+const { applyInspectorEdits, addWaypoint, removeWaypoint, degToRad, setAudits, addAudit, removeAudit, applyGatekeeperEdits, applyLaserConfig, applyPackageConfig, applyPrismConfig, applyAbilityList } = await import('../src/ui/editorInspector.js');
+const { Prism, PRISM_DEFAULTS } = await import('../src/entities/bosses/Prism.js');
 
 const roundTrip = (setup) => deserializeLevel(JSON.parse(JSON.stringify(serializeLevel(setup))));
 let passed = 0;
@@ -159,6 +160,57 @@ test('camera sweep 0 applies live, serializes, and deserializes as 0', () => {
     assert.equal(again.sweepRange, 0);
     applyInspectorEdits(again, { sweepRange: -0.2 });
     assert.equal(again.sweepRange, 0, 'negative sweep stays ignored');
+});
+
+test('laser config edits id and size and round-trips', () => {
+    const s = deserializeLevel({ lasers: [{ id: 'l1', x: 10, y: 20, w: 20, h: 80 }] });
+    applyLaserConfig(s.lasers[0], { id: 'beam', w: 28, h: 120 });
+    assert.equal(s.lasers[0].id, 'beam');
+    assert.equal(s.lasers[0].w, 28);
+    const back = roundTrip(s).lasers[0];
+    assert.equal(back.id, 'beam');
+    assert.equal(back.w, 28);
+    assert.equal(back.h, 120);
+});
+
+test('fragile package type and delivery flag round-trip', () => {
+    const s = deserializeLevel({ packages: [{ id: 'pkg', x: 40, y: 40, packageType: 'standard', requiredForDelivery: true }] });
+    applyPackageConfig(s.packages[0], { type: 'fragile', requiredForDelivery: false });
+    assert.equal(s.packages[0].type, 'fragile');
+    assert.equal(s.packages[0].requiredForDelivery, false);
+    const back = roundTrip(s).packages[0];
+    assert.equal(back.type, 'fragile');
+    assert.equal(back.requiredForDelivery, false);
+});
+
+test('prism config normalizes and round-trips', () => {
+    const s = deserializeLevel({ prisms: [{ id: 'prism', x: 100, y: 80, w: 48, h: 48 }] });
+    const prism = s.prisms[0];
+    assert.ok(prism instanceof Prism);
+    applyPrismConfig(prism, { hp: 2.5, sweepSpeed: 0, arc: -1, range: 300, telegraphTime: 0.5, receiverArc: 1, receiverRange: 90, startAngle: 0.2, spin: -2, defeatDoorId: 'vault' });
+    assert.equal(prism.hp, 3);
+    assert.equal(prism.maxHp, 3);
+    assert.equal(prism.sweepSpeed, PRISM_DEFAULTS.sweepSpeed);
+    assert.equal(prism.arc, PRISM_DEFAULTS.arc);
+    assert.equal(prism.range, 300);
+    assert.equal(prism.telegraphTime, 0.5);
+    assert.equal(prism.spin, -1);
+    assert.equal(prism.defeatDoorId, 'vault');
+    const back = roundTrip(s).prisms[0];
+    assert.equal(back.hp, 3);
+    assert.equal(back.range, 300);
+    assert.equal(back.defeatDoorId, 'vault');
+    assert.equal(back.spin, -1);
+    assert.equal(back.telegraphTime, 0.5);
+});
+
+test('ghostShield grant and unlock lists toggle without dropping other ids', () => {
+    let grants = applyAbilityList([], 'ghostShield', true);
+    grants = applyAbilityList(grants, 'dash', true);
+    assert.deepEqual(grants, ['ghostShield', 'dash']);
+    grants = applyAbilityList(grants, 'ghostShield', false);
+    assert.deepEqual(grants, ['dash']);
+    assert.deepEqual(applyAbilityList(['toss'], 'nope', true), ['toss']);
 });
 
 console.log(`\n${passed} tests passed`);
