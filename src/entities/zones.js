@@ -11,5 +11,13 @@ export class DeliveryZone extends Entity {
         if (img) drawTiled(ctx, img, this.x, this.y, this.w, this.h, 40, pulse);
         else super.render(ctx);
         ctx.strokeStyle='#39ff14'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h);
+        ctx.save();
+        ctx.font = 'bold 16px "Space Grotesk", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(this.x + this.w / 2 - 26, this.y + this.h / 2 - 11, 52, 22);
+        ctx.fillStyle = '#b8ff9a';
+        ctx.fillText('DROP', this.x + this.w / 2, this.y + this.h / 2 + 1);
+        ctx.restore();
     }
 }

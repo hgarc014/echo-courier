@@ -22,7 +22,8 @@ const TICKS_PER_SECOND = 60;
 // interval, so the cadence is unchanged) until bodies separate, at most this long,
 // before it locks. A tie that survives the wait goes to the echo, so an echo lure
 // works from the first strike of a loop.
-export const SPAWN_TIE_WAIT_TICKS = 60;
+// A locked crack this close to the lure (centre to centre, at lock time) is a lure strike.
+export const LURE_NEAR_PX = 120;
 const TIE_EPS = 1;
 
 export function burrowerTicks(seconds) {
@@ -54,6 +55,16 @@ function center(a) {
 }
 
 // Ghosts carry a numeric id (and runData). The live courier does not.
+export function firstEchoOf(actors) {
+    let best = null;
+    for (const a of actors || []) {
+        if (!a || a.isActive === false || a.isDestroyed) continue;
+        if (actorTargetInfo(a).kind !== 'echo') continue;
+        if (!best || (a.id ?? 0) < (best.id ?? 0)) best = a;
+    }
+    return best;
+}
+
 export function actorTargetInfo(actor) {
     if (!actor) return { kind: null, id: null };
     if (typeof actor.id === 'number' || Array.isArray(actor.runData)) {
@@ -147,6 +158,8 @@ export class Burrower extends Entity {
         this.phaseTicks = 0;
         this.cycleTicks = 0;
         this.cycleLocked = false;
+        this.firstLockPending = true;
+        this.lockStart = null;
         this.lockedTile = null;
         this.teleOriginX = x;
         this.teleOriginY = y;
@@ -205,6 +218,7 @@ export class Burrower extends Entity {
             stunSeconds: stunTicksLeft / tps,
             targetKind: this.aimKind,
             targetId: this.aimId,
+            targetLabel: this.targetLabel(),
             surfaceInTicks: this.surfaceInTicks(),
             homeFallback: !!this.homeFallback,
             ...this.targetPointers(),
@@ -368,6 +382,24 @@ export class Burrower extends Entity {
         return restored;
     }
 
+    // Once a tile is locked it never moves. If that tile stops being a legal crack
+    // (it broke or started collapsing) the cycle is called off: the mark clears,
+    // the boss goes home and the next update locks a fresh tile with a full countdown.
+    validateLock() {
+        if (this.phase !== 'burrow' && this.phase !== 'telegraph') return true;
+        if (!this.lockedTile || this.homeFallback) return true;
+        if (this.crackIsTargetable(this.findCrack(this.lockedTile))) return true;
+        this.phase = 'burrow';
+        this.phaseTicks = 0;
+        this.cycleTicks = 0;
+        this.cycleLocked = false;
+        this.lockedTile = null;
+        this.previewTile = null;
+        this.lockStart = null;
+        this.goHome();
+        return false;
+    }
+
     // Keep the locked tile when it is still a legal crack. Otherwise pick another,
     // knit clear tiles, or fall back to the den. Does not reset the countdown.
     ensureTarget(actors) {
@@ -529,6 +561,7 @@ export class Burrower extends Entity {
         this.cycleTicks = 0;
         this.cycleLocked = false;
         this.lockedTile = null;
+        this.previewTile = null;
         this.homeFallback = false;
         this.goHome();
     }
@@ -541,6 +574,7 @@ export class Burrower extends Entity {
         this.cycleTicks = 0;
         this.cycleLocked = false;
         this.lockedTile = null;
+        this.previewTile = null;
         this.goHome();
         const cap = this.maxStunsPerLoop;
         if (cap != null && this.stunsThisLoop >= cap) {
@@ -571,29 +605,27 @@ export class Burrower extends Entity {
         if (this.phase === 'telegraph') {
             this.phaseTicks++;
             this.refreshAimPosition(actors);
-            this.ensureTarget(actors);
+            if (!this.validateLock()) return;
             if (!this.homeFallback) this.markLockedWarning();
             this.slideToTile();
             if (this.phaseTicks >= this.telegraphTicks()) this.strike(actors);
             return;
         }
-        // Lock the strike tile once. Later movement does not re-aim a tile that is
-        // still intact. A tile that breaks, collapses, or was never valid is replaced
-        // without resetting the countdown, so the boss cannot sit on a dead mark.
+        // Lock the strike tile once. Later movement never re-aims it. A locked tile
+        // that breaks calls the cycle off (validateLock) instead of moving the mark.
         if (!this.cycleLocked) {
-            const { actor: target, tied } = this.pickTargetInfo(actors);
-            const waiting = tied && this.cycleTicks < Math.min(SPAWN_TIE_WAIT_TICKS, this.intervalTicks() - 1);
-            if (waiting) {
-                // Bodies still stacked: no mark yet, the interval keeps counting.
-                this.clearAim();
-                this.lockedTile = null;
-                this.cycleTicks++;
-                return;
-            }
+            // First lock of a loop: an echo, when one is on the floor, is the lure
+            // (lowest echo id). Which way the echo or courier steps first does not
+            // matter. Later cycles go to the nearest body.
+            let target = null;
+            if (this.firstLockPending) target = firstEchoOf(actors);
+            if (!target) target = this.pickTarget(actors);
+            this.firstLockPending = false;
             if (target) this.noteAim(target);
             else this.clearAim();
             this.ensureTarget(actors);
             this.cycleLocked = true;
+            this.lockStart = target ? center(target) : null;
             if (!this.homeFallback) this.previewTile = this.lockedTile;
         } else {
             if (this.aimKind == null) {
@@ -602,13 +634,12 @@ export class Burrower extends Entity {
             } else {
                 this.refreshAimPosition(actors);
             }
-            this.ensureTarget(actors);
+            if (!this.validateLock()) return;
             this.previewTile = this.homeFallback ? null : this.lockedTile;
         }
         this.cycleTicks++;
         if (this.cycleTicks >= this.intervalTicks()) {
             this.cycleTicks = 0;
-            this.ensureTarget(actors);
             this.beginTelegraph();
         }
     }
@@ -648,11 +679,28 @@ export class Burrower extends Entity {
         const ptr = this.targetPointers();
         if (!ptr.arrowTo) return;
         const color = this.aimKind === 'echo' ? '#e070ff' : '#3ee0ff';
+        drawArrow(ctx, this.x + this.w / 2, this.y + this.h / 2, ptr.arrowTo.x, ptr.arrowTo.y, color);
+        const text = this.targetLabel();
+        if (text) {
+            // Below the tile when there is no room above it, so it clears the HP pips.
+            const above = ptr.targetTile.y - 10;
+            const y = above < 24 ? ptr.targetTile.y + ptr.targetTile.h + 10 : above;
+            paintLabel(ctx, text, ptr.arrowTo.x, y, { color, h: 15 });
+        }
+    }
+
+    // Names what the boss is actually going for: the locked crack, and the body it
+    // was nearest to when it locked. A crack far from that body is not called a lure.
+    targetLabel() {
+        const ptr = this.targetPointers();
+        if (!ptr.targetTile) return null;
         const who = this.aimKind === 'echo'
             ? `ECHO ${typeof this.aimId === 'number' ? this.aimId + 1 : this.aimId}`
             : (this.aimKind === 'player' ? 'YOU' : null);
-        drawArrow(ctx, this.x + this.w / 2, this.y + this.h / 2, ptr.arrowTo.x, ptr.arrowTo.y, color);
-        if (who) paintLabel(ctx, `lured by ${who}`, ptr.arrowTo.x, ptr.targetTile.y - 10, { color, h: 15 });
+        if (!who) return 'STRIKES HERE';
+        const from = this.lockStart;
+        const near = from && Math.hypot(from.x - ptr.arrowTo.x, from.y - ptr.arrowTo.y) <= LURE_NEAR_PX;
+        return near ? `STRIKES HERE · lured by ${who}` : `STRIKES HERE · nearest open crack to ${who}`;
     }
 
     drawSurfaceMark(ctx) {
@@ -693,7 +741,6 @@ export class Burrower extends Entity {
         const dormant = this.phase === 'dormant';
         ctx.save();
         this.drawSurfaceMark(ctx);
-        this.drawTargetMark(ctx);
 
         if (this.phase === 'stun' || this.stunFlash > 0) {
             const flash = 0.35 + 0.45 * Math.abs(Math.sin(tick * 0.7));
@@ -769,6 +816,8 @@ export class Burrower extends Entity {
         }
 
         this.drawHpPips(ctx, cx);
+        // Last, so the boss body and HP pips never cover the arrow label.
+        this.drawTargetMark(ctx);
         ctx.restore();
     }
 }

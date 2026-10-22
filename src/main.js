@@ -19,6 +19,7 @@ import { sampleRun, predictEchoHazards } from './systems/preview.js';
 import { collectShieldSlabs, laserThreatens } from './systems/laserShield.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
+import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -323,6 +324,36 @@ function drawCrackEdgeWarning(ctx) {
     ctx.fillRect(p.x + p.w / 2 - 44, p.y - 22, 88, 15);
     ctx.fillStyle = '#ffb060';
     ctx.fillText('⚠ crack edge', p.x + p.w / 2, p.y - 11);
+    ctx.restore();
+}
+
+// Parcel pickup feedback: a ring around the courier and a "PARCEL PICKED UP" tag.
+export const PICKUP_FLASH_TICKS = 45;
+export function notePickupFeedback(pkg) {
+    state.pickupFlash = { ticks: PICKUP_FLASH_TICKS, fragile: pkg && pkg.packageType === 'fragile' };
+}
+function drawPickupFeedback(ctx) {
+    const f = state.pickupFlash;
+    if (!f || f.ticks <= 0) return;
+    const p = state.player;
+    const t = 1 - f.ticks / PICKUP_FLASH_TICKS;
+    const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - t);
+    ctx.strokeStyle = '#7dffb0';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18 + t * 22, 0, Math.PI * 2);
+    ctx.stroke();
+    const text = f.fragile ? 'PARCEL PICKED UP · fragile' : 'PARCEL PICKED UP';
+    ctx.font = 'bold 12px "Space Grotesk", sans-serif';
+    ctx.textAlign = 'center';
+    const w = ctx.measureText ? Math.max(120, ctx.measureText(text).width + 12) : 150;
+    const y = p.y - 30 - t * 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(cx - w / 2, y - 11, w, 16);
+    ctx.fillStyle = '#9dffc4';
+    ctx.fillText(text, cx, y + 1);
     ctx.restore();
 }
 
@@ -876,6 +907,8 @@ function positionHintPopup() {
     scheduleHintFontPin();
 }
 
+try { installLayoutFit(); } catch (_) { /* headless test DOM */ }
+
 window.addEventListener('resize', () => {
     if (!hintAnchor || !isPopupDemo()) return;
     positionHintPopup();
@@ -1061,6 +1094,7 @@ export function resetRun() {
     // fall and could push a good echo out of the maxGhosts buffer.
     const failedRun = !!state.lastRunFailed;
     state.lastRunFailed = false;
+    state.pickupFlash = null;
     const recorded = state.currentTick > 0 && !failedRun;
     if (recorded) {
         const cap = loopRecordCap();
@@ -1423,7 +1457,7 @@ function update() {
     // update just invalidated so the drawn telegraph is never a broken tile.
     for (const burrower of state.burrowers || []) {
         if (!burrower || burrower.defeated) continue;
-        if (burrower.phase === 'burrow' || burrower.phase === 'telegraph') burrower.ensureTarget(allActors);
+        burrower.validateLock();
     }
     for (const g of state.activeGhosts) if (g.isActive) g._crackFell = false;
     
@@ -1507,12 +1541,14 @@ function update() {
                     p.carriedBy = 'player';
                     p.onPickup();
                     SFX.pickup();
+                    notePickupFeedback(p);
                     break;
                 }
             }
         }
     }
 
+    if (state.pickupFlash && state.pickupFlash.ticks > 0) state.pickupFlash.ticks--;
     let tossFired = false;
     if (tossJustPressed && carried && state.player.tossCooldown <= 0) {
         SFX.toss();
@@ -2031,7 +2067,7 @@ function draw() {
         ctx.stroke(); ctx.restore();
     });
     
-    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); drawCrackEdgeWarning(ctx); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
+    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); drawCrackEdgeWarning(ctx); drawPickupFeedback(ctx); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
     drawEchoHazardFlashes(ctx);

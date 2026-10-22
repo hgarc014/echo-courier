@@ -490,6 +490,8 @@ check('getUiState reports dormant, stun countdown, and player vs echo', () => {
     const nearPlayer = { x: 0, y: 0, w: 30, h: 30 };
     const farEcho = { x: 400, y: 0, w: 30, h: 30, isActive: true, id: 1 };
     const hunter2 = fastBoss(20, 0, { telegraphTime: 1, surfaceInterval: 1 });
+    // After the first lock of a loop (which an echo always wins), the nearest body is the lure.
+    hunter2.firstLockPending = false;
     hunter2.update([nearPlayer, farEcho]);
     ui = hunter2.getUiState();
     assert.equal(ui.targetKind, 'player');
