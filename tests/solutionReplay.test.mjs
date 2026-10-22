@@ -121,6 +121,17 @@ check('W4-L1 B8: a dash across an open (inactive) beam is safe', () => {
     assert.ok(r.x > r.beamX); assert.ok(!r.fail, `unexpected fail ${r.fail}`);
 });
 
+check('Failed-loop counter survives R and resets on Q (full restart)', () => {
+    const r = dashAcrossW4L1(false);
+    assert.equal(r.fail, 'Burned by Laser Grid!');
+    assert.equal(state.loopFails, 1);
+    for (let i = 0; i < 200 && state.failTimer > 0; i++) main.stepSimulation();
+    keys.r = true; main.stepSimulation(); keys.r = false; main.stepSimulation();
+    assert.equal(state.loopFails, 1, 'R keeps the count');
+    main.restartLevel();
+    assert.equal(state.loopFails, 0, 'Q resets the count');
+});
+
 // QA B r2 (B6): a west dash at the closed back door used last tick's (south) facing.
 check('W5 B6: dashing west into XR-9\'s closed back door never jumps the courier south', () => {
     loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W5-BOSS')) });

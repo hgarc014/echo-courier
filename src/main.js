@@ -1138,7 +1138,7 @@ export function restartLevel() {
     state.bossCheckpointLive = false;
     clearGatekeeperCheckpoint();
     applyLoadedLevel(loadCurrentEntities());
-    state.pastRuns = []; state.lastRunFailed = false; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.pastRuns = []; state.lastRunFailed = false; state.loopFails = 0; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     clearLoopFx();
     syncLoopCountUI();
