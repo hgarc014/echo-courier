@@ -843,8 +843,10 @@ export class Burrower extends Entity {
         const text = this.targetLabel();
         if (text) {
             // Below the tile when there is no room above it, so it clears the HP pips.
+            // Player mode: below the tile, so it clears the '!' over the courier.
             const above = ptr.targetTile.y - 10;
-            const y = above < 24 ? ptr.targetTile.y + ptr.targetTile.h + 10 : above;
+            const below = ptr.targetTile.y + ptr.targetTile.h + 10;
+            const y = this.playerMode || above < 24 ? below : above;
             paintLabel(ctx, text, ptr.arrowTo.x, y, { color, h: 15 });
         }
     }
@@ -911,17 +913,18 @@ export class Burrower extends Entity {
     drawRecordCue(ctx) {
         if ((state.pastRuns || []).length > 0 || this.defeated) return;
         const ids = this.corePlateIds || [];
-        const plates = (state.plates || []).filter(p => ids.includes(p.id));
-        for (const crack of state.cracks || []) {
-            if (!crack || crack.broken || !plates.some(p => orthoAdjacent(crack, p))) continue;
-            const cx = crack.x + crack.w / 2;
+        for (const plate of state.plates || []) {
+            if (!plate || !ids.includes(plate.id)) continue;
+            const cx = plate.x + (plate.w || 40) / 2;
+            // Above the ring's north crack, one badge per core plate.
+            const y = plate.y - (plate.h || 40) - 10;
             ctx.save();
             ctx.fillStyle = '#ff4060';
             ctx.beginPath();
-            ctx.arc(cx - 22, crack.y - 8, 4, 0, Math.PI * 2);
+            ctx.arc(cx - 34, Math.max(12, y), 4, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
-            paintLabel(ctx, 'REC stamp', cx + 4, crack.y - 8, { color: '#ffd0d8', h: 13, font: 'bold 10px "Space Grotesk", sans-serif' });
+            paintLabel(ctx, 'REC stamp', cx + 2, Math.max(12, y), { color: '#ffd0d8', h: 13, font: 'bold 10px "Space Grotesk", sans-serif' });
         }
     }
 

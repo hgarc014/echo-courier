@@ -236,7 +236,7 @@ check("hint no longer says 'Step off fast'; it says stay ON the crack", () => {
     assert.ok(lvl.hintLine.length < 200, 'short hint');
 });
 
-check('loop 1 shows the REC stamp cue on cracks beside core plates; later loops do not', () => {
+check('loop 1 shows the REC stamp cue on each core plate; later loops do not', () => {
     start();
     const b = state.burrowers[0];
     const draw = () => {
@@ -245,7 +245,7 @@ check('loop 1 shows the REC stamp cue on cracks beside core plates; later loops 
         b.drawRecordCue(ctx);
         return calls.filter(t => t === 'REC stamp').length;
     };
-    assert.equal(draw(), 12);
+    assert.equal(draw(), 3);
     state.pastRuns = [[]];
     assert.equal(draw(), 0);
     state.pastRuns = [];
