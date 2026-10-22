@@ -102,8 +102,11 @@ const W3_L4_LAYOUT = base({
     walls: [
         ...borders(),
         { x: 140, y: 260, w: 60, h: 20 },
-        { x: 320, y: 260, w: 460, h: 20 },
-        { x: 560, y: 440, w: 40, h: 40 },
+        // Thick north wall east of the gap: no hidden strip to wait in above the post.
+        { x: 320, y: 260, w: 460, h: 60 },
+        // The gate column runs the full height under the north wall, so the only
+        // way east is the timed door (no north-strip bypass).
+        { x: 560, y: 280, w: 40, h: 200 },
         { x: 560, y: 540, w: 40, h: 40 }
     ],
     doors: [{ x: 560, y: 480, w: 40, h: 60, id: 'td1', type: 'timer', openT: 100, closedT: 180 }],

@@ -225,18 +225,45 @@ function solveL3() {
         dropInZone();
     }, range(0, 400, 10));
 }
+// Axis-first walk used by the L4 plan (x, then y), so the recorded route is the
+// one the plan search found.
+function walk(x, y, max = 900) {
+    for (let i = 0; i < max; i++) {
+        if (state.gameState === 'LEVEL_COMPLETE') return;
+        const dx = x - state.player.x;
+        const dy = y - state.player.y;
+        if (Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+        const px = state.player.x;
+        const py = state.player.y;
+        if (Math.abs(dx) > 3) tick({ x: Math.sign(dx), y: 0 });
+        else tick({ x: 0, y: Math.sign(dy) });
+        if (px === state.player.x && py === state.player.y && state.rewindFreeze <= 0) {
+            throw new Error(`walk(${x},${y}) blocked at ${Math.round(px)},${Math.round(py)} tick ${state.currentTick}`);
+        }
+    }
+    throw new Error(`walk(${x},${y}) timed out`);
+}
 function solveL4() {
+    // Loop 1 (echo): toss the decoy from the top of the gap so it lands north of
+    // the crack, then get out of sight to the east. The guard walks over the crack.
+    // Loop 2: come up behind the guard, stamp the crack so it collapses behind
+    // them, then haul the heavy crate along the bottom while the camera is off it.
     return search('W3-L4', (d) => {
-        moveTo(160, 505, 2, 500);
-        grab();
-        wait(d);
-        moveTo(160, 292, 2, 500);
-        moveTo(610, 292, 2, 500);
-        moveTo(610, 495, 2, 500);
+        walk(70, 145); tick({}, ['space']); tick();
+        walk(230, 25); tick({ x: 0, y: 1 }); tick({}, ['f']); tick();
+        walk(740, 25);
+        wait(300);
+        pressR();
+        wait(40);
+        walk(40, 420); wait(160);
+        walk(205, 420); walk(205, 370); walk(205, 440);
+        wait(150);
+        walk(165, 505); tick({}, ['space']); tick();
+        walk(165, 545); wait(d); walk(520, 545); walk(520, 505);
         waitUntil(() => doorOpen('td1'), 400, 'L4 timer');
-        moveTo(700, 495, 2, 300);
-        dropInZone();
-    }, range(0, 400, 5));
+        walk(720, 505); tick({}, ['space']);
+        for (let i = 0; i < 10 && state.gameState !== 'LEVEL_COMPLETE'; i++) tick();
+    }, range(470, 485, 5));
 }
 function relaySolved(id) {
     return !!state.wardens?.[0]?.solved?.has(id);
