@@ -20,7 +20,7 @@ const SPEC = {
     'W5-L1: First Light': { par: 3, loopTime: 25, maxGhosts: 2, grants: [] },
     'W5-L2: Last Word': { par: 3, loopTime: 28, maxGhosts: 2, grants: [] },
     'W5-L3: Slow Motion': { par: 3, loopTime: 30, maxGhosts: 2, grants: [] },
-    'W5-L4: Courier Overclock': { par: 4, loopTime: 45, maxGhosts: 3, grants: ['ghostShield'] },
+    'W5-L4: Courier Overclock': { par: 3, loopTime: 45, maxGhosts: 3, grants: ['ghostShield'] },
     'W5-BOSS: XR-9': { par: 5, loopTime: 40, maxGhosts: 4, grants: [] }
 };
 

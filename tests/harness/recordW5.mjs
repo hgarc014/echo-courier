@@ -350,7 +350,7 @@ const SOLVERS = {
     'W5-L3': solveL3
 };
 
-function formatSolution(sol) {
+export function formatSolution(sol) {
     return JSON.stringify(sol, null, 1).replace(/\[\n\s+"([^"]*)",\n\s+(\d+)\n\s+\]/g, '["$1", $2]') + '\n';
 }
 
