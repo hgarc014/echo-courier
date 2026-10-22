@@ -224,9 +224,45 @@ export function isLevelUnlocked(idx, lvl) {
     return idx <= state.maxUnlockedLevel;
 }
 
+// Settings "Developer Mode" toggle: UI-only. It shows the Level Editor and Dev Sandbox
+// buttons and nothing else. It never feeds isDevMode(), so progress writes and the
+// shop stay normal unless Unlock All or ?dev=1 (+ the dev checkbox) is on.
+export const DEV_TOOLS_KEY = 'echoCourier_devMode';
+
+export function isDevToolsStored() {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+        return localStorage.getItem(DEV_TOOLS_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+export function setDevToolsEnabled(enabled) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(DEV_TOOLS_KEY, enabled ? '1' : '0');
+    } catch {
+        /* private mode / quota */
+    }
+}
+
+// ?dev=1 forces the toggle on.
+export function isDevToolsEnabled() {
+    return isDevUrlEnabled() || isDevToolsStored();
+}
+
 export function applyDevModeUi() {
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
     const allowed = isDevUrlEnabled();
+    const tools = isDevToolsEnabled();
+    const toggle = document.getElementById('dev-tools-toggle');
+    if (toggle) {
+        toggle.checked = tools;
+        toggle.disabled = allowed;
+    }
+    const buttons = document.getElementById('dev-tools-buttons');
+    if (buttons) buttons.hidden = !tools;
     const box = document.getElementById('dev-mode-controls');
     if (box) box.hidden = !allowed;
     if (!allowed) {

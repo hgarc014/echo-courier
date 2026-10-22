@@ -825,13 +825,15 @@ export function levelSelectEntries() {
     const placed = new Set();
     const entries = [];
     for (const world of WORLDS) {
-        entries.push({ type: 'world', world });
+        const rows = [];
         for (const idx of world.levels) {
             const lvl = LEVELS[idx];
             if (!lvl || lvl.isTutorial || lvl.isSandbox || lvl.hideFromSelect) continue;
             placed.add(idx);
-            entries.push({ type: 'level', idx, lvl });
+            rows.push({ type: 'level', idx, lvl });
         }
+        // A world with nothing selectable (Overclock until W5 lands) gets no header.
+        if (rows.length) entries.push({ type: 'world', world }, ...rows);
     }
     let pending = false;
     LEVELS.forEach((lvl, idx) => {
