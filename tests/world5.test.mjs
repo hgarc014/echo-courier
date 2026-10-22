@@ -179,5 +179,13 @@ check('clarity: XR-9 draws a labelled glow on its open back panel', () => {
     assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'BACK PANEL OPEN'));
 });
 
+const { levelButtonLabel } = await import('../src/ui/menu.js');
+check('cosmetic: W5 level buttons use world-relative names, not "Level 27-31"', () => {
+    for (const { level, index } of w5) {
+        const label = levelButtonLabel({ ...level, isPendingCampaign: false }, index);
+        assert.ok(label.startsWith('W5-'), `${level.name} shows "${label}"`);
+    }
+});
+
 if (failures) { console.log(`${failures} world5 check(s) failed`); process.exit(1); }
 console.log('all world5 checks passed');
