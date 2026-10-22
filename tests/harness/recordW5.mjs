@@ -223,34 +223,37 @@ function shieldParked() {
     return !!(g && g.isActive && g.y <= 40 && g.facingY < 0 && g.facingX === 0);
 }
 
+const l4log = (m) => { if (process.env.L4DBG) console.error('L4', state.pastRuns.length, state.currentTick, m, Math.round(state.player.x), Math.round(state.player.y)); };
 function solveL4() {
     // Loop 1, first echo: shield parked on the magenta plate at the top of the beam.
     upTheBeam(36);
     wait(6);
-    pressR();
+    l4log('R'); pressR();
     // Loop 2, middle echo: the pocket, where the guard can see it but not reach it.
     upTheBeam(76);
     // The shield crawls through static on its way here; turn only once it is set.
     waitUntil(shieldParked, 600, 'shield parked (loop 2)');
     moveTo(295, 76, 2, 300);
     wait(6);
-    pressR();
+    l4log('R'); pressR();
     // Loop 3, last echo: the blue plate, once the guard is pinned.
-    moveTo(40, 300, 2, 400);
+    // Wait above the static: an echo idling in static replays the wait at half speed too.
+    moveTo(40, 100, 2, 400);
     waitUntil(guardPinned, 1500, 'guard pinned (loop 3)');
+    moveTo(40, 300, 2, 400);
     moveTo(480, 300, 2, 400);
     standOn('p_last', 480, 520);
     wait(6);
-    pressR();
+    l4log('R'); pressR();
     // Loop 4: the glass.
     moveTo(60, 300, 2, 400);
     grab();
     waitUntil(guardPinned, 1500, 'guard pinned (haul)');
-    moveTo(525, 300, 2, 500);
-    waitUntil(() => doorOpen('d_first') && doorOpen('d_last'), 600, 'airlock');
+    l4log('pinned, cross; guard y ' + Math.round(state.guards[0].y) + ' echo2 ' + state.activeGhosts.map(g => Math.round(g.x) + ',' + Math.round(g.y)).join(' ')); moveTo(525, 300, 2, 500);
+    l4log('hall done'); waitUntil(() => doorOpen('d_first') && doorOpen('d_last'), 900, 'airlock'); l4log('airlock');
     moveTo(585, 300, 2, 200);
-    waitUntil(() => doorOpen('td'), 400, 'timer door');
-    dropInZone();
+    waitUntil(() => doorOpen('td'), 1500, 'timer door');
+    l4log('td'); dropInZone();
 }
 
 // XR-9: bait slots (tick the decoy shows in the booth) and arena waypoints.
@@ -419,19 +422,25 @@ export function runNaive(which, arg) {
         softMove(295, 76); wait(6, true); if (!state.failMessage) pressR();
     };
     const blueLoop = () => {
-        softMove(40, 300);
+        softMove(40, 100);
         for (let i = 0; i < 900 && !shieldParked() && !state.failMessage; i++) tick({}, [], true);
         for (let i = 0; i < 1500 && !guardPinned() && !state.failMessage; i++) tick({}, [], true);
-        softMove(480, 300); softMove(480, 520); wait(6, true); if (!state.failMessage) pressR();
+        softMove(40, 300); softMove(480, 300); softMove(480, 520); wait(6, true); if (!state.failMessage) pressR();
     };
-    const haul4 = (waitGuard) => {
+    let haulNote = '', doorX = 0;
+    const haul4 = (waitGuard, lateStart = 0) => {
         softMove(60, 300);
         tick({}, ['space'], true);
         tick({}, [], true);
         for (let i = 0; i < 900 && !shieldParked() && !state.failMessage; i++) tick({}, [], true);
         if (waitGuard) for (let i = 0; i < 1500 && !guardPinned() && !state.failMessage; i++) tick({}, [], true);
         softMove(525, 300);
-        for (let i = 0; i < 900 && state.gameState !== 'LEVEL_COMPLETE' && !state.failMessage; i++) tick({ x: 1 }, [], true);
+        if (lateStart) waitTick(lateStart, true);
+        for (let i = 0, last = state.currentTick; i < 2000 && state.player.x < 680 && !state.failMessage; i++) {
+            tick({ x: 1 }, [], true);
+            if (state.currentTick < last) { haulNote = `loop ran out at the shut door (x ${Math.round(doorX)})`; return; }
+            last = state.currentTick; doorX = state.player.x;
+        }
         tick({}, ['space'], true);
         wait(30, true);
     };
@@ -517,11 +526,37 @@ export function runNaive(which, arg) {
             const g = () => state.guards[0];
             for (let i = 0; i < 2000 && !when(g()) && !state.failMessage; i++) tick({}, [], true);
             softMove(525, 300);
-            for (let i = 0; i < 900 && state.gameState !== 'LEVEL_COMPLETE' && !state.failMessage; i++) tick({ x: 1 }, [], true);
+            for (let i = 0; i < 2000 && state.player.x < 680 && !state.failMessage; i++) tick({ x: 1 }, [], true);
             tick({}, ['space'], true);
             wait(30, true);
         },
         // Right jobs, wrong order: blue recorded before the decoy is no longer the newest.
+        // Decoy recorded as if static were not there: it reaches the pocket in
+        // time for the guard's second upward sweep on the clock it was recorded
+        // on, but its beam climb replays at half speed, so it misses that sweep.
+        // The guard is pinned a sweep later and the timed door has shut for good.
+        'l4-ignore-static': (opts = {}) => {
+            const start = opts.start ?? Number(process.env.L4LATE || 800);
+            const lvl = LEVELS[levelIndex('W5-L4')];
+            const saved = lvl.layout.statics;
+            // Control only: the same inputs on L4 with its static removed (every rewind rebuilds the level).
+            if (opts.noStatic) lvl.layout.statics = [];
+            try {
+                loadLevel({ level: levelIndex('W5-L4') });
+                shieldLoop();
+                softMove(40, 530); softMove(198, 530);
+                waitTick(start, true);
+                for (let i = 0; i < 400 && state.player.y > 77 && !state.failMessage; i++) tick({ y: -1 }, [], true);
+                softMove(295, 76);
+                wait(6, true); if (!state.failMessage) pressR();
+                blueLoop(); haul4(true);
+            } finally { lvl.layout.statics = saved; }
+        },
+        // Right echoes, but the courier dawdles past the door's one window.
+        'l4-miss-window': () => {
+            loadLevel({ level: levelIndex('W5-L4') });
+            shieldLoop(); pocketLoop(); blueLoop(); haul4(true, 1780);
+        },
         'l4-blue-middle': () => {
             loadLevel({ level: levelIndex('W5-L4') });
             shieldLoop(); blueLoop(); pocketLoop(); haul4(true);
@@ -595,7 +630,7 @@ export function runNaive(which, arg) {
         tick: state.currentTick,
         loops: state.pastRuns.length,
         hp: state.robots?.[0]?.hp,
-        fail: state.failMessage || ''
+        fail: state.failMessage || haulNote
     };
 }
 

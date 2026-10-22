@@ -74,12 +74,17 @@ for (const f of ['w5-l1.json', 'w5-l2.json', 'w5-l3.json', 'w5-l4.json', 'w5-bos
     });
 }
 
-for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park', 'l4-no-decoy', 'l4-sneak', 'l4-blue-middle', 'l4-decoy-first', 'x9-frontal', 'x9-early-blue', 'x9-wrong-order', 'x9-camp']) {
+for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park', 'l4-no-decoy', 'l4-sneak', 'l4-blue-middle', 'l4-decoy-first', 'l4-ignore-static', 'l4-miss-window', 'x9-frontal', 'x9-early-blue', 'x9-wrong-order', 'x9-camp']) {
     check(`naive W5 ${plan} fails`, () => {
         const r = runNaiveW5(plan);
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
     });
 }
+
+check('W5 l4-ignore-static fails only because of static: the same inputs complete with the static removed', () => {
+    const r = runNaiveW5('l4-ignore-static', { noStatic: true });
+    assert.equal(r.completed, true, `no-static control failed (${r.fail || 'no fail'})`);
+});
 
 for (const plan of ['l2-control', 'l3-control', 'l4-control']) {
     check(`W5 ${plan}: the naive haul completes when the echoes are right`, () => {

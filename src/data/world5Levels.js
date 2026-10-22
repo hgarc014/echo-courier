@@ -136,7 +136,7 @@ const W5_L4_LAYOUT = base({
     doors: [
         { x: 560, y: 240, w: 20, h: 120, id: 'd_first', type: 'standard' },
         { x: 580, y: 240, w: 20, h: 120, id: 'd_last', type: 'standard' },
-        { x: 620, y: 240, w: 20, h: 120, id: 'td', type: 'timer', openT: 90, closedT: 150 }
+        { x: 620, y: 240, w: 20, h: 120, id: 'td', type: 'timer', openT: 120, closedT: 1530 }
     ],
     plates: [
         { x: 194, y: 20, linkedIds: ['d_first'], id: 'p_first', type: 'temporal', requiredTimeline: 'first' },
@@ -151,7 +151,9 @@ const W5_L4_LAYOUT = base({
         { x: 228, y: 300, w: 40, h: 40 },
         { x: 268, y: 300, w: 40, h: 40 }
     ],
-    statics: [{ x: 20, y: 380, w: 180, h: 100 }]
+    // Static on the left-room stairs and up the beam column: every echo that
+    // climbs the beam replays that climb at half speed.
+    statics: [{ x: 20, y: 140, w: 180, h: 440 }, { x: 200, y: 140, w: 28, h: 340 }]
 });
 
 // XR-9 arena. The robot sits in a sealed ring with two openings: a slit to the
@@ -246,8 +248,8 @@ export const W5_LEVELS = [
     ),
     level(
         'W5-L4: Courier Overclock',
-        'Glass, a plateless beam, a guard who sees through walls, two colored plates, cracked floor, and a timed door. Three echoes.',
-        'Every job here belongs to a loop number. Work out which job only the oldest echo can do, which only the newest can, and what is left for the one in between. Then record them in that order.',
+        'Glass, a plateless beam, a guard who sees through walls, two colored plates, cracked floor, static, and a door that opens once. Three echoes.',
+        'Every job here belongs to a loop number. Work out which job only the oldest echo can do, which only the newest can, and what is left for the one in between. Then record them in that order. Static replays an echo at half speed, even one standing still, so the guard sweep your decoy catches is later than it looks. The timed door opens once a loop, about 27 seconds in, for two seconds.',
         4, 3, 45, W5_L4_LAYOUT,
         { unlocks: ['ghostShield'], grants: ['ghostShield'] }
     ),

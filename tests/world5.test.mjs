@@ -78,7 +78,12 @@ for (const { level, index } of w5) {
             assert.equal(json.guards.length, 1);
             assert.ok(json.cracks.length >= 1);
             assert.ok(json.statics.length >= 1);
-            assert.ok(json.doors.some(d => d.type === 'timer'));
+            const td = json.doors.find(d => d.type === 'timer');
+            assert.ok(td);
+            const period = td.openT + td.closedT;
+            assert.ok(period > level.loopTime * 60 / 2, 'timed door opens at most once after the start of a loop');
+            assert.ok(period < level.loopTime * 60, 'the one window falls inside the loop');
+            assert.ok(json.statics.some(z => z.x <= 200 && z.x + z.w >= 228 && z.h >= 300), 'static covers the beam climb');
         }
         if (level.name.startsWith('W5-BOSS')) {
             assert.deepEqual(modes, ['last']);
