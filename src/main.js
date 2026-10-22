@@ -18,7 +18,7 @@ import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
-import { collectShieldSlabs, laserThreatens, shieldSlab, shieldShadowRects } from './systems/laserShield.js';
+import { collectShieldSlabs, laserThreatens, shieldSlab, shieldShadowRects, laserEmitterRect, plateBeamEdges } from './systems/laserShield.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { installLayoutFit } from './ui/fitLayout.js';
@@ -1741,6 +1741,34 @@ function drawShieldShadows(target) {
     target.restore();
 }
 
+// W5-L4 cold clarity: emitter housing at each beam's source, and beam-side edges on plates
+// that sit inside a beam, so it reads that the plate cannot be reached from the side.
+function drawBeamFixtures(target) {
+    target.save();
+    for (const l of state.lasers) {
+        const e = laserEmitterRect(l);
+        if (!e) continue;
+        target.fillStyle = '#2a1416'; target.fillRect(e.x, e.y, e.w, e.h);
+        target.fillStyle = l.isOpen ? '#553333' : '#ff5050';
+        if (e.w > e.h) target.fillRect(e.x + e.w / 2 - 5, e.y + e.h - 4, 10, 4);
+        else target.fillRect(e.x + e.w - 4, e.y + e.h / 2 - 5, 4, 10);
+        target.strokeStyle = '#ff8080'; target.lineWidth = 1; target.strokeRect(e.x + 0.5, e.y + 0.5, e.w - 1, e.h - 1);
+    }
+    for (const b of plateBeamEdges(state.plates, state.lasers.filter(l => !l.isOpen))) {
+        target.fillStyle = 'rgba(255, 70, 70, 0.95)';
+        if (b.axis === 'y') {
+            target.fillRect(b.x1 - 3, b.y, 3, b.h); target.fillRect(b.x2, b.y, 3, b.h);
+            target.font = 'bold 9px monospace'; target.textAlign = 'right'; target.textBaseline = 'middle';
+            target.fillText('IN BEAM: NO SIDE ENTRY', b.x1 - 8, b.y + b.h / 2);
+        } else {
+            target.fillRect(b.x, b.y1 - 3, b.w, 3); target.fillRect(b.x, b.y2, b.w, 3);
+            target.font = 'bold 9px monospace'; target.textAlign = 'center'; target.textBaseline = 'bottom';
+            target.fillText('IN BEAM: NO SIDE ENTRY', b.x + b.w / 2, b.y1 - 6);
+        }
+    }
+    target.restore();
+}
+
 const loopRingCache = new WeakMap();
 function loopRingCenter() {
     const meta = state.currentLevelMeta;
@@ -2055,7 +2083,7 @@ function draw() {
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
     // Plates draw over beams so a plate under a laser column (W5-L4) stays readable.
-    state.lasers.forEach(l => l.render(ctx)); drawShieldShadows(ctx); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
+    state.lasers.forEach(l => l.render(ctx)); drawShieldShadows(ctx); drawBeamFixtures(ctx); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
     state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
 

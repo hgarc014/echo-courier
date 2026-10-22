@@ -34,12 +34,14 @@ export function drawWires(ctx, wires, tick = 0) {
         ctx.moveTo(w.x1, w.y1);
         ctx.lineTo(midX, w.y1);
         ctx.lineTo(w.x2, w.y2);
-        ctx.lineWidth = 4;
+        ctx.lineWidth = w.powered ? 7 : 4;
         ctx.strokeStyle = 'rgba(0,0,0,0.55)';
         ctx.setLineDash([]);
         ctx.stroke();
         ctx.lineWidth = 2;
         if (w.powered) {
+            // Held plate: bold glowing wire so it reads which door/gate this plate drives.
+            ctx.lineWidth = 4; ctx.shadowColor = w.kind === 'laser' ? '#ff9a3c' : '#ffdd00'; ctx.shadowBlur = 8;
             ctx.strokeStyle = w.kind === 'laser' ? '#ff9a3c' : '#ffdd00';
             ctx.setLineDash([10, 6]);
             ctx.lineDashOffset = -(tick * 0.6) % 16;
@@ -51,6 +53,7 @@ export function drawWires(ctx, wires, tick = 0) {
             ctx.globalAlpha = 0.8;
         }
         ctx.stroke();
+        ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
         ctx.setLineDash([]);
         ctx.fillStyle = w.powered ? '#ffdd00' : '#0b2a33';

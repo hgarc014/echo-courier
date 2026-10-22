@@ -196,6 +196,7 @@ check('cosmetic: W5 level buttons use world-relative names, not "Level 27-31"', 
     }
 });
 
+async function checkAsync(name, fn) { try { await fn(); console.log(`  ok  ${name}`); } catch (e) { failures++; console.log(`  FAIL ${name}\n       ${e.message}`); } }
 const shield = await import('../src/systems/laserShield.js');
 check('r2 L4: a shield cuts the beam only when facing along it, and the safe shadow is the strip behind it', () => {
     const beam = byName('W5-L4').layout.lasers[0];
@@ -206,6 +207,18 @@ check('r2 L4: a shield cuts the beam only when facing along it, and the safe sha
     assert.equal(sh[0].y, up.y, 'shadow starts at the shield face');
     assert.equal(sh[0].y + sh[0].h, beam.y + beam.h, 'and runs away from the emitter');
     assert.deepEqual(shield.shieldShadowRects([beam], shield.shieldSlab(echo, { x: 1, y: 0 })), [], 'facing across the beam cuts nothing');
+});
+
+await checkAsync('W5-L4 cold: emitter sits at the beam source; plate 1 inside the beam gets no-side-entry edges', async () => {
+    const { getLevelSetup } = await import('../src/data/levels.js');
+    const L4 = LEVELS.findIndex(l => l.name.startsWith('W5-L4'));
+    const setup = getLevelSetup(L4);
+    const beam = setup.lasers[0];
+    const e = shield.laserEmitterRect(beam);
+    assert.equal(e.y, beam.y); assert.ok(e.x < beam.x && e.x + e.w > beam.x + beam.w);
+    const edges = shield.plateBeamEdges(setup.plates, setup.lasers);
+    assert.deepEqual(edges.map(b => b.plate.id), ['p_first']);
+    assert.equal(edges[0].x1, beam.x); assert.equal(edges[0].x2, beam.x + beam.w);
 });
 
 if (failures) { console.log(`${failures} world5 check(s) failed`); process.exit(1); }
