@@ -674,6 +674,8 @@ check('the HOLD label is drawn by the lit plate, not the locked tile', () => {
     const h = texts.find(t => /^HOLD/.test(t.t));
     assert.ok(h, 'HOLD drawn: ' + texts.map(t => t.t).join('|'));
     assert.ok(Math.abs(h.x - 100) < 40 && Math.abs(h.y - 100) < 80, `HOLD at ${h.x},${h.y}`);
+    // Clear of the plate's HELD tag and the crack above it (y 40..80): pill bottom above y 40.
+    assert.ok(h.y + 8 <= 40, `HOLD pill overlaps the plate/ring at y ${h.y}`);
 });
 
 

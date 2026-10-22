@@ -1004,7 +1004,7 @@ export class Burrower extends Entity {
             let x = ptr.arrowTo.x;
             // HOLD is about the lit plate: draw it by that plate, not the locked tile.
             const lit = /^HOLD/.test(text) ? this.litPlate() : null;
-            if (lit) { x = lit.x + lit.w / 2; y = lit.y - 30; }
+            if (lit) { x = lit.x + lit.w / 2; y = lit.y - 52; }   // above the ring crack and the HELD tag
             const pos = this.labelSpot(ctx, text, x, y);
             this._targetLabelBox = pos.box;
             paintLabel(ctx, text, pos.x, pos.y, { color, h: 15 });
