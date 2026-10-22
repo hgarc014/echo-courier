@@ -17,6 +17,13 @@ import { actorPressesPlate, killZone } from '../../core/hitZones.js';
 import { drawKillRing } from '../hazards.js';
 
 const TICKS_PER_SECOND = 60;
+// Every loop starts with the courier and all echoes stacked on the spawn tile, so
+// "nearest actor" is a tie on tick 1. The cycle waits (counting toward the same
+// interval, so the cadence is unchanged) until bodies separate, at most this long,
+// before it locks. A tie that survives the wait goes to the echo, so an echo lure
+// works from the first strike of a loop.
+export const SPAWN_TIE_WAIT_TICKS = 60;
+const TIE_EPS = 1;
 
 export function burrowerTicks(seconds) {
     const n = Number(seconds);
@@ -200,12 +207,38 @@ export class Burrower extends Entity {
             targetId: this.aimId,
             surfaceInTicks: this.surfaceInTicks(),
             homeFallback: !!this.homeFallback,
+            ...this.targetPointers(),
             loopTicksLeft: clock ? clock.ticks : null,
             loopSecondsLeft: clock ? clock.seconds : null,
             statusText: dormant
                 ? ('DORMANT — wakes on rewind · ' + (clock ? `loop clock ${Math.ceil(clock.seconds)}s` : 'rewind to wake'))
                 : null
         };
+    }
+
+    // One target, four pointers. The arrow, the dust ring, the countdown and the
+    // highlighted core plate are all derived from the same aimed tile, so they
+    // cannot point at different places.
+    targetPointers() {
+        const tile = (this.phase === 'burrow' || this.phase === 'telegraph') && !this.homeFallback ? this.aimedTile() : null;
+        if (!tile) return { targetTile: null, ringTile: null, countdownTile: null, arrowTo: null, highlightPlateId: null };
+        const t = tileOf(tile);
+        return {
+            targetTile: t,
+            ringTile: t,
+            countdownTile: t,
+            arrowTo: { x: t.x + t.w / 2, y: t.y + t.h / 2 },
+            highlightPlateId: this.corePlateBeside(t)
+        };
+    }
+
+    corePlateBeside(tile) {
+        if (!tile) return null;
+        const ids = this.corePlateIds || [];
+        for (const plate of state.plates || []) {
+            if (ids.includes(plate.id) && orthoAdjacent(tile, plate)) return plate.id;
+        }
+        return null;
     }
 
     clearAim() {
@@ -254,19 +287,28 @@ export class Burrower extends Entity {
     // Nearest living actor to the burrower's current position. Ties keep the earlier actor
     // (player is listed before echoes). Inactive echoes are ignored.
     pickTarget(actors) {
+        return this.pickTargetInfo(actors).actor;
+    }
+
+    // Nearest living actor. `tied` is true when another living actor is within
+    // TIE_EPS of the same distance. On a tie an echo wins over the courier
+    // (lowest echo id first), so stacked spawns resolve to the lure.
+    pickTargetInfo(actors) {
         const origin = center(this);
-        let best = null;
-        let bestD = Infinity;
+        const live = [];
         for (const actor of actors || []) {
             if (!actor || actor.isActive === false || actor.isDestroyed) continue;
             const c = center(actor);
-            const d = Math.hypot(c.x - origin.x, c.y - origin.y);
-            if (d < bestD) {
-                bestD = d;
-                best = actor;
-            }
+            live.push({ actor, d: Math.hypot(c.x - origin.x, c.y - origin.y) });
         }
-        return best;
+        if (!live.length) return { actor: null, tied: false };
+        let bestD = Infinity;
+        for (const e of live) if (e.d < bestD) bestD = e.d;
+        const near = live.filter(e => e.d <= bestD + TIE_EPS);
+        if (near.length === 1) return { actor: near[0].actor, tied: false };
+        const echoes = near.filter(e => actorTargetInfo(e.actor).kind === 'echo')
+            .sort((a, b) => (a.actor.id ?? 0) - (b.actor.id ?? 0));
+        return { actor: (echoes[0] || near[0]).actor, tied: true };
     }
 
     crackIsTargetable(crack) {
@@ -539,12 +581,19 @@ export class Burrower extends Entity {
         // still intact. A tile that breaks, collapses, or was never valid is replaced
         // without resetting the countdown, so the boss cannot sit on a dead mark.
         if (!this.cycleLocked) {
-            const target = this.pickTarget(actors);
+            const { actor: target, tied } = this.pickTargetInfo(actors);
+            const waiting = tied && this.cycleTicks < Math.min(SPAWN_TIE_WAIT_TICKS, this.intervalTicks() - 1);
+            if (waiting) {
+                // Bodies still stacked: no mark yet, the interval keeps counting.
+                this.clearAim();
+                this.lockedTile = null;
+                this.cycleTicks++;
+                return;
+            }
             if (target) this.noteAim(target);
             else this.clearAim();
             this.ensureTarget(actors);
             this.cycleLocked = true;
-            this.cycleTicks = 0;
             if (!this.homeFallback) this.previewTile = this.lockedTile;
         } else {
             if (this.aimKind == null) {
@@ -593,30 +642,17 @@ export class Burrower extends Entity {
         ctx.restore();
     }
 
+    // The arrow ends on the locked crack (the same tile as the dust ring and the
+    // countdown), never on the lure's live position. The label names who drew it.
     drawTargetMark(ctx) {
-        if (this.aimX == null || this.aimKind == null) return;
-        if (this.phase !== 'burrow' && this.phase !== 'telegraph') return;
+        const ptr = this.targetPointers();
+        if (!ptr.arrowTo) return;
         const color = this.aimKind === 'echo' ? '#e070ff' : '#3ee0ff';
-        const label = this.aimKind === 'echo'
+        const who = this.aimKind === 'echo'
             ? `ECHO ${typeof this.aimId === 'number' ? this.aimId + 1 : this.aimId}`
-            : 'PLAYER';
-        drawArrow(ctx, this.x + this.w / 2, this.y + this.h / 2, this.aimX, this.aimY, color);
-        ctx.save();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(this.aimX, this.aimY, 16, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(this.aimX - 8, this.aimY);
-        ctx.lineTo(this.aimX + 8, this.aimY);
-        ctx.moveTo(this.aimX, this.aimY - 8);
-        ctx.lineTo(this.aimX, this.aimY + 8);
-        ctx.stroke();
-        ctx.restore();
-        // The echo end-badge sits above the actor (filled disc, r=11). Keep the
-        // words to the side of that disc so "ECHO 1" is not drawn underneath it.
-        paintLabel(ctx, label, this.aimX + 54, this.aimY - 6, { color, h: 15 });
+            : (this.aimKind === 'player' ? 'YOU' : null);
+        drawArrow(ctx, this.x + this.w / 2, this.y + this.h / 2, ptr.arrowTo.x, ptr.arrowTo.y, color);
+        if (who) paintLabel(ctx, `lured by ${who}`, ptr.arrowTo.x, ptr.targetTile.y - 10, { color, h: 15 });
     }
 
     drawSurfaceMark(ctx) {

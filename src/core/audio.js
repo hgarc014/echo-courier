@@ -22,7 +22,8 @@ export function playTone(freq, type, duration, vol=0.5, slideFreq=null) {
 export const SFX = {
     interact: () => playTone(600, 'sine', 0.1, 0.3, 800),
     // Short click on the frame a plate goes down. Not a loop, so holding it stays quiet.
-    platePress: () => playTone(880, 'square', 0.06, 0.22, 1320),
+    // Two-step chime, louder than a UI click, so a cold player hears the press.
+    platePress: () => { playTone(660, 'square', 0.09, 0.4, 990); setTimeout(() => playTone(1320, 'triangle', 0.12, 0.35, 1760), 70); },
     pickup: () => playTone(520, 'triangle', 0.12, 0.28, 760),
     drop: () => playTone(280, 'sine', 0.1, 0.25, 140),
     break: () => { playTone(180, 'sawtooth', 0.25, 0.45, 60); setTimeout(() => playTone(90, 'square', 0.15, 0.2), 80); },

@@ -18,6 +18,7 @@ import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
 import { collectShieldSlabs, laserThreatens } from './systems/laserShield.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
+import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -303,6 +304,44 @@ function getRequiredPackages() {
 
 function isPackageDelivered(pkg) {
     return !pkg.isDestroyed && !pkg.carriedBy && AABB(state.deliveryZone.x, state.deliveryZone.y, state.deliveryZone.w, state.deliveryZone.h, pkg.x, pkg.y, pkg.w, pkg.h);
+}
+
+// F7: standing on a plate while the body already hangs over a crack.
+function drawCrackEdgeWarning(ctx) {
+    const p = state.player;
+    const hits = crackEdgeWarning(p, state.plates, state.cracks);
+    if (!hits.length) return;
+    ctx.save();
+    ctx.strokeStyle = '#ff9a2e';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 3]);
+    for (const c of hits) ctx.strokeRect(c.x + 1, c.y + 1, c.w - 2, c.h - 2);
+    ctx.setLineDash([]);
+    ctx.font = 'bold 11px "Space Grotesk", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(p.x + p.w / 2 - 44, p.y - 22, 88, 15);
+    ctx.fillStyle = '#ffb060';
+    ctx.fillText('⚠ crack edge', p.x + p.w / 2, p.y - 11);
+    ctx.restore();
+}
+
+let bossHudKey = '';
+function syncBossHud() {
+    const el = document.getElementById('boss-progress');
+    const boss = (state.burrowers || [])[0];
+    const required = state.deliveryZone ? getRequiredPackages() : [];
+    const delivered = required.length > 0 && required.every(isPackageDelivered);
+    const hud = burrowerHud(boss, { delivered });
+    const key = hud ? `${hud.progress}|${hud.goal}` : '';
+    if (key === bossHudKey) return;
+    bossHudKey = key;
+    if (el) {
+        el.innerText = hud ? hud.progress : '';
+        el.classList.toggle('hidden', !hud);
+    }
+    const obj = document.getElementById('objective-text');
+    if (obj && hud) obj.innerText = hud.goal || localizeControlHints(state.currentLevelMeta?.obj || '');
 }
 
 function updateDeliveryProgressUI() {
@@ -966,7 +1005,7 @@ export function startGame(levelIndex) {
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(lv, levelIndex);
-    state.pastRuns = []; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    state.pastRuns = []; state.lastRunFailed = false; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
     uiAppLayout.classList.remove('hidden'); syncLoopCountUI(); Object.assign(prevKeys, keys);
@@ -1018,7 +1057,11 @@ function warnEchoesEndingOnCracks() {
 
 export function resetRun() {
     markLoopBoundary();
-    const recorded = state.currentTick > 0;
+    // A run that ended in a death is not kept as an echo: it would replay the
+    // fall and could push a good echo out of the maxGhosts buffer.
+    const failedRun = !!state.lastRunFailed;
+    state.lastRunFailed = false;
+    const recorded = state.currentTick > 0 && !failedRun;
     if (recorded) {
         const cap = loopRecordCap();
         const run = (cap != null && state.currentRun.length > cap) ? state.currentRun.slice(0, cap) : state.currentRun;
@@ -1039,6 +1082,8 @@ export function resetRun() {
     if (recorded) warnEchoesEndingOnCracks();
     syncLoopCountUI();
     updateDeliveryProgressUI();
+    bossHudKey = '';
+    syncBossHud();
     beginRewindJuice();
 }
 
@@ -1057,7 +1102,7 @@ export function restartLevel() {
     state.bossCheckpointLive = false;
     clearGatekeeperCheckpoint();
     applyLoadedLevel(loadCurrentEntities());
-    state.pastRuns = []; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.pastRuns = []; state.lastRunFailed = false; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     clearLoopFx();
     syncLoopCountUI();
@@ -1079,6 +1124,7 @@ export function restartLevel() {
 
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
+    state.lastRunFailed = true;
     SFX.fail();
     state.failMessage = reason;
     state.failTimer = FAIL_HOLD_FRAMES;
@@ -1164,7 +1210,7 @@ export function startPlaytestFromEditor() {
     state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(state.currentLevelMeta, state.currentLevelIndex);
-    state.pastRuns = []; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.pastRuns = []; state.lastRunFailed = false; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false;
     clearLoopFx();
     uiLevelComplete.classList.add('hidden');
@@ -1371,6 +1417,7 @@ function update() {
 
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
     for (const burrower of state.burrowers || []) burrower.update(allActors);
+    syncBossHud();
     for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
     // The floor resolves after the strike decision. Drop a mark that the crack
     // update just invalidated so the drawn telegraph is never a broken tile.
@@ -1984,7 +2031,7 @@ function draw() {
         ctx.stroke(); ctx.restore();
     });
     
-    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
+    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); drawCrackEdgeWarning(ctx); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
     drawEchoHazardFlashes(ctx);
@@ -2020,6 +2067,7 @@ function draw() {
         if (showText) {
             ctx.fillStyle = '#fff'; ctx.font = 'bold 36px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText("LOOP FAILED", 400, 250);
             ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
+            ctx.font = '16px "Space Grotesk"'; ctx.fillStyle = '#ffd0d0'; ctx.fillText('Rewinding — this run will NOT become an echo.', 400, 335);
             ctx.textAlign = 'left';
         }
     }

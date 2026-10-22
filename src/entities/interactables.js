@@ -300,10 +300,23 @@ export class Package extends Entity {
     }
 }
 
+export const PRESS_FLASH_TICKS = 20;
 export class PressurePlate extends Entity {
-    constructor(id, x, y, linkedIds) { super(x, y, 40, 40, 'plate'); this.id=id; this.linkedIds=Array.isArray(linkedIds)?linkedIds:[linkedIds]; this.isPressed=false; this.arrivalTicks=[]; }
+    constructor(id, x, y, linkedIds) { super(x, y, 40, 40, 'plate'); this.id=id; this.linkedIds=Array.isArray(linkedIds)?linkedIds:[linkedIds]; this.isPressed=false; this.arrivalTicks=[]; this.pressFlash=0; }
     notePressEdge(wasPressed) {
-        if (this.isPressed && !wasPressed) SFX.platePress();
+        if (this.pressFlash > 0) this.pressFlash--;
+        if (this.isPressed && !wasPressed) {
+            SFX.platePress();
+            this.pressFlash = PRESS_FLASH_TICKS;
+        }
+    }
+    // True when a burrower's countdown tile touches this core plate.
+    isBurrowerHighlight() {
+        for (const boss of state.burrowers || []) {
+            if (typeof boss.getUiState !== 'function') continue;
+            if (boss.getUiState().highlightPlateId === this.id) return true;
+        }
+        return false;
     }
     // What render draws for a press. Tests read this so the glow cannot drift from the flag.
     pressVisual() {
@@ -314,18 +327,47 @@ export class PressurePlate extends Entity {
             core,
             glow: pressed ? '#ffe14a' : null,
             fill: pressed ? 'rgba(255, 225, 74, 0.45)' : null,
+            // Pressed-in look: the pad is drawn inset this many px with a dark lip.
+            insetPx: pressed ? 4 : 0,
+            // Outer bloom; bigger for a short burst right after the press.
+            glowBlur: pressed ? (this.pressFlash > 0 ? 24 : 12) : 0,
+            flash: this.pressFlash > 0,
+            highlight: core && this.isBurrowerHighlight(),
             label: core ? (pressed ? 'HELD' : 'CORE') : ''
         };
     }
     drawPressFeedback(ctx) {
         const vis = this.pressVisual();
-        if (vis.pressed) {
+        if (vis.highlight) {
+            const t = Number(state.currentTick) || 0;
             ctx.save();
+            ctx.strokeStyle = `rgba(255, 196, 90, ${0.6 + 0.4 * Math.abs(Math.sin(t * 0.2))})`;
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 4]);
+            ctx.strokeRect(this.x - 5, this.y - 5, this.w + 10, this.h + 10);
+            ctx.restore();
+        }
+        if (vis.pressed) {
+            const i = vis.insetPx;
+            ctx.save();
+            // Dark lip around the sunk pad.
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+            ctx.fillRect(this.x, this.y, this.w, i);
+            ctx.fillRect(this.x, this.y, i, this.h);
+            ctx.shadowColor = vis.glow;
+            ctx.shadowBlur = vis.glowBlur;
             ctx.fillStyle = vis.fill;
-            ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.fillRect(this.x + i, this.y + i, this.w - i, this.h - i);
             ctx.strokeStyle = vis.glow;
-            ctx.lineWidth = 4;
+            ctx.lineWidth = vis.flash ? 6 : 4;
             ctx.strokeRect(this.x + 1, this.y + 1, this.w - 2, this.h - 2);
+            if (vis.flash) {
+                const k = this.pressFlash / PRESS_FLASH_TICKS;
+                ctx.strokeStyle = `rgba(255, 240, 160, ${k})`;
+                ctx.lineWidth = 3;
+                const g = 4 + (1 - k) * 14;
+                ctx.strokeRect(this.x - g, this.y - g, this.w + g * 2, this.h + g * 2);
+            }
             ctx.restore();
         }
         if (!vis.label) return;
