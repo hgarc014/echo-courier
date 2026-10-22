@@ -2,6 +2,7 @@ import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, 
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing.js';
+import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
@@ -2088,6 +2089,7 @@ function draw() {
     state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); drawCrackEdgeWarning(ctx); drawPickupFeedback(ctx); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
+    if (state.gameState !== 'EDITOR') drawWorldLabels(ctx, worldLabelsFor(state, { shield: getUnlockedAbilities().includes('ghostShield') }), state.mapWidth || 800, state.mapHeight || 600);
     drawEchoHazardFlashes(ctx);
     drawScrubPreviewGhosts(ctx);
     if (state.failFx) drawBurst(ctx, state.failFx);

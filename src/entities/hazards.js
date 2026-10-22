@@ -37,7 +37,9 @@ export class Laser extends Entity {
         for (const r of rects) {
             if (img) {
                 ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
-                ctx.globalAlpha = pulse;
+                // Long beam columns draw translucent with a bright core so they read as a beam, not a wall.
+                const column = Math.max(r.w, r.h) >= 200;
+                ctx.globalAlpha = column ? 0.42 * pulse : pulse;
                 const tile = 40;
                 for (let i = 0; i < r.h; i += tile) ctx.drawImage(img, r.x + (r.w / 2 - 20), r.y + i, tile, tile);
                 for (let i = 0; i < r.w; i += tile) ctx.drawImage(img, r.x + i, r.y + (r.h / 2 - 20), tile, tile);
@@ -45,6 +47,13 @@ export class Laser extends Entity {
             } else {
                 ctx.fillStyle = `rgba(255,0,0,${0.35 * pulse})`;
                 ctx.fillRect(r.x, r.y, r.w, r.h);
+            }
+            if (Math.max(r.w, r.h) >= 200) {
+                ctx.save();
+                ctx.fillStyle = `rgba(255,80,80,${0.9 * pulse})`;
+                if (r.h >= r.w) ctx.fillRect(r.x + r.w / 2 - 1.5, r.y, 3, r.h);
+                else ctx.fillRect(r.x, r.y + r.h / 2 - 1.5, r.w, 3);
+                ctx.restore();
             }
         }
     }
@@ -563,6 +572,28 @@ export class ShooterRobot extends Entity {
             : 0;
         const stunned = this.hitFlicker > 0;
         const phasing = this.phaseChangeTimer > 0;
+
+        // XR-9: glow and label the back panel while it is actually open (locked on an echo).
+        if (this.backTouch && !stunned && this.backPanelOpen(state.player)) {
+            const back = this.facingAngle + Math.PI;
+            const arc = this.backArc ?? Math.PI / 3;
+            const glow = 0.6 + 0.4 * Math.abs(Math.sin((state.currentTick || 0) * 0.2));
+            ctx.save();
+            ctx.strokeStyle = `rgba(57,255,140,${glow})`;
+            ctx.shadowColor = 'rgba(57,255,140,0.9)';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 24, back - arc, back + arc);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#39ff8c';
+            ctx.font = 'bold 10px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('BACK PANEL OPEN', cx + Math.cos(back) * 44, cy + Math.sin(back) * 40);
+            ctx.restore();
+        }
 
         if (this.hp <= 2) {
             const pulseSpeed = this.hp === 1 ? 0.28 : 0.15;

@@ -156,5 +156,28 @@ check('B4: an open W5-L3 timed gate draws a solid frame and label, distinct from
     assert.ok(calls.some(c => c[0] === 'fillText' && /GATE/.test(c[1])), 'open gate has no label');
 });
 
+const labels = await import('../src/ui/worldLabels.js');
+const byName = (n) => LEVELS.find(l => l.name.startsWith(n));
+check('clarity: W5-L2 teaches "newest" with an in-world label on its last plate', () => {
+    const ls = labels.worldLabelsFor(byName('W5-L2').layout, {});
+    assert.ok(ls.some(l => l.text === 'NEWEST ECHO'), JSON.stringify(ls));
+});
+check('clarity: W5-L4 shows a shield hint next to the beam column', () => {
+    const lv = byName('W5-L4');
+    const ls = labels.worldLabelsFor(lv.layout, { shield: true }).filter(l => l.kind === 'shield');
+    assert.ok(ls.length >= 1);
+    const beam = lv.layout.lasers[0];
+    assert.ok(Math.abs(ls[0].x - (beam.x + beam.w / 2)) < 30 && ls[0].y - (beam.y + beam.h) < 30, 'hint is not by the beam');
+});
+const { ShooterRobot } = await import('../src/entities/hazards.js');
+check('clarity: XR-9 draws a labelled glow on its open back panel', () => {
+    const r = new ShooterRobot([{ x: 400, y: 300 }]).configure({ targetEchoes: true, backTouch: true, backArc: Math.PI / 3 });
+    r.lockTarget = { x: 600, y: 300, isActive: true };
+    const calls = [];
+    const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => { calls.push([k, ...a]); return { addColorStop() {} }; }), set: (t, k, v) => { t[k] = v; return true; } });
+    r.render(ctx);
+    assert.ok(calls.some(c => c[0] === 'fillText' && c[1] === 'BACK PANEL OPEN'));
+});
+
 if (failures) { console.log(`${failures} world5 check(s) failed`); process.exit(1); }
 console.log('all world5 checks passed');
