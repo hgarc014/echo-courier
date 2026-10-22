@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { main, state, keys, LEVELS, replaySolution } from './harness/replay.mjs';
 
-const { Burrower, NOISE_TTL_TICKS, STAMP_WINDOW_TICKS } = await import('../src/entities/bosses/Burrower.js');
+const { Burrower, NOISE_TTL_TICKS, STAMP_WINDOW_TICKS, STAMP_ACCEPT_TICKS } = await import('../src/entities/bosses/Burrower.js');
 const { CrackedFloor } = await import('../src/entities/hazards.js');
 const { PressurePlate } = await import('../src/entities/interactables.js');
 
@@ -175,20 +175,23 @@ function stampRun(lead, { courierOnPlate = true } = {}) {
     return { boss, k, log };
 }
 
-check('stamp window is exactly 0.75 s (45 ticks): a stamp 45 ticks out stuns, 46 ticks out is TOO EARLY', () => {
+check('STAMP NOW cue is 0.75 s (45 ticks); a stamp up to 15 ticks before the cue still stuns (60 ok, 61 TOO EARLY)', () => {
     assert.equal(STAMP_WINDOW_TICKS, 45);
-    const ok = stampRun(45);
+    assert.equal(STAMP_ACCEPT_TICKS, 60);
+    const cue = stampRun(45);
+    assert.equal(cue.boss.hp, 2);
+    const ok = stampRun(60);
     assert.equal(ok.boss.hp, 2, 'stamp inside the window stuns');
     assert.equal(ok.log.feedback, 'STAMP OK');
     const late = stampRun(1);
     assert.equal(late.boss.hp, 2, 'stamp on the strike tick stuns');
-    const early = stampRun(46);
+    const early = stampRun(61);
     assert.equal(early.boss.hp, 3, 'stamp outside the window does not stun');
     assert.equal(early.log.feedback, 'TOO EARLY');
 });
 
 check('an early stamp keeps the locked crack intact until the strike (no crumble, no early fire)', () => {
-    const early = stampRun(58);
+    const early = stampRun(75);
     assert.deepEqual(early.log.crackBeforeStrike, { collapsing: false, broken: false });
     assert.equal(early.k.collapsing || early.k.broken, true, 'the strike itself collapses it');
     assert.equal(early.boss.hp, 3);
@@ -325,6 +328,71 @@ check('during replay a ghost marker shows when the echo will stamp, and that it 
     const { ctx, calls } = recCtx();
     state.burrowers[0].drawStampCue(ctx);
     assert.ok(calls.some(t => /^ECHO 1 stamps .*✓$/.test(t)), calls.join(' | '));
+});
+
+// Player mode: the courier holds the core plate (its noise makes it the target);
+// a silent echo steps onto a crack beside the plate `lead` ticks before the strike.
+function playerModeRun(lead, { ghost = false } = {}) {
+    resetWorld();
+    const core = new PressurePlate('c1', 80, 80, []);
+    state.plates = [core];
+    const k = new CrackedFloor(80, 120, 40, 40, 'fast');
+    state.cracks = [k];
+    const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1, corePlateIds: ['c1'], maxStunsPerLoop: 1 });
+    state.burrowers = [boss];
+    const player = { x: 85, y: 85, w: 30, h: 30 };
+    const strikeAt = boss.intervalTicks() + boss.telegraphTicks();
+    const runData = [];
+    for (let t = 0; t <= strikeAt + 5; t++) runData.push(t >= strikeAt - lead + 1 ? { x: 85, y: 125 } : { x: 200, y: 125 });
+    const echo = { id: 0, runData, x: 200, y: 125, w: 30, h: 30, isActive: true };
+    state.activeGhosts = ghost ? [echo] : [];
+    const log = { labels: [], pred: null, modes: [] };
+    for (let t = 1; t <= strikeAt + 2; t++) {
+        state.currentTick = t;
+        const s = runData[t]; echo.x = s.x; echo.y = s.y;
+        boss.update([player, echo]);
+        k.update([player, echo]);
+        log.modes.push(boss.playerMode);
+        if (ghost && boss.phase === 'telegraph' && !log.pred) log.pred = boss.predictedStamp();
+    }
+    return { boss, log, failed: !!boss.strikeFail };
+}
+
+check('player-mode strike: courier on the CORE plate + echo stamping a crack beside it stuns (no death)', () => {
+    const r = playerModeRun(20);
+    assert.ok(r.log.modes.some(Boolean), 'strike was aimed at the courier');
+    assert.equal(r.boss.hp, 2);
+    assert.equal(r.failed, false);
+    const miss = playerModeRun(80);
+    assert.equal(miss.boss.hp, 3);
+});
+
+check('ghost marker keys off the stamp cracks beside the core plate in player mode', () => {
+    const r = playerModeRun(20, { ghost: true });
+    assert.ok(r.log.pred, 'prediction while the boss targets the courier');
+    assert.equal(r.log.pred.inWindow, true);
+    assert.deepEqual(r.log.pred.tile, { x: 80, y: 120, w: 40, h: 40 });
+});
+
+check('only one target label at a time: hunt label hidden while a strike label shows', () => {
+    resetWorld();
+    const core = new PressurePlate('c1', 80, 80, []);
+    state.plates = [core];
+    state.cracks = [new CrackedFloor(400, 400, 40, 40, 'fast')];
+    const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1, corePlateIds: ['c1'] });
+    state.burrowers = [boss];
+    const player = { x: 85, y: 85, w: 30, h: 30 };
+    const echo = { id: 0, runData: [], x: 405, y: 405, w: 30, h: 30, isActive: true };
+    for (let t = 1; t < boss.intervalTicks() + 20; t++) {
+        state.currentTick = t;
+        if (t === boss.intervalTicks() + 10) { echo.x = 405; echo.y = 405; }
+        if (t === boss.intervalTicks() + 5) { echo.x = 600; }
+        boss.update([player, echo]);
+        if (!boss.targetLabel()) continue;
+        const { ctx, calls } = recCtx();
+        boss.drawHunt(ctx);
+        assert.ok(!calls.some(c => /^hunting /.test(c)), calls.join(' | '));
+    }
 });
 
 if (failures) { console.log(`${failures} failed`); process.exit(1); }
