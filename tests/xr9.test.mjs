@@ -91,6 +91,19 @@ check('XR-9 body is solid: a dash stops at the armour instead of passing through
     state.robots = [];
 });
 
+check('B2: with nothing in sight XR-9 holds a stable facing (no 2-tick jitter on its bob path)', () => {
+    reset();
+    const r = xr9();
+    r.path = [{ x: r.x, y: r.y }, { x: r.x, y: r.y + 2 }];
+    r.facingAngle = 0.7;
+    state.walls = []; state.doors = []; state.robots = [r];
+    const far = player(r.x + 2000, r.y + 2000);
+    const seen = new Set();
+    for (let i = 0; i < 240; i++) { r.update(far, [], []); seen.add(r.facingAngle.toFixed(4)); }
+    assert.equal(seen.size, 1, `facing changed ${seen.size - 1} times while idle`);
+    state.robots = [];
+});
+
 check('telegraph is 1.5s of locked aim, and the shot follows the warned lane', () => {
     reset();
     const r = xr9();

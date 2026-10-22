@@ -473,7 +473,9 @@ export class ShooterRobot extends Entity {
             } else {
                 this.x += (dx / dist) * curSpeed;
                 this.y += (dy / dist) * curSpeed;
-                this.facingAngle = Math.atan2(dy, dx);
+                // XR-9 bobs on a 2-point path; its facing only follows targets, so it
+                // holds a stable idle heading instead of flipping every 2 ticks.
+                if (!this.targetEchoes || this.isEmerging) this.facingAngle = Math.atan2(dy, dx);
             }
         };
 
