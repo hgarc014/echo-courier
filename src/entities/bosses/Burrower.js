@@ -1231,7 +1231,8 @@ export class Burrower extends Entity {
     // Core plates already spent on a stun: greyed out with a USED tag so they never
     // read as live. Rendering only; the plate itself still presses as before.
     drawRetiredPlates(ctx) {
-        const live = this.liveCoreIds();
+        // Once defeated every spent plate is retired (none reads as lit again).
+        const live = this.defeated ? [] : this.liveCoreIds();
         // The lit core plate always carries a pulsing outline.
         if (!this.defeated) {
             const pulse = 0.5 + 0.5 * Math.abs(Math.sin((state.currentTick || 0) * 0.12));
