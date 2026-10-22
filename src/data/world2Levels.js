@@ -222,14 +222,14 @@ export const W2_LEVELS = [
     ),
     level(
         'W2-MB: Sinkhole',
-        'Loudest wins: it strikes whoever last stepped on a crack or plate, or YOUR tile. Stun it 3 times: you on the LIT core plate, an echo stepping onto any crack beside that plate in the last 1.5 s. Each stun lights the next plate. Then deliver.',
+        'Loudest wins: it strikes whoever last stepped on a crack or plate, or YOUR tile. Stun it 3 times: hold the LIT core plate and have an echo standing on a crack beside the lit plate when the strike lands. Each stun lights the next plate. Then deliver.',
         'Something under the subfloor hunts by sound. Whoever last stepped onto a crack or a plate is the one it hunts and it surfaces on a crack by them. With no noise it comes up under YOU, on any floor, so keep moving. Hold the lit core plate while an echo stamps any crack beside it right as it surfaces, and it is stunned. Each stun spends that plate and lights the next one, so every stun needs a fresh stamp. One stun per loop, then it sleeps until the loop clock rewinds. Three stuns open the door.',
         4, 3, 30, W2_MB_LAYOUT,
         {
             unlocks: ['dash'],
             flags: {
                 isBoss: true,
-                hintLine: 'It hunts the last step on a crack or plate, else YOU: keep moving. Stun: you on the LIT core plate + an echo stepping onto any crack beside that plate in the last 1.5 s and staying ON it. Each stun lights the next plate. 1 stun per loop.',
+                hintLine: 'It hunts the last step on a crack or plate, else YOU: keep moving. Stun: hold the LIT core plate. Have an echo standing on a crack beside the lit plate when the strike lands. Each stun lights the next plate. 1 stun per loop.',
                 bossIntro: {
                     speaker: 'BURROWER',
                     text: 'I hear every step on cracks and plates, and I hunt the loudest. Stand still and I rise under you. Hold the lit plate and have your echo stamp a crack beside it as I rise. Each plate works once. One stun, then I sleep until your loop clock rewinds.'

@@ -83,7 +83,7 @@ for (const { level, index } of w2) {
             assert.equal(loaded.burrowers[0].maxStunsPerLoop, 1);
             assert.equal(json.meta.isBoss, true);
             assert.equal(json.meta.hintLine, level.hintLine);
-            assert.match(json.meta.hintLine, /staying ON it/);
+            assert.match(json.meta.hintLine, /Have an echo standing on a crack beside the lit plate when the strike lands\./);
             assert.match(json.meta.hintLine, /1 stun per loop/);
             assert.equal(json.meta.pitKillFraction, undefined);
         } else {

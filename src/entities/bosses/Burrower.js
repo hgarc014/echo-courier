@@ -605,12 +605,11 @@ export class Burrower extends Entity {
         const key = 'k' + tile.x + ',' + tile.y;
         for (const actor of actors || []) {
             if (!actor || actor.isActive === false || actorTargetInfo(actor).kind !== 'echo') continue;
-            const n = this.noise.get(actorKey(actor));
-            if (!n || n.surface !== key) continue;
+            // One rule: the echo is standing ON the crack when the strike lands
+            // (however long it has been there).
             if (this.footing.get(actorKey(actor)) !== key) continue;
-            // Strike tick minus centre-entry tick: 1..STAMP_ACCEPT_TICKS (45 ticks).
             if (!includeSpent && this.echoSpent(actor)) continue;
-            if (n.centerTick != null && this.clock - n.centerTick <= STAMP_ACCEPT_TICKS) return actor;
+            return actor;
         }
         return null;
     }
@@ -623,7 +622,10 @@ export class Burrower extends Entity {
     }
 
     // An echo that stepped onto the locked crack this cycle but outside the window.
-    echoEarly(tile, actors) {
+    // No TOO EARLY window any more: an echo standing on the crack at impact counts.
+    echoEarly() { return false; }
+
+    echoEarlyOld(tile, actors) {
         const key = 'k' + tile.x + ',' + tile.y;
         for (const actor of actors || []) {
             if (!actor || actorTargetInfo(actor).kind !== 'echo') continue;
@@ -827,6 +829,18 @@ export class Burrower extends Entity {
         }
     }
 
+    // The stamping echo stepped off before impact: call the strike off and relock
+    // with a fresh full countdown, so following the cue never kills the courier.
+    cancelForEchoLeft() {
+        const crack = this.findCrack(this.lockedTile);
+        if (crack) crack.burrowerHold = false;
+        const at = this.lockedTile || this.litPlate() || { x: this.x, y: this.y, w: GRID, h: GRID };
+        this.endCycle();
+        this.cancelNote = FEEDBACK_TICKS;
+        this.say('ECHO LEFT — strike cancelled', at, '#ff9a6a');
+        this.cancels = (this.cancels || 0) + 1;
+    }
+
     endCycle() {
         this.echoLeft = false; this.stampSeen = false;
         this.phase = 'burrow';
@@ -896,6 +910,7 @@ export class Burrower extends Entity {
             if (!this.validateLock()) return;
             if (!this.homeFallback) this.markLockedWarning();
             this.trackEchoLeft(actors);
+            if (this.phase !== 'telegraph') return;   // cancelled: fresh countdown
             this.slideToTile();
             if (this.phaseTicks >= this.telegraphTicks()) this.strike(actors);
             return;
@@ -1010,8 +1025,10 @@ export class Burrower extends Entity {
     trackEchoLeft(actors) {
         if (this.echoLeft) return;
         const on = this.liveRingCracks().some(c => this.echoStamped(c, actors));
-        if (on) this.stampSeen = true;
-        else if (this.stampSeen) this.echoLeft = true;
+        // Only a stamp the courier is acting on (holding the lit plate under the
+        // HOLD cue) arms the cancel; an echo merely walking across a ring crack does not.
+        if (on && this.playerHoldsLivePlate()) this.stampSeen = true;
+        else if (this.stampSeen) this.cancelForEchoLeft();
     }
 
     litPlate() {
@@ -1044,7 +1061,6 @@ export class Burrower extends Entity {
     targetLabel() {
         const ptr = this.targetPointers();
         if (!ptr.targetTile) return null;
-        if (this.echoLeft && this.phase === 'telegraph') return 'ECHO LEFT — step off!';
         if (!this.playerMode && this.phase === 'telegraph' && this.playerHoldsLivePlate()) return 'HOLD — echo stamps now';
         if (this.playerMode) {
             if (this.playerHoldsLivePlate()) return this.phase === 'telegraph' ? 'HOLD — echo stamps now' : 'HOLD the lit plate';
