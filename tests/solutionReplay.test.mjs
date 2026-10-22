@@ -9,7 +9,7 @@ import { runNaive as runNaiveW1 } from './harness/recordW1.mjs';
 import { LEVELS, getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 import { runNaive as runNaiveW4 } from './harness/recordW4.mjs';
-import { runNaive as runNaiveW5, dashRushL3 } from './harness/recordW5.mjs';
+import { runNaive as runNaiveW5, dashRushL3, runQaPlan, QA_XR9_PLANS } from './harness/recordW5.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'solutions');
 const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort();
@@ -80,6 +80,18 @@ for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
     });
 }
+
+// QA B r2 (B6): a west dash at the closed back door used last tick's (south) facing.
+check('W5 B6: dashing west into XR-9\'s closed back door never jumps the courier south', () => {
+    loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W5-BOSS')) });
+    let last = null; const jumps = [];
+    runQaPlan(QA_XR9_PLANS['k-d-east-door-dash'], () => {
+        const p = state.player;
+        if (last && state.currentTick > 0 && Math.abs(p.y - last.y) > 20) jumps.push([state.currentTick, Math.round(last.y), Math.round(p.y)]);
+        last = { x: p.x, y: p.y };
+    });
+    assert.deepEqual(jumps, [], `vertical jumps during a west dash: ${JSON.stringify(jumps)}`);
+});
 
 // QA B (B1): dash through XR-9's body into the back arc, then sit on the panel.
 check('W5 x9-qa-cheese: no dash-through, at most one panel hit per loop', () => {

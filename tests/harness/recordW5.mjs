@@ -389,15 +389,18 @@ export function dashRushL3() {
 
 // Port of QA B's cold driver (qab-evidence/pr56/xr.js): plan = loops of steps
 // ['go',cx,cy,dash?] (player centre), ['wait',n], ['sp'], ['end'] (until the loop resets).
-const QA_XR9_PLANS = {
+export const QA_XR9_PLANS = {
     // Echo on blue, then dash through XR-9 into the back arc and sit on the panel.
     'xr-cheese-2loop': [[['go', 60, 200], ['go', 720, 200], ['go', 720, 300], ['end']],
         [['go', 60, 200], ['go', 500, 200], ['go', 500, 300], ['go', 470, 300], ['go', 400, 300, 1], ['wait', 100],
             ['go', 500, 300], ['go', 560, 300], ['go', 560, 550], ['go', 655, 550], ['sp'], ['go', 735, 535], ['sp'], ['wait', 60]]],
+    // B6: dash west into the closed back door from (480,284).
+    'k-d-east-door-dash': [[['go', 260, 200], ['go', 260, 295], ['end']],
+        [['go', 600, 200], ['go', 520, 300], ['go', 400, 300, 1], ['hold', 'a', 40]]],
     'xr-cheese-front-walk': [[['go', 60, 200], ['go', 720, 200], ['go', 720, 300], ['end']],
         [['go', 60, 200], ['go', 500, 200], ['go', 500, 300], ['go', 470, 300], ['go', 420, 300], ['wait', 200]]],
 };
-function runQaPlan(plan) {
+export function runQaPlan(plan, onTick) {
     const dead = () => state.gameState !== 'PLAYING';
     const pc = () => ({ x: state.player.x + state.player.w / 2, y: state.player.y + state.player.h / 2 });
     for (const loop of plan) {
@@ -409,9 +412,11 @@ function runQaPlan(plan) {
                     const p = pc(); const dx = s[1] - p.x; const dy = s[2] - p.y;
                     if (Math.abs(dx) < 3 && Math.abs(dy) < 3) break;
                     tick({ x: dx > 2 ? 1 : (dx < -2 ? -1 : 0), y: dy > 2 ? 1 : (dy < -2 ? -1 : 0) }, s[3] ? ['shift'] : [], true);
+                    if (onTick) onTick();
                     // both axes: tick() only sets one key per axis, which matches QA's driver
                 }
-            } else if (s[0] === 'wait') wait(s[1], true);
+            } else if (s[0] === 'hold') { for (let n = 0; n < s[2] && !dead(); n++) { tick({ x: s[1] === 'a' ? -1 : s[1] === 'd' ? 1 : 0, y: s[1] === 'w' ? -1 : s[1] === 's' ? 1 : 0 }, [], true); if (onTick) onTick(); } }
+            else if (s[0] === 'wait') wait(s[1], true);
             else if (s[0] === 'sp') { tick({}, ['space'], true); tick({}, [], true); }
             else if (s[0] === 'end') { for (let n = 0; n < 4000 && !dead() && state.loopNumber === L0; n++) tick({}, [], true); }
         }

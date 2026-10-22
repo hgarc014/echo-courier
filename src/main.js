@@ -1401,7 +1401,12 @@ function update() {
     if (state.player.cloakTimer > 0) state.player.cloakTimer--;
     if (cloakJustPressed && state.player.cloakTimer <= 0) { SFX.cloak(); state.player.cloakTimer = 120; state.runStats.cloaks++; }
     if (dashJustPressed && state.player.dashCooldown <= 0) {
-        let dest = getDashDestination(state.player.x, state.player.y, state.player.facingX, state.player.facingY, 120, state.player.w, state.player.h);
+        // Dash along this tick's held direction; facing is only updated later in the tick,
+        // so using it alone dashed along last tick's heading (B6: west press -> 120px south).
+        const held = getMoveVector();
+        const dfx = held.x ? Math.sign(held.x) : (held.y ? 0 : state.player.facingX);
+        const dfy = held.y ? Math.sign(held.y) : (held.x ? 0 : state.player.facingY);
+        let dest = getDashDestination(state.player.x, state.player.y, dfx, dfy, 120, state.player.w, state.player.h);
         if (dest.x !== state.player.x || dest.y !== state.player.y) { 
             SFX.dash(); 
             state.dashTrails.push({ sx: state.player.x, sy: state.player.y, ex: dest.x, ey: dest.y, life: 1.0 });
