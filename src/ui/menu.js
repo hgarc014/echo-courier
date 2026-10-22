@@ -74,7 +74,11 @@ export function refreshLevelSelectGrid() {
         } else if (entry.type === 'pending-header') {
             const header = document.createElement('div');
             header.className = 'world-header';
-            header.textContent = 'Subfloor routes (pending campaign order)';
+            header.textContent = entry.world === 3
+                ? 'Panopticon routes (pending campaign order)'
+                : entry.world === 2
+                    ? 'Subfloor routes (pending campaign order)'
+                    : `World ${entry.world} routes (pending campaign order)`;
             uiLevelGrid.appendChild(header);
         } else {
             appendLevelButton(entry.lvl, entry.idx);

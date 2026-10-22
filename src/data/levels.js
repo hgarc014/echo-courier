@@ -4,6 +4,7 @@ import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall
 import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
 import { Burrower, normalizeMaxStunsPerLoop } from '../entities/bosses/Burrower.js';
 import { Prism, serializePrism, normalizePrismParams } from '../entities/bosses/Prism.js';
+import { Warden } from '../entities/bosses/Warden.js';
 import { finishedWithinLoops } from '../core/loopDisplay.js';
 import { Gatekeeper, normalizeFreshTicks } from '../entities/bosses/gatekeeper.js';
 import { DeliveryZone } from '../entities/zones.js';
@@ -11,6 +12,7 @@ import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
 import { W4_LEVELS } from './world4Levels.js';
 import { PIT_KILL_FRACTION, clampKillFraction } from '../core/hitZones.js';
+import { W3_LEVELS } from './world3Levels.js';
 
 // W1 Dispatch is 0–4. W2 Subfloor (#47) is 5–9. Older campaign levels follow, shifted
 // past both. Provisional Subfloor slots (originally indices 2–4) sit at the front of Panopticon.
@@ -24,7 +26,7 @@ export const WORLDS = [
   { id: 5, name: 'Overclock',  unlocks: [],                 levels: [18, 19] },
 ];
 
-let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, prisms, projectiles;
+let player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, wardens, gatekeepers, prisms, projectiles;
 
 export function createBoundWalls(w, h, t = 20) {
     return [
@@ -694,7 +696,8 @@ export const LEVELS = [
 
     { name: "Level 12: Danger Courier", voiceKey: "level-11-story", hideFromSelect: true, bossVoiceKey: "level-11-boss-intro", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => finishedWithinLoops(state.loopNumber, 1) }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; gatekeepers=[]; prisms=[]; } },
     { name: "Dev Sandbox", voiceKey: "level-12-story", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox },
-    ...W4_LEVELS
+    ...W4_LEVELS,
+    ...W3_LEVELS
 ];
 
 // #47 shipped these after the sandbox as pending. They are World 2 now, so they
@@ -805,12 +808,12 @@ export function levelSelectEntries() {
         // A world with nothing selectable (Overclock until W5 lands) gets no header.
         if (rows.length) entries.push({ type: 'world', world }, ...rows);
     }
-    let pending = false;
+    let pendingWorld = null;
     LEVELS.forEach((lvl, idx) => {
         if (!lvl || lvl.isTutorial || lvl.isSandbox || lvl.hideFromSelect || placed.has(idx)) return;
-        if (lvl.isPendingCampaign && !pending) {
-            pending = true;
-            entries.push({ type: 'pending-header' });
+        if (lvl.isPendingCampaign && lvl.world !== pendingWorld) {
+            pendingWorld = lvl.world;
+            entries.push({ type: 'pending-header', world: lvl.world });
         }
         entries.push({ type: 'level', idx, lvl });
     });
@@ -1021,6 +1024,37 @@ function deserializePrism(p) {
     return new Prism(p?.x || 0, p?.y || 0, { ...params, id: p?.id || 'prism' });
 }
 
+function serializeWarden(w) {
+    return {
+        x: w.startX ?? w.x,
+        y: w.startY ?? w.y,
+        w: w.w,
+        h: w.h,
+        id: w.id,
+        coneLength: w.coneLength,
+        coneAngle: w.coneAngle,
+        turnSpeed: w.turnSpeed,
+        hearRange: w.hearRange,
+        homeAngle: w.homeAngle,
+        relaysPerLoop: w.relaysPerLoop,
+        relayIds: [...(w.relayIds || [])],
+        defeatDoorId: w.defeatDoorId || 'boss_door'
+    };
+}
+function deserializeWarden(w) {
+    return new Warden(w.x || 0, w.y || 0, {
+        w: w.w, h: w.h, id: w.id,
+        coneLength: w.coneLength,
+        coneAngle: w.coneAngle,
+        turnSpeed: w.turnSpeed,
+        hearRange: w.hearRange,
+        homeAngle: w.homeAngle,
+        relaysPerLoop: w.relaysPerLoop,
+        relayIds: w.relayIds,
+        defeatDoorId: w.defeatDoorId
+    });
+}
+
 // Boss/challenge level config shared by serialize, deserialize and the editor.
 // challengeRef names the campaign level whose code-defined challenge applies (challenges are functions).
 export const BOSS_META_KEYS = ['isBoss', 'bossIntro', 'bossIntroDoorId', 'challengeRef'];
@@ -1117,6 +1151,7 @@ export function serializeLevel(src = state) {
         burrowers: (src.burrowers || []).map(serializeBurrower),
         gatekeepers: (src.gatekeepers || []).map(serializeGatekeeper),
         prisms: (src.prisms || []).map(serializePrism),
+        wardens: (src.wardens || []).map(serializeWarden),
         crackSpeed: crackSpeedFromMeta(m, src.crackSpeed)
     };
     if (demo) payload.demo = demo;
@@ -1196,6 +1231,7 @@ export function deserializeLevel(data) {
     burrowers = (data.burrowers||[]).map(deserializeBurrower);
     gatekeepers = (data.gatekeepers||[]).map(deserializeGatekeeper);
     prisms = (data.prisms||[]).map(deserializePrism);
+    wardens = (data.wardens||[]).map(deserializeWarden);
     projectiles = [];
 
     const demo = cloneDemo(data.demo || data.meta?.demo);
@@ -1238,7 +1274,7 @@ export function deserializeLevel(data) {
         }
     }
     
-    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, gatekeepers, prisms, projectiles }, size);
+    return withMapSize({ player, deliveryZone, walls, doors, plates, hints, packages, lasers, guards, cameras, drones, winds, statics, cracks, robots, burrowers, wardens, gatekeepers, prisms, projectiles }, size);
 }
 
 export function getLevelSetup(index) {
@@ -1252,13 +1288,14 @@ export function getLevelSetup(index) {
         level.setup();
         hints = [];
         burrowers = [];
+        wardens = [];
         if (level.crackSpeed === 'fast' || level.crackSpeed === 'normal') {
             for (const c of cracks) if (c && typeof c.setCrackSpeed === 'function') c.setCrackSpeed(level.crackSpeed);
         }
         return withMapSize({
             player, deliveryZone, walls, doors, plates, hints, packages,
             lasers, guards, cameras, drones, winds, statics, cracks,
-            robots, burrowers, gatekeepers, prisms, projectiles
+            robots, burrowers, wardens, gatekeepers, prisms, projectiles
         }, size);
     } else if (level.layout) {
         const payload = { ...level.layout, ...size, demos: level.demos, demo: level.demo };

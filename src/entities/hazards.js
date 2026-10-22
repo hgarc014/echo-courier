@@ -15,6 +15,7 @@ import {
     pointInRect
 } from '../core/hitZones.js';
 import { collectShieldSlabs, laserHotRects } from '../systems/laserShield.js';
+import { latestNoise } from '../systems/noiseEvents.js';
 
 function isPresentPlayer(actor) {
     return actor && actor.id === undefined && actor.assetName === 'player';
@@ -59,6 +60,8 @@ const GUARD_CATCH_PAD = 4;
 const GUARD_VISION_RANGE = 220;
 const GUARD_VISION_FOV = 90; // degrees, full wedge
 const GUARD_TURN_TICKS = 18; // ~0.3s at 60tps
+const GUARD_HEAR_RANGE = 350; // same top-left radius drones use
+const GUARD_INVEST_LINGER = 180;
 
 function angleDiff(a, b) {
     let d = a - b;
@@ -698,14 +701,95 @@ export class Guard extends Entity {
         this.facingAngle = this.turnStartAngle + angleDiff(this.targetAngle, this.turnStartAngle) * t;
         if (this.turnTicksLeft <= 0) this.facingAngle = this.targetAngle;
     }
+    _overlapsBrokenCrack(x, y) {
+        for (const c of state.cracks || []) {
+            if (!c || !c.broken) continue;
+            if (AABB(x, y, this.w, this.h, c.x, c.y, c.w, c.h)) return true;
+        }
+        return false;
+    }
+    _waypointBlocked(pt) {
+        if (!pt) return true;
+        const cx = pt.x + this.w / 2;
+        const cy = pt.y + this.h / 2;
+        for (const c of state.cracks || []) {
+            if (!c || !c.broken) continue;
+            if (cx >= c.x && cx < c.x + c.w && cy >= c.y && cy < c.y + c.h) return true;
+        }
+        return false;
+    }
+    // Decoy landings only. A fresh key retargets; the same landing does not reset linger.
+    // Chase is left alone so a seen player is not pulled off by the crate.
+    _armDecoy() {
+        if (this.state === 'chase') return;
+        const noise = latestNoise(state.noiseEvents, ['decoy']);
+        if (!noise) return;
+        if (Math.hypot(noise.x - this.x, noise.y - this.y) >= GUARD_HEAR_RANGE) return;
+        const key = `${noise.tick}:${noise.seq}`;
+        if (this._decoyKey === key) return;
+        this._decoyKey = key;
+        this.state = 'investigate';
+        this.investTarget = { x: noise.x, y: noise.y };
+        this.investTimer = 0;
+        this.investArrived = false;
+        this._faceToward(noise.x, noise.y);
+    }
+    _stepInvestigate() {
+        const tgt = this.investTarget;
+        if (!tgt) { this.state = 'patrol'; return; }
+        if (!this.investArrived) {
+            const dx = tgt.x - this.x;
+            const dy = tgt.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            const spd = this.chaseSpeed;
+            if (dist < spd) {
+                if (!this._overlapsBrokenCrack(tgt.x, tgt.y)) {
+                    this.x = tgt.x;
+                    this.y = tgt.y;
+                }
+                this.investArrived = true;
+                this.investTimer = GUARD_INVEST_LINGER;
+            } else {
+                const nx = (dx / dist) * spd;
+                const ny = (dy / dist) * spd;
+                if (!this._overlapsBrokenCrack(this.x + nx, this.y + ny)) {
+                    this.x += nx;
+                    this.y += ny;
+                }
+                this._faceToward(tgt.x, tgt.y);
+            }
+        } else {
+            this.investTimer--;
+            if (this.investTimer <= 0) {
+                this.state = 'patrol';
+                this.investArrived = false;
+            }
+        }
+    }
     update(player, ghosts) {
         // Interpolate facing before vision so this frame's cone matches render().
         // _faceToward / _setFacing only queue the next turn.
         this._advanceTurn();
         const cone = getVisionCone(this);
+        const playerInVision = !!(player && player.cloakTimer <= 0 && pointInVisionCone(cone, player.x, player.y, player.w, player.h));
+
+        // A player already in the cone keeps priority. Otherwise a new decoy
+        // landing pulls the guard, and that walk ignores echo-freeze so the
+        // courier who threw the crate does not pin them in place.
+        if (!playerInVision) this._armDecoy();
+        if (this.state === 'investigate' && playerInVision) {
+            this.state = 'chase';
+            this.lostSightTimer = GUARD_LOST_SIGHT;
+            this.lastSeenX = player.x;
+            this.lastSeenY = player.y;
+            this._faceToward(player.x, player.y);
+        } else if (this.state === 'investigate') {
+            this._stepInvestigate();
+            return null;
+        }
 
         // Echoes still swing the guard's facing, which can pull vision off the player.
-        for (let g of ghosts) {
+        for (let g of ghosts || []) {
             if (!g.isActive) continue;
             if (pointInVisionCone(cone, g.x, g.y, g.w, g.h)) {
                 this.state='distracted';
@@ -715,7 +799,6 @@ export class Guard extends Entity {
             }
         }
 
-        const playerInVision = player.cloakTimer <= 0 && pointInVisionCone(cone, player.x, player.y, player.w, player.h);
         if (playerInVision) {
             this.state = 'chase';
             this.lostSightTimer = GUARD_LOST_SIGHT;
@@ -743,18 +826,44 @@ export class Guard extends Entity {
         }
 
         if (this.state==='patrol') {
-            let target=this.points[this.targetIndex]; let dx=target.x-this.x, dy=target.y-this.y; let dist=Math.hypot(dx,dy);
-            if (dist<this.speed) { this.x=target.x; this.y=target.y; this.targetIndex=(this.targetIndex+1)%this.points.length; }
-            else {
-                this.x+=(dx/dist)*this.speed; this.y+=(dy/dist)*this.speed;
-                if (Math.abs(dx)>Math.abs(dy)) this._setFacing(dx>0?1:-1, 0);
-                else this._setFacing(0, dy>0?1:-1);
+            const n = this.points.length;
+            if (n > 0) {
+                let hops = 0;
+                while (hops < n && this._waypointBlocked(this.points[this.targetIndex])) {
+                    this.targetIndex = (this.targetIndex + 1) % n;
+                    hops++;
+                }
+                if (hops < n) {
+                    const target = this.points[this.targetIndex];
+                    const dx = target.x - this.x, dy = target.y - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < this.speed) {
+                        if (!this._overlapsBrokenCrack(target.x, target.y)) {
+                            this.x = target.x;
+                            this.y = target.y;
+                        }
+                        this.targetIndex = (this.targetIndex + 1) % n;
+                    } else {
+                        const nx = (dx / dist) * this.speed;
+                        const ny = (dy / dist) * this.speed;
+                        // A broken tile on the step drops this waypoint. With two
+                        // points the guard then oscillates on the far side.
+                        if (this._overlapsBrokenCrack(this.x + nx, this.y + ny)) {
+                            this.targetIndex = (this.targetIndex + 1) % n;
+                        } else {
+                            this.x += nx;
+                            this.y += ny;
+                            if (Math.abs(dx) > Math.abs(dy)) this._setFacing(dx > 0 ? 1 : -1, 0);
+                            else this._setFacing(0, dy > 0 ? 1 : -1);
+                        }
+                    }
+                }
             }
         }
         return null;
     }
     render(ctx) {
-        const moving = this.state === 'patrol' || this.state === 'chase';
+        const moving = this.state === 'patrol' || this.state === 'chase' || this.state === 'investigate';
         const t = state.currentTick;
         const walk = moving ? Math.sin(t * 0.4) : 0;
         const img = resolveSprite(state, 'guard');
@@ -768,6 +877,7 @@ export class Guard extends Entity {
         } else super.render(ctx);
         const cone = getVisionCone(this);
         if (this.state === 'chase') ctx.fillStyle = 'rgba(255,40,40,0.34)';
+        else if (this.state === 'investigate') ctx.fillStyle = 'rgba(255,160,0,0.22)';
         else if (this.state === 'distracted') ctx.fillStyle = 'rgba(255,255,0,0.14)';
         else ctx.fillStyle = 'rgba(255,0,0,0.06)';
         ctx.beginPath();

@@ -21,6 +21,7 @@ import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
+import { pushNoiseEvent, resetNoiseEvents } from './systems/noiseEvents.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -213,6 +214,37 @@ function clearLoopFx() {
     state.shakeMax = 0;
     state.shakeMag = 0;
     state.rewindFreeze = 0;
+    resetNoiseEvents();
+}
+
+function alarmNoisePoint() {
+    const cams = state.cameras || [];
+    if (state.player && cams.some(c => c.seesPlayer)) return { x: state.player.x, y: state.player.y };
+    for (const cam of cams) {
+        if (!cam || typeof cam._inCone !== 'function') continue;
+        for (const g of state.activeGhosts || []) {
+            if (g && g.isActive && !g.cloakActive && cam._inCone(g.x, g.y)) return { x: g.x, y: g.y };
+        }
+    }
+    const cam = cams[0];
+    if (cam) return { x: cam.x, y: cam.y };
+    return { x: state.player?.x || 0, y: state.player?.y || 0 };
+}
+
+function noteAlarmNoise() {
+    const on = !!state.alarmState;
+    if (on && !state.alarmWasOn) {
+        const p = alarmNoisePoint();
+        pushNoiseEvent(p.x, p.y, 'alarm');
+    }
+    state.alarmWasOn = on;
+}
+
+function noteDecoyLandings() {
+    for (const p of state.packages || []) {
+        if (!p || p.isDestroyed || p.type !== 'decoy') continue;
+        if (p.feelKind === 'land' && p.feelTtl === 12) pushNoiseEvent(p.x, p.y, 'decoy');
+    }
 }
 
 function tickLoopFx() {
@@ -545,6 +577,7 @@ function applyLoadedLevel(setupData) {
     if (!Array.isArray(state.burrowers)) state.burrowers = [];
     if (!Array.isArray(state.gatekeepers)) state.gatekeepers = [];
     if (!Array.isArray(state.prisms)) state.prisms = [];
+    if (!Array.isArray(state.wardens)) state.wardens = [];
     setMapSize(setupData.mapWidth || DEFAULT_MAP_WIDTH, setupData.mapHeight || DEFAULT_MAP_HEIGHT);
     resetPlayerLoopState();
     if (state.gameState !== 'EDITOR' && state.player) {
@@ -1022,7 +1055,7 @@ export function startGame(levelIndex) {
     let lv = LEVELS[levelIndex];
     applyLevelAbilityOverrides(lv);
     state.worldUnlockedAbilities = getWorldUnlockedAbilities(levelIndex);
-    state.robots = []; state.burrowers = []; state.gatekeepers = []; state.prisms = []; state.projectiles = [];
+    state.robots = []; state.burrowers = []; state.wardens = []; state.gatekeepers = []; state.prisms = []; state.projectiles = [];
     state.bossCheckpoint = null;
     state.bossCheckpointLive = false;
     clearGatekeeperCheckpoint();
@@ -1371,6 +1404,7 @@ function update() {
     }
 
     state.alarmState = false; state.cameras.forEach(c => c.update(state.player));
+    noteAlarmNoise();
     state.robots.forEach(r => r.update(state.player, state.activeGhosts, state.walls));
     for (let p of state.projectiles) {
         let fail = p.update(state.walls, state.activeGhosts, state.player, state.packages);
@@ -1417,9 +1451,16 @@ function update() {
 
     let noiseSources = [];
     if (interactJustPressed || tossJustPressed) noiseSources.push({x: state.player.x, y: state.player.y});
+    if (interactJustPressed) pushNoiseEvent(state.player.x, state.player.y, 'interact');
+    if (tossJustPressed) pushNoiseEvent(state.player.x, state.player.y, 'toss');
     for(let g of state.activeGhosts) {
         let stateIndex = g.lastStateIndex;
         if (stateIndex >= 0 && stateIndex < g.runData.length && (g.runData[stateIndex].interact || g.runData[stateIndex].toss)) noiseSources.push({x: g.x, y: g.y});
+        if (stateIndex >= 0 && stateIndex < g.runData.length) {
+            const step = g.runData[stateIndex];
+            if (step.interact) pushNoiseEvent(g.x, g.y, 'interact');
+            if (step.toss) pushNoiseEvent(g.x, g.y, 'toss');
+        }
     }
 
     for(let d of state.drones) {
@@ -1594,6 +1635,9 @@ function update() {
             else { p.carriedBy = null; p.onDrop(); }
         }
     }
+
+    noteDecoyLandings();
+    for (const warden of state.wardens || []) warden.update();
 
     updateDeliveryProgressUI();
     const requiredPackages = getRequiredPackages();
@@ -2067,7 +2111,7 @@ function draw() {
         ctx.stroke(); ctx.restore();
     });
     
-    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); drawCrackEdgeWarning(ctx); drawPickupFeedback(ctx); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
+    state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); (state.wardens || []).forEach(w => w.render(ctx)); drawCrackEdgeWarning(ctx); drawPickupFeedback(ctx); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
     drawEchoHazardFlashes(ctx);

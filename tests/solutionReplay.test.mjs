@@ -28,7 +28,7 @@ for (const f of files) {
         assert.ok(r.completed, `level not completed after ${r.ticks} ticks, ${r.loopsUsed} loops; fails: ${r.failMessages.join(' | ') || 'none'}`);
         if (r.par != null) assert.ok(r.loopsUsed <= r.par, `over par: ${r.loopsUsed} loops > par ${r.par}`);
         if (sol.completedLoops != null) assert.equal(r.loopsUsed, sol.completedLoops, 'loop count drifted from recording');
-        if (String(sol.levelName || '').startsWith('W2-') || String(sol.levelName || '').startsWith('W4-')) {
+        if (String(sol.levelName || '').startsWith('W2-') || String(sol.levelName || '').startsWith('W4-') || String(sol.levelName || '').startsWith('W3-')) {
             const ends = (state.pastRuns || []).map((run, id) => {
                 const step = run && run.length ? run[run.length - 1] : {};
                 return { id, x: step.x, y: step.y, w: 30, h: 30 };
