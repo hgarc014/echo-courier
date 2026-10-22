@@ -111,6 +111,49 @@ const W5_L3_LAYOUT = base({
     packages: [{ x: 60, y: 370, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }]
 });
 
+// Combine. Plateless beam (x=200) with its emitter at the top: a shielded echo
+// parked near the top (its shield needs beam in front of it) blocks the rest. That spot is a magenta plate, so the
+// shield must be the first echo. The guard (x=420) sees through walls; an echo
+// in the walled pocket pins it facing up. Blue plate in the hall's south end.
+// Glass, cracks on the beam exit, airlock, then a timer door before the zone.
+const W5_L4_LAYOUT = base({
+    player: { x: 40, y: 40 },
+    deliveryZone: { x: 660, y: 240, w: 100, h: 120 },
+    walls: [
+        ...borders(),
+        // Alcove under the beam: entered from the left room, walled off from the hall.
+        { x: 228, y: 480, w: 60, h: 100 },
+        // Distraction pocket, entered from the top of the beam column.
+        { x: 228, y: 20, w: 102, h: 50 },
+        { x: 228, y: 110, w: 122, h: 20 },
+        { x: 330, y: 20, w: 20, h: 90 },
+        // Airlock column and timer-door column.
+        { x: 560, y: 20, w: 40, h: 220 },
+        { x: 560, y: 360, w: 40, h: 220 },
+        { x: 620, y: 20, w: 20, h: 220 },
+        { x: 620, y: 360, w: 20, h: 220 }
+    ],
+    doors: [
+        { x: 560, y: 240, w: 20, h: 120, id: 'd_first', type: 'standard' },
+        { x: 580, y: 240, w: 20, h: 120, id: 'd_last', type: 'standard' },
+        { x: 620, y: 240, w: 20, h: 120, id: 'td', type: 'timer', openT: 90, closedT: 150 }
+    ],
+    plates: [
+        { x: 194, y: 20, linkedIds: ['d_first'], id: 'p_first', type: 'temporal', requiredTimeline: 'first' },
+        { x: 480, y: 520, linkedIds: ['d_last'], id: 'p_last', type: 'temporal', requiredTimeline: 'last' }
+    ],
+    packages: [{ x: 60, y: 300, id: 'pkg1', packageType: 'fragile', requiredForDelivery: true }],
+    lasers: [{ x: 200, y: 20, w: 28, h: 460, id: 'beam' }],
+    guards: [{ path: [{ x: 420, y: 500 }, { x: 420, y: 60 }] }],
+    cracks: [
+        { x: 228, y: 260, w: 40, h: 40 },
+        { x: 268, y: 260, w: 40, h: 40 },
+        { x: 228, y: 300, w: 40, h: 40 },
+        { x: 268, y: 300, w: 40, h: 40 }
+    ],
+    statics: [{ x: 20, y: 380, w: 180, h: 100 }]
+});
+
 function level(name, obj, text, loops, ghosts, loopTime, layout, extra = {}) {
     return {
         name,
@@ -150,5 +193,12 @@ export const W5_LEVELS = [
         'The gate only opens at the start of a loop, and anyone standing in it keeps it open. Static drags echoes. It does not drag you.',
         'You cannot reach the gate with the parcel before it shuts. An echo walking through it holds it, but only while it is there. The purple field is the long way round, and it is longer for an echo than it was for you.',
         3, 2, 30, W5_L3_LAYOUT
+    ),
+    level(
+        'W5-L4: Courier Overclock',
+        'Glass, a plateless beam, a guard who sees through walls, two colored plates, cracked floor, and a timed door. Three echoes.',
+        'Every job here belongs to a loop number. Work out which job only the oldest echo can do, which only the newest can, and what is left for the one in between. Then record them in that order.',
+        4, 3, 45, W5_L4_LAYOUT,
+        { unlocks: ['ghostShield'], grants: ['ghostShield'] }
     )
 ];

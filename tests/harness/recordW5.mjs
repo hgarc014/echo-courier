@@ -13,7 +13,8 @@ const solDir = join(here, '..', 'solutions');
 const FILES = [
     ['W5-L1', join(solDir, 'w5-l1.json')],
     ['W5-L2', join(solDir, 'w5-l2.json')],
-    ['W5-L3', join(solDir, 'w5-l3.json')]
+    ['W5-L3', join(solDir, 'w5-l3.json')],
+    ['W5-L4', join(solDir, 'w5-l4.json')]
 ];
 
 function levelIndex(prefix) {
@@ -198,7 +199,60 @@ function solveL3() {
     dropInZone();
 }
 
+function guardPinned() {
+    return state.guards.some(g => g.state === 'distracted');
+}
+
+// Down the left room, into the alcove, then straight up the beam (facing the emitter).
+function upTheBeam(topY, soft = false) {
+    moveTo(40, 530, 2, 400, soft);
+    moveTo(198, 530, 2, 300, soft);
+    // Straight up only: any sideways step inside the beam faces away from the emitter.
+    for (let i = 0; i < 400 && state.player.y > topY + 1; i++) {
+        if (soft && state.failMessage) return;
+        const y = state.player.y;
+        tick({ y: -1 }, [], soft);
+        if (state.player.y === y) break;
+    }
+}
+
+function shieldParked() {
+    const g = state.activeGhosts.find(e => e.id === 0) || state.activeGhosts[0];
+    return !!(g && g.isActive && g.y <= 40 && g.facingY < 0 && g.facingX === 0);
+}
+
+function solveL4() {
+    // Loop 1, first echo: shield parked on the magenta plate at the top of the beam.
+    upTheBeam(36);
+    wait(6);
+    pressR();
+    // Loop 2, middle echo: the pocket, where the guard can see it but not reach it.
+    upTheBeam(76);
+    // The shield crawls through static on its way here; turn only once it is set.
+    waitUntil(shieldParked, 600, 'shield parked (loop 2)');
+    moveTo(295, 76, 2, 300);
+    wait(6);
+    pressR();
+    // Loop 3, last echo: the blue plate, once the guard is pinned.
+    moveTo(40, 300, 2, 400);
+    waitUntil(guardPinned, 1500, 'guard pinned (loop 3)');
+    moveTo(480, 300, 2, 400);
+    standOn('p_last', 480, 520);
+    wait(6);
+    pressR();
+    // Loop 4: the glass.
+    moveTo(60, 300, 2, 400);
+    grab();
+    waitUntil(guardPinned, 1500, 'guard pinned (haul)');
+    moveTo(525, 300, 2, 500);
+    waitUntil(() => doorOpen('d_first') && doorOpen('d_last'), 600, 'airlock');
+    moveTo(585, 300, 2, 200);
+    waitUntil(() => doorOpen('td'), 400, 'timer door');
+    dropInZone();
+}
+
 const SOLVERS = {
+    'W5-L4': solveL4,
     'W5-L1': solveL1,
     'W5-L2': solveL2,
     'W5-L3': solveL3
@@ -241,7 +295,7 @@ export function dashRushL3() {
     return { tick: state.currentTick, gateOpen: doorOpen('gate'), dashes: state.runStats?.dashes ?? 0 };
 }
 
-export function runNaive(which) {
+export function runNaive(which, arg) {
     const softMove = (x, y) => moveTo(x, y, 4, 700, true);
     const plateLoop = ([x, y]) => {
         softMove(x, 285);
@@ -269,7 +323,64 @@ export function runNaive(which) {
         tick({}, ['space'], true);
         wait(30, true);
     };
+    const shieldLoop = () => { upTheBeam(36, true); wait(6, true); if (!state.failMessage) pressR(); };
+    const pocketLoop = () => {
+        upTheBeam(76, true);
+        for (let i = 0; i < 600 && !shieldParked() && !state.failMessage; i++) tick({}, [], true);
+        softMove(295, 76); wait(6, true); if (!state.failMessage) pressR();
+    };
+    const blueLoop = () => {
+        softMove(40, 300);
+        for (let i = 0; i < 900 && !shieldParked() && !state.failMessage; i++) tick({}, [], true);
+        for (let i = 0; i < 1500 && !guardPinned() && !state.failMessage; i++) tick({}, [], true);
+        softMove(480, 300); softMove(480, 520); wait(6, true); if (!state.failMessage) pressR();
+    };
+    const haul4 = (waitGuard) => {
+        softMove(60, 300);
+        tick({}, ['space'], true);
+        tick({}, [], true);
+        for (let i = 0; i < 900 && !shieldParked() && !state.failMessage; i++) tick({}, [], true);
+        if (waitGuard) for (let i = 0; i < 1500 && !guardPinned() && !state.failMessage; i++) tick({}, [], true);
+        softMove(525, 300);
+        for (let i = 0; i < 900 && state.gameState !== 'LEVEL_COMPLETE' && !state.failMessage; i++) tick({ x: 1 }, [], true);
+        tick({}, ['space'], true);
+        wait(30, true);
+    };
     const table = {
+        'l4-control': () => {
+            loadLevel({ level: levelIndex('W5-L4') });
+            shieldLoop(); pocketLoop(); blueLoop(); haul4(true);
+        },
+        // Skip the decoy: shield, then blue, then haul straight past the guard.
+        'l4-no-decoy': () => {
+            loadLevel({ level: levelIndex('W5-L4') });
+            shieldLoop(); blueLoop(); haul4(false);
+        },
+        // Skip the decoy and time the patrol: cross behind the guard while it walks north.
+        'l4-sneak': (when = (gd) => gd.facingY < 0 && gd.y < 240) => {
+            loadLevel({ level: levelIndex('W5-L4') });
+            shieldLoop(); blueLoop();
+            softMove(60, 300);
+            tick({}, ['space'], true);
+            tick({}, [], true);
+            for (let i = 0; i < 900 && !shieldParked() && !state.failMessage; i++) tick({}, [], true);
+            const g = () => state.guards[0];
+            for (let i = 0; i < 2000 && !when(g()) && !state.failMessage; i++) tick({}, [], true);
+            softMove(525, 300);
+            for (let i = 0; i < 900 && state.gameState !== 'LEVEL_COMPLETE' && !state.failMessage; i++) tick({ x: 1 }, [], true);
+            tick({}, ['space'], true);
+            wait(30, true);
+        },
+        // Right jobs, wrong order: blue recorded before the decoy is no longer the newest.
+        'l4-blue-middle': () => {
+            loadLevel({ level: levelIndex('W5-L4') });
+            shieldLoop(); blueLoop(); pocketLoop(); haul4(true);
+        },
+        // Decoy first: no shield yet, so the turn into the pocket is inside a live beam.
+        'l4-decoy-first': () => {
+            loadLevel({ level: levelIndex('W5-L4') });
+            pocketLoop(); shieldLoop(); blueLoop(); haul4(true);
+        },
         'l3-control': () => {
             loadLevel({ level: levelIndex('W5-L3') });
             slowRoad();
@@ -322,7 +433,7 @@ export function runNaive(which) {
     };
     const fn = table[which];
     if (!fn) throw new Error(`unknown naive plan ${which}`);
-    fn();
+    fn(arg);
     return {
         completed: state.gameState === 'LEVEL_COMPLETE',
         state: state.gameState,

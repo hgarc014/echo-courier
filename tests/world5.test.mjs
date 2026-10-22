@@ -19,7 +19,8 @@ const w5 = LEVELS.map((level, index) => ({ level, index })).filter(({ level }) =
 const SPEC = {
     'W5-L1: First Light': { par: 3, loopTime: 25, maxGhosts: 2, grants: [] },
     'W5-L2: Last Word': { par: 3, loopTime: 28, maxGhosts: 2, grants: [] },
-    'W5-L3: Slow Motion': { par: 3, loopTime: 30, maxGhosts: 2, grants: [] }
+    'W5-L3: Slow Motion': { par: 3, loopTime: 30, maxGhosts: 2, grants: [] },
+    'W5-L4: Courier Overclock': { par: 4, loopTime: 45, maxGhosts: 3, grants: ['ghostShield'] }
 };
 
 check('world 5 is the contiguous W5 block after W4', () => {
@@ -69,6 +70,15 @@ for (const { level, index } of w5) {
         const modes = json.plates.filter(p => p.type === 'temporal').map(p => p.requiredTimeline).sort();
         if (level.name.startsWith('W5-L1')) assert.deepEqual(modes, ['first']);
         if (level.name.startsWith('W5-L2')) assert.deepEqual(modes, ['first', 'last', 'present']);
+        if (level.name.startsWith('W5-L4')) {
+            assert.deepEqual(modes, ['first', 'last']);
+            assert.equal(json.packages[0].packageType, 'fragile');
+            assert.equal(json.lasers.length, 1);
+            assert.equal(json.guards.length, 1);
+            assert.ok(json.cracks.length >= 1);
+            assert.ok(json.statics.length >= 1);
+            assert.ok(json.doors.some(d => d.type === 'timer'));
+        }
         if (level.name.startsWith('W5-L3')) {
             assert.equal(json.statics.length, 2);
             const gate = json.doors.find(d => d.id === 'gate');

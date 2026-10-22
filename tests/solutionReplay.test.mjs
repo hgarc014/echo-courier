@@ -66,7 +66,7 @@ for (const plan of ['l1-grab-first', 'l2-one-plate', 'l3-no-shield', 'l4-crack-p
     });
 }
 
-for (const f of ['w5-l1.json', 'w5-l2.json', 'w5-l3.json']) {
+for (const f of ['w5-l1.json', 'w5-l2.json', 'w5-l3.json', 'w5-l4.json']) {
     check(`truncated ${f} fails`, () => {
         const sol = JSON.parse(readFileSync(join(dir, f), 'utf8'));
         const r = replaySolution({ ...sol, loops: sol.loops.slice(0, -1) }, { extraTicks: 90 });
@@ -74,14 +74,14 @@ for (const f of ['w5-l1.json', 'w5-l2.json', 'w5-l3.json']) {
     });
 }
 
-for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park']) {
+for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park', 'l4-no-decoy', 'l4-sneak', 'l4-blue-middle', 'l4-decoy-first']) {
     check(`naive W5 ${plan} fails`, () => {
         const r = runNaiveW5(plan);
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
     });
 }
 
-for (const plan of ['l2-control', 'l3-control']) {
+for (const plan of ['l2-control', 'l3-control', 'l4-control']) {
     check(`W5 ${plan}: the naive haul completes when the echoes are right`, () => {
         const r = runNaiveW5(plan);
         assert.equal(r.completed, true, 'control haul failed, so the naive checks prove nothing');
