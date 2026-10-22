@@ -1375,6 +1375,7 @@ function update() {
 
     state.alarmState = false; state.cameras.forEach(c => c.update(state.player));
     state.robots.forEach(r => r.update(state.player, state.activeGhosts, state.walls));
+    { const sweep = state.robots.find(r => r.sweepFail); if (sweep) { levelFailed(sweep.sweepFail); return; } }
     for (let p of state.projectiles) {
         let fail = p.update(state.walls, state.activeGhosts, state.player, state.packages);
         if (fail) { levelFailed(fail); return; }

@@ -201,6 +201,8 @@ const W5_BOSS_LAYOUT = base({
         backArc: Math.PI / 3,
         backTouch: true,
         telegraphTime: 1.5,
+        sweepPeriod: 11,
+        sweepWidth: 34,
         checkpoint: true,
         defeatDoorId: 'boss_door'
     }]
@@ -256,7 +258,7 @@ export const W5_LEVELS = [
     level(
         'W5-BOSS: XR-9',
         'XR-9 fires at the nearest echo it can see, and only its back panel is soft. Its back door answers to the blue plate.',
-        'It always turns toward an echo before it turns toward you. Blue only listens to the newest recording, and each hit is checkpointed. Each loop has one job: stand guard for the next loop, or be the decoy for a later one.',
+        'It always turns toward an echo before it turns toward you. Blue only listens to the newest recording, and each hit is checkpointed. Each loop has one job: stand guard for the next loop, or be the decoy for a later one. Do not get comfortable against the outer walls: XR-9 sweeps its perimeter, corner to corner, and the warning lanes show you when.',
         5, 4, 40, W5_BOSS_LAYOUT,
         {
             speaker: 'Overclock Dispatch',

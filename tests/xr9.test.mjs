@@ -176,13 +176,15 @@ check('phase checkpoint: hp survives a rewind rebuild', () => {
 check('every XR-9 param round-trips through inspector, save and JSON', () => {
     reset();
     const r = new ShooterRobot([{ x: 100, y: 100 }, { x: 200, y: 100 }]);
-    applyRobotConfig(r, { id: 'boss', label: 'XR-9 Mk2', targetEchoes: true, backArc: '0.9', backTouch: true, telegraphTime: '1.75', checkpoint: true, defeatDoorId: 'exit' });
+    applyRobotConfig(r, { id: 'boss', label: 'XR-9 Mk2', targetEchoes: true, backArc: '0.9', backTouch: true, telegraphTime: '1.75', checkpoint: true, defeatDoorId: 'exit', sweepPeriod: '12', sweepWidth: '50' });
+    assert.equal(r.sweepPeriod, 12); assert.equal(r.sweepWidth, 50);
     assert.equal(r.backArc, 0.9); assert.equal(r.telegraphTime, 1.75);
     const json = JSON.parse(JSON.stringify(serializeLevel({ player: { x: 0, y: 0, w: 30, h: 30 }, deliveryZone: { x: 0, y: 0, w: 10, h: 10 }, robots: [r] })));
     const back = deserializeLevel(json).robots[0];
     for (const k of Object.keys(ROBOT_XR9_DEFAULTS)) assert.deepEqual(back[k], r[k], k);
-    applyRobotConfig(back, { backArc: '', telegraphTime: '' });
+    applyRobotConfig(back, { backArc: '', telegraphTime: '', sweepPeriod: '', sweepWidth: '' });
     assert.equal(back.backArc, null); assert.equal(back.telegraphTime, null);
+    assert.equal(back.sweepPeriod, null); assert.equal(back.sweepWidth, null);
 });
 
 if (failures) { console.log(`${failures} XR-9 check(s) failed`); process.exit(1); }

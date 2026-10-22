@@ -854,6 +854,8 @@ function updatePropertiesPanel() {
         html += `<label title="Blank = hits from any side">Back arc (rad): <input type="number" step="0.01" min="0.05" id="prop-robot-back-arc" placeholder="any side" value="${selectedEntity.backArc ?? ''}" style="width:80px"></label><br>`;
         html += `<label><input type="checkbox" id="prop-robot-back-touch" ${selectedEntity.backTouch?'checked':''}> Back panel touch hits</label><br>`;
         html += `<label title="Blank = legacy short wind-up">Telegraph (sec): <input type="number" step="0.05" min="0.1" id="prop-robot-telegraph" placeholder="legacy" value="${selectedEntity.telegraphTime ?? ''}" style="width:70px"></label><br>`;
+        html += `<label title="Blank = no perimeter sweep">Sweep every (sec): <input type="number" step="0.5" min="2" id="prop-robot-sweep" placeholder="off" value="${selectedEntity.sweepPeriod ?? ''}" style="width:70px"></label><br>`;
+        html += `<label title="Blank = 60">Sweep depth (px): <input type="number" step="5" min="20" id="prop-robot-sweep-width" placeholder="60" value="${selectedEntity.sweepWidth ?? ''}" style="width:70px"></label><br>`;
         html += `<label><input type="checkbox" id="prop-robot-checkpoint" ${selectedEntity.checkpoint?'checked':''}> Phase checkpoints (hp survives rewind)</label><br>`;
         html += `<label>Defeat door id: <input type="text" id="prop-robot-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
     }
@@ -1072,6 +1074,8 @@ function updatePropertiesPanel() {
                 backTouch: on('prop-robot-back-touch'),
                 telegraphTime: val('prop-robot-telegraph'),
                 checkpoint: on('prop-robot-checkpoint'),
+                sweepPeriod: val('prop-robot-sweep'),
+                sweepWidth: val('prop-robot-sweep-width'),
                 defeatDoorId: val('prop-robot-door').trim()
             });
         }
