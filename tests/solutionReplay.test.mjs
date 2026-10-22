@@ -9,6 +9,7 @@ import { runNaive as runNaiveW1 } from './harness/recordW1.mjs';
 import { LEVELS, getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 import { runNaive as runNaiveW4 } from './harness/recordW4.mjs';
+import { runNaive as runNaiveW5 } from './harness/recordW5.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'solutions');
 const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort();
@@ -28,7 +29,7 @@ for (const f of files) {
         assert.ok(r.completed, `level not completed after ${r.ticks} ticks, ${r.loopsUsed} loops; fails: ${r.failMessages.join(' | ') || 'none'}`);
         if (r.par != null) assert.ok(r.loopsUsed <= r.par, `over par: ${r.loopsUsed} loops > par ${r.par}`);
         if (sol.completedLoops != null) assert.equal(r.loopsUsed, sol.completedLoops, 'loop count drifted from recording');
-        if (String(sol.levelName || '').startsWith('W2-') || String(sol.levelName || '').startsWith('W4-')) {
+        if (String(sol.levelName || '').startsWith('W2-') || String(sol.levelName || '').startsWith('W4-') || String(sol.levelName || '').startsWith('W5-')) {
             const ends = (state.pastRuns || []).map((run, id) => {
                 const step = run && run.length ? run[run.length - 1] : {};
                 return { id, x: step.x, y: step.y, w: 30, h: 30 };
@@ -64,6 +65,26 @@ for (const plan of ['l1-grab-first', 'l2-one-plate', 'l3-no-shield', 'l4-crack-p
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
     });
 }
+
+for (const f of ['w5-l1.json', 'w5-l2.json']) {
+    check(`truncated ${f} fails`, () => {
+        const sol = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+        const r = replaySolution({ ...sol, loops: sol.loops.slice(0, -1) }, { extraTicks: 90 });
+        assert.equal(r.completed, false, 'dropping the last loop still completed');
+    });
+}
+
+for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first']) {
+    check(`naive W5 ${plan} fails`, () => {
+        const r = runNaiveW5(plan);
+        assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
+    });
+}
+
+check('W5 naive haul completes when the loops are in the right order', () => {
+    const r = runNaiveW5('l2-control');
+    assert.equal(r.completed, true, 'control haul failed, so the naive checks prove nothing');
+});
 
 check('truncated w2-l1 solution fails', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'w2-l1.json'), 'utf8'));
