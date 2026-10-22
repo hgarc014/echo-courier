@@ -138,6 +138,8 @@ check('W5 B6: dashing west into XR-9\'s closed back door never jumps the courier
     let last = null; const jumps = [];
     runQaPlan(QA_XR9_PLANS['k-d-east-door-dash'], () => {
         const p = state.player;
+        // A failed loop (e.g. the #61 perimeter sweep) respawns the courier; that is not a dash jump.
+        if (state.loopFails > 0 || state.failTimer > 0) { last = null; return; }
         if (last && state.currentTick > 0 && Math.abs(p.y - last.y) > 20) jumps.push([state.currentTick, Math.round(last.y), Math.round(p.y)]);
         last = { x: p.x, y: p.y };
     });
