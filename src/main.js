@@ -2104,6 +2104,7 @@ function draw() {
             ctx.fillStyle = '#fff'; ctx.font = 'bold 36px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText("LOOP FAILED", 400, 250);
             ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
             ctx.font = '16px "Space Grotesk"'; ctx.fillStyle = '#ffd0d0'; ctx.fillText('Rewinding — this run will NOT become an echo.', 400, 335);
+            if (state.burrowerFailNote) { ctx.font = 'bold 18px "Space Grotesk"'; ctx.fillStyle = '#ffb08a'; ctx.fillText('Echo stamp: ' + state.burrowerFailNote, 400, 365); }
             ctx.textAlign = 'left';
         }
     }

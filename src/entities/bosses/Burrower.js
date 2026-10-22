@@ -30,7 +30,9 @@ export const STAMP_WINDOW_TICKS = 45;
 export const STAMP_GRACE_TICKS = 0;
 export const STAMP_ACCEPT_TICKS = STAMP_WINDOW_TICKS + STAMP_GRACE_TICKS;
 export const STAMP_WINDOW_SECONDS = STAMP_WINDOW_TICKS / TICKS_PER_SECOND;
-export const FEEDBACK_TICKS = 75;
+export const FEEDBACK_TICKS = 75;      // >= 1 s on screen
+// A stamp up to 1.5 s before the strike (but before the window) reads TOO EARLY.
+export const EARLY_TICKS = 90;
 export const STRIKE_FAIL = 'Struck by the Burrower!';
 const GRID = 40;
 export const RIPPLE_TICKS = 36;
@@ -107,6 +109,10 @@ function paintLabel(ctx, text, x, y, opts = {}) {
     ctx.textBaseline = 'middle';
     const w = ctx.measureText(text).width;
     const padX = 5;
+    // Never chopped at the canvas edge.
+    const cw = (ctx.canvas && ctx.canvas.width) || 800;
+    x = Math.min(Math.max(x, w / 2 + padX + 2), cw - w / 2 - padX - 2);
+    y = Math.max(y, (opts.h || 16) / 2 + 2);
     const h = opts.h || 16;
     ctx.fillStyle = opts.bg || 'rgba(4, 8, 12, 0.82)';
     ctx.fillRect(x - w / 2 - padX, y - h / 2, w + padX * 2, h);
@@ -193,9 +199,12 @@ export class Burrower extends Entity {
         // Core plates already used for a stun. The lit (live) plate is the first
         // unspent id, so each stun moves to a new plate and a new stamp.
         this.spentPlateIds = [];
+        this.spentEchoIds = [];   // an echo can pay for at most one stun, ever
+        state.burrowerFailNote = null;
         const saved = state.bossCheckpointLive && state.bossCheckpoint ? state.bossCheckpoint[this.id] : null;
         if (saved && Number.isFinite(saved.hp)) this.hp = saved.hp;
         if (saved && Array.isArray(saved.spent)) this.spentPlateIds = [...saved.spent];
+        if (saved && Array.isArray(saved.echoes)) this.spentEchoIds = [...saved.echoes];
         if (this.hp <= 0) {
             this.hp = 0;
             this.defeated = true;
@@ -332,7 +341,7 @@ export class Burrower extends Entity {
 
     rememberCheckpoint() {
         if (!state.bossCheckpoint || typeof state.bossCheckpoint !== 'object') state.bossCheckpoint = {};
-        state.bossCheckpoint[this.id] = { hp: this.hp, spent: [...this.spentPlateIds] };
+        state.bossCheckpoint[this.id] = { hp: this.hp, spent: [...this.spentPlateIds], echoes: [...this.spentEchoIds] };
     }
 
     // Loudest wins: the live actor whose last step onto a crack or plate is the most
@@ -573,12 +582,25 @@ export class Burrower extends Entity {
         for (const plate of state.plates || []) {
             if (!ids.includes(plate.id)) continue;
             if (!orthoAdjacent(tile, plate)) continue;
-            if (actorPressesPlate(player, plate)) { this.stunPlateId = plate.id; return true; }
+            if (actorPressesPlate(player, plate)) {
+                this.stunPlateId = plate.id;
+                this.stunEchoId = actorTargetInfo(this.stampingEcho(tile, actors)).id;
+                return true;
+            }
         }
         return false;
     }
 
     echoStamped(tile, actors) {
+        return !!this.stampingEcho(tile, actors);
+    }
+
+    echoSpent(actor) {
+        return this.spentEchoIds.includes(actorTargetInfo(actor).id);
+    }
+
+    // The echo whose stamp counts on this tile (never one already spent on a stun).
+    stampingEcho(tile, actors, { includeSpent = false } = {}) {
         const key = 'k' + tile.x + ',' + tile.y;
         for (const actor of actors || []) {
             if (!actor || actor.isActive === false || actorTargetInfo(actor).kind !== 'echo') continue;
@@ -586,9 +608,17 @@ export class Burrower extends Entity {
             if (!n || n.surface !== key) continue;
             if (this.footing.get(actorKey(actor)) !== key) continue;
             // Strike tick minus centre-entry tick: 1..STAMP_ACCEPT_TICKS (45 ticks).
-            if (n.centerTick != null && this.clock - n.centerTick <= STAMP_ACCEPT_TICKS) return true;
+            if (!includeSpent && this.echoSpent(actor)) continue;
+            if (n.centerTick != null && this.clock - n.centerTick <= STAMP_ACCEPT_TICKS) return actor;
         }
-        return false;
+        return null;
+    }
+
+    // A spent echo stamped in the window: it no longer counts. Returns its label.
+    spentStampLabel(tile, actors) {
+        if (!tile || this.stampingEcho(tile, actors)) return null;
+        const a = this.stampingEcho(tile, actors, { includeSpent: true });
+        return a ? whoName('echo', actorTargetInfo(a).id) + ' spent' : null;
     }
 
     // An echo that stepped onto the locked crack this cycle but outside the window.
@@ -598,8 +628,10 @@ export class Burrower extends Entity {
             if (!actor || actorTargetInfo(actor).kind !== 'echo') continue;
             const n = this.noise.get(actorKey(actor));
             if (!n || n.surface !== key) continue;
+            if (this.echoSpent(actor)) continue;
             const t = n.centerTick ?? n.tick;
-            if (t >= this.lockClock - NOISE_TTL_TICKS && this.clock - t > STAMP_ACCEPT_TICKS) return true;
+            const d = this.clock - t;
+            if (d > STAMP_ACCEPT_TICKS && d <= EARLY_TICKS) return true;
         }
         return false;
     }
@@ -611,6 +643,8 @@ export class Burrower extends Entity {
 
     say(text, tile, color) {
         this.feedback = { text, x: tile.x + tile.w / 2, y: tile.y + tile.h + 14, ttl: FEEDBACK_TICKS, color };
+        // The LOOP FAILED overlay repeats a miss reason so it is never hidden.
+        state.burrowerFailNote = /TOO EARLY|spent/.test(text) ? text : null;
     }
 
     // Keep the locked crack intact (no weight crumble) until the strike lands.
@@ -703,10 +737,11 @@ export class Burrower extends Entity {
                 this.applyStun();
                 return;
             }
+            const spent = this.liveRingCracks().map(c => [c, this.spentStampLabel(c, actors)]).find(x => x[1]);
             const early = this.liveRingCracks().find(c => this.echoEarly(c, actors) || this.echoLate(c, actors));
             if (early) {
                 this.say(this.echoEarly(early, actors) ? 'TOO EARLY' : 'STAMP OK · hold the lit CORE plate', early, '#ff9a6a');
-            }
+            } else if (spent) this.say(spent[1], spent[0], '#ff9a6a');
             if (crack && this.crackIsTargetable(crack) && typeof crack.startCollapse === 'function') {
                 crack.showWarningRing?.();
                 crack.startCollapse();
@@ -725,6 +760,7 @@ export class Burrower extends Entity {
         const stamped = tile ? this.echoStamped(tile, actors) : false;
         if (tile && stamped) this.say(this.tileStuns(tile, actors) ? 'STAMP OK' : 'STAMP OK · hold the CORE plate', tile, '#9dffb0');
         else if (tile && this.echoEarly(tile, actors)) this.say('TOO EARLY', tile, '#ff9a6a');
+        else if (tile && this.spentStampLabel(tile, actors)) this.say(this.spentStampLabel(tile, actors), tile, '#ff9a6a');
         if (this.tileStuns(tile, actors)) {
             this.applyStun();
             return;
@@ -747,7 +783,8 @@ export class Burrower extends Entity {
             if (!ids.includes(plate.id) || !actorPressesPlate(player, plate)) continue;
             for (const crack of state.cracks || []) {
                 if (!crack || crack.broken || !orthoAdjacent(crack, plate)) continue;
-                if (this.echoStamped(crack, actors)) { this.stunPlateId = plate.id; return crack; }
+                const e = this.stampingEcho(crack, actors);
+                if (e) { this.stunPlateId = plate.id; this.stunEchoId = actorTargetInfo(e).id; return crack; }
             }
         }
         return null;
@@ -759,6 +796,11 @@ export class Burrower extends Entity {
             const used = this.stunPlateId || this.liveCoreIds()[0];
             if (used) this.spentPlateIds.push(used);
             this.stunPlateId = null;
+            if (this.stunEchoId != null && !this.spentEchoIds.includes(this.stunEchoId)) this.spentEchoIds.push(this.stunEchoId);
+            this.stunEchoId = null;
+            // Fresh start after a stun: the stun stamp's noise must not steer the next lock.
+            this.noise.clear();
+            this.hunt = null;
             this.rememberCheckpoint();
             this.stunFlash = 20;
             if (this.hp <= 0) {
@@ -930,7 +972,7 @@ export class Burrower extends Entity {
             const above = ptr.targetTile.y - 10;
             const below = ptr.targetTile.y + ptr.targetTile.h + 10;
             // Player mode: above the courier and the '!' (the sprite covers the tile).
-            const y = this.playerMode ? Math.max(12, ptr.targetTile.y - 40) : (above < 24 ? below : above);
+            const y = this.playerMode ? Math.max(12, ptr.targetTile.y - 58) : (above < 24 ? below : above);
             paintLabel(ctx, text, ptr.arrowTo.x, y, { color, h: 15 });
         }
     }
@@ -961,6 +1003,7 @@ export class Burrower extends Entity {
         const h = this.hunt;
         let label = this.huntLabel();
         if (!h || !label) return;
+        if (this.phase === 'stun' || this.phase === 'dormant' || this.defeated) return;
         // In player mode the strike tile sits under the hunted courier and already
         // says so; one label there, not two stacked ones.
         const ptr = this.targetPointers();
@@ -1120,7 +1163,12 @@ export class Burrower extends Entity {
                 if (wasOn === null) wasOn = on;
                 else if (on && !wasOn) {
                     const ticksBefore = now + left - t;
-                    return { ghostId: g.id, ticksBefore, inWindow: ticksBefore >= 1 && ticksBefore <= STAMP_ACCEPT_TICKS, tile: { x: tile.x, y: tile.y, w: tile.w, h: tile.h } };
+                    // ✓ only if the echo is still ON the crack when the strike lands.
+                    const e = g.runData[Math.min(g.runData.length - 1, now + left)];
+                    const ex = e ? e.x + (g.w || 30) / 2 : -1, ey = e ? e.y + (g.h || 30) / 2 : -1;
+                    const onAtStrike = ex >= tile.x && ex < tile.x + tile.w && ey >= tile.y && ey < tile.y + tile.h;
+                    const spent = this.spentEchoIds.includes(g.id);
+                    return { ghostId: g.id, ticksBefore, onAtStrike, spent, inWindow: !spent && onAtStrike && ticksBefore >= 1 && ticksBefore <= STAMP_ACCEPT_TICKS, tile: { x: tile.x, y: tile.y, w: tile.w, h: tile.h } };
                 }
                 wasOn = on;
             }
@@ -1161,7 +1209,11 @@ export class Burrower extends Entity {
         if (pred && pred.tile) {
             const t = pred.tile;
             const secs = (pred.ticksBefore / ticksPerSecond()).toFixed(2);
-            const text = pred.inWindow ? `ECHO ${pred.ghostId + 1} stamps ${secs}s before ✓` : `ECHO ${pred.ghostId + 1} stamps ${secs}s early ✗`;
+            const who = `ECHO ${pred.ghostId + 1}`;
+            const text = pred.inWindow ? `${who} stamps ${secs}s before ✓`
+                : pred.spent ? `${who} spent ✗`
+                : !pred.onAtStrike ? `${who} steps off before strike ✗`
+                : `${who} stamps ${secs}s early ✗`;
             ctx.save();
             ctx.globalAlpha = 0.55;
             ctx.strokeStyle = pred.inWindow ? '#9dffb0' : '#ff9a6a';
@@ -1180,6 +1232,19 @@ export class Burrower extends Entity {
     // read as live. Rendering only; the plate itself still presses as before.
     drawRetiredPlates(ctx) {
         const live = this.liveCoreIds();
+        // The lit core plate always carries a pulsing outline.
+        if (!this.defeated) {
+            const pulse = 0.5 + 0.5 * Math.abs(Math.sin((state.currentTick || 0) * 0.12));
+            for (const p of state.plates || []) {
+                if (!p || !live.includes(p.id)) continue;
+                ctx.save();
+                ctx.strokeStyle = `rgba(255, 214, 90, ${0.35 + 0.65 * pulse})`;
+                ctx.lineWidth = 2 + 2 * pulse;
+                ctx.strokeRect(p.x - 2, p.y - 2, p.w + 4, p.h + 4);
+                ctx.restore();
+                this._litPulse = pulse;
+            }
+        }
         for (const p of state.plates || []) {
             if (!p || !this.spentPlateIds.includes(p.id) || live.includes(p.id)) continue;
             ctx.save();

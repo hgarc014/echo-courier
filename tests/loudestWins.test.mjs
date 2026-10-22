@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { main, state, keys, LEVELS, replaySolution } from './harness/replay.mjs';
 
-const { Burrower, NOISE_TTL_TICKS, STAMP_WINDOW_TICKS, STAMP_ACCEPT_TICKS } = await import('../src/entities/bosses/Burrower.js');
+const { Burrower, NOISE_TTL_TICKS, STAMP_WINDOW_TICKS, STAMP_ACCEPT_TICKS, FEEDBACK_TICKS, EARLY_TICKS } = await import('../src/entities/bosses/Burrower.js');
 const { CrackedFloor } = await import('../src/entities/hazards.js');
 const { PressurePlate } = await import('../src/entities/interactables.js');
 
@@ -152,7 +152,7 @@ check('recorded route clears in 4 loops at par 4', () => {
 // Boss with an echo lure: the echo's step onto crack k (tick 1) is the newest noise
 // at the first lock, so the lock is k. The echo then waits off the floor and steps
 // back onto k `lead` ticks before the strike (lead 1 = the strike tick itself).
-function stampRun(lead, { courierOnPlate = true } = {}) {
+function stampRun(lead, { courierOnPlate = true, spentEchoes = [] } = {}) {
     resetWorld();
     const core = new PressurePlate('c1', 80, 80, []);
     state.plates = [core];
@@ -160,6 +160,7 @@ function stampRun(lead, { courierOnPlate = true } = {}) {
     state.cracks = [k];
     const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1, corePlateIds: ['c1'], maxStunsPerLoop: 1 });
     state.burrowers = [boss];
+    boss.spentEchoIds = [...spentEchoes];
     const player = { x: courierOnPlate ? 85 : 300, y: courierOnPlate ? 85 : 200, w: 30, h: 30 };
     const echo = { id: 0, runData: [], x: 85, y: 125, w: 30, h: 30, isActive: true };
     const strikeAt = boss.intervalTicks() + boss.telegraphTicks();
@@ -509,6 +510,68 @@ check('retired core plates are drawn greyed with a USED tag; the lit plate is no
     assert.ok(d.fills.some(([x, y]) => x === 80 && y === 80), 'c1 dimmed');
     assert.ok(!d.fills.some(([x]) => x === 400), 'lit c2 not dimmed');
     assert.ok(d.texts.includes('USED'));
+    state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
+check('a single echo can never stun twice: a spent echo stamping in the window does nothing and says so', () => {
+    const fresh = stampRun(30);
+    assert.equal(fresh.boss.hp, 2);
+    assert.deepEqual(fresh.boss.spentEchoIds, [0], 'the stamping echo is spent');
+    const again = stampRun(30, { spentEchoes: [0] });
+    assert.equal(again.boss.hp, 3, 'spent echo cannot stun');
+    assert.equal(again.log.feedback, 'ECHO 1 spent');
+    state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
+check('spent echoes survive the checkpoint (rewind)', () => {
+    const r = stampRun(30);
+    const cp = state.bossCheckpoint && Object.values(state.bossCheckpoint)[0];
+    assert.deepEqual(cp && cp.echoes, [0]);
+    void r; state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
+check('TOO EARLY covers stamps up to 1.5 s before the strike, shows >= 1 s, and is repeated on LOOP FAILED', () => {
+    assert.ok(FEEDBACK_TICKS >= 60);
+    assert.equal(EARLY_TICKS, 90);
+    for (const lead of [47, 70, 90]) {
+        const r = stampRun(lead);
+        assert.equal(r.boss.hp, 3);
+        assert.equal(r.log.feedback, 'TOO EARLY', 'lead ' + lead);
+        assert.equal(state.burrowerFailNote, 'TOO EARLY');
+    }
+});
+
+check('after a stun the noise is reset so the next lock is fresh', () => {
+    const r = stampRun(30);
+    assert.equal(r.boss.hp, 2);
+    assert.equal(r.boss.noise.size, 0);
+    assert.ok(!r.boss.hunt || r.boss.hunt.byNoise === false, 'no stale noise hunt');
+    state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
+check('the lit core plate always has a pulsing outline', () => {
+    resetWorld();
+    state.plates = [new PressurePlate('c1', 80, 80, []), new PressurePlate('c2', 400, 80, [])];
+    const boss = new Burrower(300, 300, { corePlateIds: ['c1', 'c2'] });
+    const outline = (tick) => {
+        state.currentTick = tick;
+        const rects = []; const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? () => ({ width: 10 }) : k === 'strokeRect' ? (x, y) => rects.push([x, y]) : () => {}), set: () => true });
+        boss.drawRetiredPlates(ctx);
+        return { rects, pulse: boss._litPulse };
+    };
+    const a = outline(0), b = outline(13);
+    assert.ok(a.rects.some(([x, y]) => x === 78 && y === 78), 'c1 outlined');
+    assert.notEqual(a.pulse, b.pulse, 'outline pulses');
+    state.currentTick = 0;
+});
+
+check('hunting label is hidden during the stun', () => {
+    const r = stampRun(30);
+    assert.equal(r.boss.phase, 'stun');
+    const { ctx, calls } = recCtx();
+    r.boss.hunt = { x: 85, y: 85, w: 30, h: 30, kind: 'player', id: 'player', byNoise: false };
+    r.boss.drawHunt(ctx);
+    assert.ok(!calls.some(t => /hunting/i.test(t)));
     state.bossCheckpoint = null; state.bossCheckpointLive = false;
 });
 

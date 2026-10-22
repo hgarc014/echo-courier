@@ -171,6 +171,8 @@ function withStamper(boss, player) {
     let first = true;
     return () => {
         const t = boss.lockedTile;
+        // One echo pays for one stun: a fresh echo stamps after each stun.
+        echo.id = (boss.spentEchoIds || []).length;
         // Lure: the echo's step onto the first crack is the newest noise at the
         // first lock (it is listed after the courier, so it wins the tie).
         if (first) {
