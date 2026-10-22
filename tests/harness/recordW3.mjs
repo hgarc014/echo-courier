@@ -247,7 +247,8 @@ function solveL4() {
     // Loop 1 (echo): toss the decoy from the top of the gap so it lands north of
     // the crack, then get out of sight to the east. The guard walks over the crack.
     // Loop 2: come up behind the guard, stamp the crack so it collapses behind
-    // them, then haul the heavy crate along the bottom while the camera is off it.
+    // them, then haul the heavy crate along the bottom while the camera looks north
+    // (a ~3 s window: delays about 0-180 and 350-550 all clear).
     return search('W3-L4', (d) => {
         walk(70, 145); tick({}, ['space']); tick();
         walk(230, 25); tick({ x: 0, y: 1 }); tick({}, ['f']); tick();
@@ -263,7 +264,7 @@ function solveL4() {
         waitUntil(() => doorOpen('td1'), 400, 'L4 timer');
         walk(720, 505); tick({}, ['space']);
         for (let i = 0; i < 10 && state.gameState !== 'LEVEL_COMPLETE'; i++) tick();
-    }, range(470, 485, 5));
+    }, range(100, 180, 10));
 }
 function relaySolved(id) {
     return !!state.wardens?.[0]?.solved?.has(id);

@@ -95,7 +95,9 @@ const W3_L3_LAYOUT = base({
 
 // Guard walks the haul lane. Decoy landing is north of a fast crack, so the
 // lure crosses the tile and the second echo can collapse it behind them.
-// Camera looks south across the haul; the upper room is outside the sweep.
+// The camera faces east and sweeps north-south, so it only rakes the east end of
+// the haul lane for part of each sweep: a readable ~3 s gap to take the crate
+// through (it used to sweep the whole lane, which left a ~15-tick window).
 const W3_L4_LAYOUT = base({
     player: { x: 40, y: 500 },
     deliveryZone: { x: 680, y: 470, w: 90, h: 90 },
@@ -115,7 +117,7 @@ const W3_L4_LAYOUT = base({
         { x: 70, y: 140, id: 'decoy1', packageType: 'decoy', requiredForDelivery: false },
         { x: 160, y: 500, id: 'pkg1', packageType: 'heavy', requiredForDelivery: true }
     ],
-    cameras: [{ x: 400, y: 360, baseAngle: Math.PI / 2, sweepRange: Math.PI / 2 }],
+    cameras: [{ x: 400, y: 360, baseAngle: 0, sweepRange: Math.PI / 2 }],
     guards: [{ path: [{ x: 240, y: 500 }, { x: 420, y: 500 }] }],
     cracks: [{ x: 200, y: 320, w: 80, h: 80 }]
 });
@@ -198,8 +200,8 @@ export const W3_LEVELS = [
     ),
     level(
         'W3-L4: Heavy Contraband',
-        'Lure the guard across the crack, collapse it behind them, then haul through the timed gate.',
-        'The heavy crate is too slow for one gap. One echo throws a decoy. The next walks the crack so the patrol cannot come back. You take the long window through the clock door.',
+        'Toss the decoy north of the crack so the guard crosses it. Step on the crack behind them, then haul the crate along the bottom while the camera looks north.',
+        'The heavy crate is too slow to pass the patrol. Loop 1: from the top of the gap, toss the decoy so it lands north of the crack. Next loop: once the guard has crossed, step on the crack so it breaks behind them. Then haul the crate along the bottom wall when the camera swings north, and take the clock door.',
         3, 2, 35, W3_L4_LAYOUT,
         { ...TOSS, crackSpeed: 'fast' }
     ),
