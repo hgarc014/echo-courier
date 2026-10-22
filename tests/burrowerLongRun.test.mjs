@@ -64,6 +64,11 @@ function assertTelegraph(boss, where) {
         assert.equal(boss.lockedTile, null, where + ' den fallback has no crack');
         return;
     }
+    // Player mode strikes the courier's own grid tile, on any floor.
+    if (boss.playerMode) {
+        assert.ok(boss.lockedTile && boss.lockedTile.w === 40 && boss.lockedTile.h === 40, where + ' player tile');
+        return;
+    }
     const crack = boss.findCrack(boss.lockedTile);
     assert.ok(crack, where + ' telegraph has no crack');
     assert.equal(crack.broken, false, where);
@@ -131,7 +136,10 @@ check('a collapsing or broken crack is never the telegraphed tile', () => {
         step(boss, [body(spent.x + 5, spent.y + 5)], 'skip broken');
         if (boss.phase === 'telegraph' && !boss.homeFallback) {
             saw = true;
-            assert.ok(!(boss.lockedTile.x === spent.x && boss.lockedTile.y === spent.y));
+            // With no noise the courier is the target: the strike goes to their own
+            // tile on any floor (here a spent crack), never to some other crack.
+            assert.equal(boss.playerMode, true);
+            assert.deepEqual(boss.lockedTile, boss.playerTile(body(spent.x + 5, spent.y + 5)));
         }
     }
     assert.equal(saw, true);
@@ -139,16 +147,27 @@ check('a collapsing or broken crack is never the telegraphed tile', () => {
 
 check('200s on a core plate: presses, surfaces, then the stun cap is a loop clock', () => {
     const { boss } = sinkhole();
-    const plate = state.plates.find(p => p.id === 'c1');
+    // The lit core plate (each stun spends it and lights the next).
+    const plate = state.plates.find(p => p.id === boss.liveCoreIds()[0]);
     const player = body(plate.x + (plate.w - 30) / 2, plate.y + (plate.h - 30) / 2);
-    const actorsAt = () => [player];
+    // 'Loudest wins': a stun needs an echo stamping the struck crack while the courier
+    // holds the plate. This echo waits off the floor and steps onto the locked crack in
+    // the last 10 ticks of each telegraph (was: courier alone on the plate stunned).
+    const echo = body(300, 300, { id: 0, runData: [] });
+    const actorsAt = () => {
+        const tile = boss.lockedTile;
+        if (boss.phase === 'telegraph' && tile && boss.telegraphTicks() - boss.phaseTicks <= 10) {
+            echo.x = tile.x + (tile.w - 30) / 2; echo.y = tile.y + (tile.h - 30) / 2;
+        } else { echo.x = 300; echo.y = 300; }
+        return [player, echo];
+    };
     let dormantAt = -1;
     let presses = 0;
     const bound = boss.intervalTicks() + boss.telegraphTicks() + 5;
     let windowStart = 0;
     for (let t = 0; t < SIM_TICKS; t++) {
         const prev = step(boss, actorsAt(), `plate t=${t}`);
-        assert.equal(plate.isPressed, true, `c1 not pressed at ${t}`);
+        assert.equal(plate.isPressed, true, `${plate.id} not pressed at ${t}`);
         assert.equal(plate.pressVisual().pressed, true);
         presses++;
         if (boss.phase === 'telegraph') assertTelegraph(boss, `plate t=${t}`);

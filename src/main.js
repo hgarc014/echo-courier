@@ -1464,7 +1464,7 @@ function update() {
     }
 
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
-    for (const burrower of state.burrowers || []) burrower.update(allActors);
+    for (const burrower of state.burrowers || []) { const fail = burrower.update(allActors); if (fail) { levelFailed(fail); return; } }
     syncBossHud();
     for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
     // The floor resolves after the strike decision. Drop a mark that the crack
@@ -2187,6 +2187,7 @@ function draw() {
             ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
             ctx.font = '16px "Space Grotesk"'; ctx.fillStyle = '#ffd0d0'; ctx.fillText('Rewinding — this run will NOT become an echo.', 400, 335);
             ctx.fillText(`Failed loops this level: ${state.loopFails || 1}`, 400, 360);
+            if (state.burrowerFailNote) { ctx.font = 'bold 18px "Space Grotesk"'; ctx.fillStyle = '#ffb08a'; ctx.fillText('Echo stamp: ' + state.burrowerFailNote, 400, 385); }
             ctx.textAlign = 'left';
         }
     }

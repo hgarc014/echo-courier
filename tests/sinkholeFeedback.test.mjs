@@ -28,7 +28,9 @@ check('item 1: arrow, ring, countdown and core plate name one locked tile from l
     state.cracks = [new CrackedFloor(0, 0, 40, 40, 'fast'), new CrackedFloor(400, 0, 40, 40, 'fast')];
     const boss = new Burrower(100, 100, { surfaceInterval: 1, telegraphTime: 0.5, corePlateIds: ['c1', 'c2'] });
     state.burrowers = [boss];
-    const player = { x: 5, y: 5, w: 30, h: 30 };
+    // The lure is an echo: its step onto the left crack is the noise, so the lock
+    // goes to a crack (a courier lure would draw a strike on their own tile).
+    const player = { x: 5, y: 5, w: 30, h: 30, id: 0, runData: [], isActive: true };
     let locked = null;
     let struck = false;
     for (let t = 0; t < 200 && !struck; t++) {
@@ -57,7 +59,7 @@ check('F5: a locked tile that breaks is never struck again; the mark moves to an
     const boss = new Burrower(100, 100, { surfaceInterval: 0.5, telegraphTime: 0.25 });
     let starts = 0;
     for (const c of state.cracks) { const orig = c.startCollapse.bind(c); c.startCollapse = () => { if (c.broken || c.collapsing) throw new Error('struck a broken tile'); starts++; return orig(); }; }
-    const actor = { x: 5, y: 5, w: 30, h: 30 };
+    const actor = { x: 5, y: 5, w: 30, h: 30, id: 0, runData: [], isActive: true };
     boss.update([actor]);
     assert.ok(same(boss.getUiState().targetTile, state.cracks[0]));
     state.cracks[0].broken = true;
@@ -69,27 +71,19 @@ check('F5: a locked tile that breaks is never struck again; the mark moves to an
     assert.ok(starts >= 1, 'it kept surfacing on the intact crack');
 });
 
-check('F6: the first strike of a loop goes to the echo, whichever way it or the courier steps first', () => {
-    const dirs = [[-6, 0], [6, 0], [0, -6], [0, 6], [6, 6], [-6, -6]];
-    for (const [ex, ey] of dirs) for (const [px, py] of [[0, 0], [-ex, -ey], [ex, ey]]) {
-        resetWorld();
-        state.cracks = [new CrackedFloor(0, 0, 40, 40, 'fast'), new CrackedFloor(400, 400, 40, 40, 'fast'), new CrackedFloor(0, 400, 40, 40, 'fast'), new CrackedFloor(400, 0, 40, 40, 'fast')];
-        const boss = new Burrower(380, 380, { surfaceInterval: 3, telegraphTime: 1 });
-        const player = { x: 200, y: 200, w: 30, h: 30 };
-        const echo = { id: 0, runData: [], x: 200 + ex, y: 200 + ey, w: 30, h: 30, isActive: true };
-        player.x += px; player.y += py;
-        boss.update([player, echo]);
-        const ui = boss.getUiState();
-        assert.equal(ui.targetKind, 'echo', `echo step ${ex},${ey} player step ${px},${py}`);
-        assert.equal(ui.targetId, 0);
-        assert.ok(ui.targetTile, 'locked on the first update');
-    }
-    // With no echo, the courier is the lure.
+// F6 is superseded by 'Loudest wins' (the lowest-echo-id first-strike rule is gone):
+// with no noise yet the live courier is hunted, even with an echo stacked on spawn.
+check('F6 (Loudest wins): no noise yet means the live courier is hunted from the first lock', () => {
     resetWorld();
-    state.cracks = [new CrackedFloor(0, 0, 40, 40, 'fast')];
-    const solo = new Burrower(300, 300, {});
-    solo.update([{ x: 100, y: 100, w: 30, h: 30 }]);
-    assert.equal(solo.getUiState().targetKind, 'player');
+    state.cracks = [new CrackedFloor(0, 0, 40, 40, 'fast'), new CrackedFloor(400, 400, 40, 40, 'fast')];
+    const boss = new Burrower(380, 380, { surfaceInterval: 3, telegraphTime: 1 });
+    const player = { x: 200, y: 200, w: 30, h: 30 };
+    const echo = { id: 0, runData: [], x: 200, y: 200, w: 30, h: 30, isActive: true };
+    boss.update([player, echo]);
+    const ui = boss.getUiState();
+    assert.equal(ui.targetKind, 'player');
+    assert.equal(ui.huntLabel, 'hunting YOU (no noise yet)');
+    assert.ok(ui.targetTile, 'locked on the first update');
 });
 
 check('F1: a press plays the chime, flashes, and draws the pad pressed in', () => {
