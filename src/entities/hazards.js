@@ -1039,6 +1039,17 @@ export class CrackedFloor extends Entity {
         }
         return false;
     }
+    // Knit a spent tile back to intact floor. Used when the burrower has no legal target.
+    restoreIntact() {
+        this.ticks = 0;
+        this.stage = 0;
+        this.collapsing = false;
+        this.broken = false;
+        this.warningTicks = 0;
+        this.showingWarning = false;
+        this.warningCommitted = false;
+        this.ringShown = false;
+    }
     // Telegraph / dust ring. Does not by itself start the crumble timer.
     showWarningRing() {
         if (this.broken || this.collapsing || this.overlapsPlate()) return;
@@ -1163,6 +1174,24 @@ export class CrackedFloor extends Entity {
     renderPit(ctx) {
         this.renderFloor(ctx, 0, '#5a3d28');
         drawKillHole(ctx, this, this.killFraction());
+        if (this.broken) {
+            // HOLE: dark red rim so it never reads as a crack or safe floor.
+            ctx.save();
+            ctx.strokeStyle = '#d0302a';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.x + 1, this.y + 1, this.w - 2, this.h - 2);
+            ctx.restore();
+        }
+    }
+    // CRACK: fracture lines and a dashed sand border. Safe floor has neither.
+    drawIntactCrackLook(ctx) {
+        this.drawFractures(ctx, 2, 'rgba(45, 22, 6, 0.85)', 1.5);
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = 'rgba(240, 200, 120, 0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(this.x + 1, this.y + 1, this.w - 2, this.h - 2);
+        ctx.restore();
     }
     renderFloor(ctx, inset, fallback) {
         const img = resolveSprite(state, 'crack');
@@ -1176,12 +1205,16 @@ export class CrackedFloor extends Entity {
             this.renderPit(ctx);
             return;
         }
-        if (this.showingWarning || (this.collapsing && this.stage === 1)) {
+        // Only a real, running warning draws a ring here (weight or cascade, or the
+        // first crumble stage). The burrower draws its own single strike mark, so a
+        // ring left over from an earlier telegraph never shows as a second marker.
+        if (this.warningCommitted || (this.collapsing && this.stage === 1)) {
             drawKillRing(ctx, this, this.killFraction());
         }
         const stage = this.collapsing ? this.stage : 0;
         if (stage === 0) {
             this.renderFloor(ctx, 0, '#966432');
+            this.drawIntactCrackLook(ctx);
             return;
         }
         if (stage >= 2) this.renderPit(ctx);

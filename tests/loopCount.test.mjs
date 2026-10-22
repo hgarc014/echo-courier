@@ -102,7 +102,7 @@ function rewind() {
 
 function hudPhrase() {
     assert.match(markup, /<span id="loop-of"[^>]*>[\s\S]*?<span id="loop-budget"><\/span><\/span>/);
-    assert.match(markup, /<span id="loop-over"[^>]*>[\s\S]*?<span id="loop-par"><\/span>\)<\/span>/);
+    assert.match(markup, /<span id="loop-over"[^>]*>[\s\S]*?<span id="loop-par"><\/span>&nbsp;\(no penalty\)<\/span>/);
     assert.match(markup, /id="loop-budget"/);
     assert.match(markup, /id="loop-par"/);
     const loop = document.getElementById('loop-count').innerText;
@@ -114,7 +114,7 @@ function hudPhrase() {
     const par = document.getElementById('loop-par').innerText;
     const over = overEl && !overEl.classList.contains('hidden');
     const showOf = !over && ofEl && !ofEl.classList.contains('hidden') && budget !== '';
-    const head = over ? `Loop ${loop} · over par (${par})` : (showOf ? `Loop ${loop} of ${budget}` : `Loop ${loop}`);
+    const head = over ? `Loop ${loop} · over par ${par} (no penalty)` : (showOf ? `Loop ${loop} of ${budget}` : `Loop ${loop}`);
     return `${head} · Echoes ${echoes}/${max}`;
 }
 
@@ -139,7 +139,7 @@ check('HUD shows the live loop, including after the echo buffer drops a run', ()
     assert.equal(state.loopNumber, 4);
     assert.equal(state.pastRuns.length, 1);
     assert.equal(hud.innerText, '4');
-    assert.equal(hudPhrase(), 'Loop 4 · over par (2) · Echoes 1/1');
+    assert.equal(hudPhrase(), 'Loop 4 · over par 2 (no penalty) · Echoes 1/1');
     assert.doesNotMatch(hudPhrase(), / of /);
     assert.equal(LEVELS[firstShift].challenge.check(), false);
 
@@ -157,7 +157,7 @@ check('two rewinds on Level 1 keep going and do not read as Loop 3 / Max 2', () 
     rewind();
     assert.equal(state.loopNumber, 3);
     assert.equal(state.pastRuns.length, 1);
-    assert.equal(hudPhrase(), 'Loop 3 · over par (2) · Echoes 1/1');
+    assert.equal(hudPhrase(), 'Loop 3 · over par 2 (no penalty) · Echoes 1/1');
     assert.doesNotMatch(hudPhrase(), /Max/);
     assert.doesNotMatch(hudPhrase(), / of /);
     assert.notEqual(hudPhrase(), 'Loop 3 / Max 2');
@@ -165,7 +165,7 @@ check('two rewinds on Level 1 keep going and do not read as Loop 3 / Max 2', () 
     rewind();
     assert.equal(state.loopNumber, 4);
     assert.equal(state.pastRuns.length, LEVELS[firstShift].maxGhosts);
-    assert.equal(hudPhrase(), 'Loop 4 · over par (2) · Echoes 1/1');
+    assert.equal(hudPhrase(), 'Loop 4 · over par 2 (no penalty) · Echoes 1/1');
     assert.equal(document.getElementById('loop-of').classList.contains('hidden'), true);
     assert.equal(document.getElementById('loop-over').classList.contains('hidden'), false);
 });

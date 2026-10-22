@@ -105,6 +105,7 @@ export function setEditorLevelMetaFromLevel(level) {
     if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
     copyBossMeta(level, state.editorLevelMeta);
     if (level.challenge && !level.isPlaytest) state.editorLevelMeta.challengeRef = level.name;
+    markEditorHintSaved(state.editorLevelMeta.hintLine || '');
     return state.editorLevelMeta;
 }
 
@@ -127,6 +128,7 @@ function syncLevelConfigForm() {
     if (obj) obj.value = meta.obj || '';
     const hintEl = document.getElementById('editor-meta-hint');
     if (hintEl) hintEl.value = meta.hintLine || '';
+    markEditorHintSaved(meta.hintLine || '');
     const pitEl = document.getElementById('editor-meta-pitfraction');
     if (pitEl) pitEl.value = meta.pitKillFraction != null ? String(meta.pitKillFraction) : '';
     if (maxG) maxG.value = meta.maxGhosts ?? 3;
@@ -250,12 +252,34 @@ export function flushEditorLevelConfig() {
     return applyLevelConfigForm();
 }
 
+// Editor saves are explicit named slots (Save button); nothing else in the layout
+// autosaves, so the hint line follows the same model: a typed hint is live in the
+// level meta at once, but until Save it shows an "unsaved" notice and the page
+// warns before unload.
+let savedHintLine = '';
+export function markEditorHintSaved(value) {
+    savedHintLine = normalizeHintLine(value) || '';
+}
+export function editorHintUnsaved() {
+    const meta = state.editorLevelMeta || {};
+    return (meta.hintLine || '') !== savedHintLine;
+}
+export const HINT_UNSAVED_NOTICE = 'Hint line not saved — press Save';
+function noteHintDirty() {
+    if (editorHintUnsaved()) setSaveStatus(HINT_UNSAVED_NOTICE, false);
+}
+
 let hintAutosaveBound = false;
 export function bindEditorHintAutosave() {
     const hintEl = document.getElementById('editor-meta-hint');
     if (!hintEl || hintAutosaveBound) return;
     hintAutosaveBound = true;
-    const write = () => commitEditorHintLine(hintEl.value);
+    const write = () => { commitEditorHintLine(hintEl.value); noteHintDirty(); };
+    if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('beforeunload', (e) => {
+            if (editorHintUnsaved()) { e.preventDefault(); e.returnValue = HINT_UNSAVED_NOTICE; }
+        });
+    }
     hintEl.addEventListener('input', write);
     hintEl.addEventListener('change', write);
 }
@@ -521,6 +545,7 @@ export function initEditor(canvas, ctx) {
         if (nameEl) nameEl.value = name;
         try {
             localStorage.setItem(EDITOR_SAVE_PREFIX + name, currentLayoutJson());
+            markEditorHintSaved(state.editorLevelMeta?.hintLine || '');
             refreshSaveSlotList();
             setSaveStatus(`Saved "${name}"`);
         } catch (err) {

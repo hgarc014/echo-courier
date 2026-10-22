@@ -220,17 +220,17 @@ export const W2_LEVELS = [
     ),
     level(
         'W2-MB: Sinkhole',
-        'Lure the Burrower onto a crack beside a pressed core plate. Three stuns open the door.',
-        'Something is moving under the subfloor. It surfaces under whoever is nearest, then the tile is gone. The three core plates are the only thing that stops it. One phase per heartbeat.',
+        'Stun the Burrower 3 times: stand on the gold CORE plate touching the dusted crack. One stun per loop — the loop clock rewinds to wake it. An echo can hold a plate. Then carry the package through the door.',
+        'Something under the subfloor surfaces on the crack nearest to you or your echo, and that tile falls. Stand on the gold core plate that touches the dusted crack to stun it. One stun per loop, then it sleeps until the loop clock rewinds. Three stuns open the door. An echo is another body: it can hold a plate while you move.',
         3, 2, 30, W2_MB_LAYOUT,
         {
             unlocks: ['dash'],
             flags: {
                 isBoss: true,
-                hintLine: 'A surfacing on a crack touching a pressed core plate stuns it once per loop. Hold the plate — do not stand on the crack. When the loop timer runs out, that run becomes an echo.',
+                hintLine: 'NOW: dust marks the crack it will break. A surfacing on a crack touching a pressed core plate stuns it once per loop. Hold the gold CORE plate — do not stand on the crack. When the loop clock hits zero it wakes, and that run becomes an echo that can hold a plate.',
                 bossIntro: {
                     speaker: 'BURROWER',
-                    text: 'Dust marks the crack where I surface. Hold a core plate beside that crack. I stun only when the crack touches the plate you are holding.'
+                    text: 'Dust marks the crack where I surface. I stun only when the crack touches the plate you are holding. One stun, then I sleep until your loop clock rewinds. Your echoes are bodies too.'
                 }
             }
         }

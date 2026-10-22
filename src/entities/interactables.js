@@ -300,10 +300,88 @@ export class Package extends Entity {
     }
 }
 
+export const PRESS_FLASH_TICKS = 20;
 export class PressurePlate extends Entity {
-    constructor(id, x, y, linkedIds) { super(x, y, 40, 40, 'plate'); this.id=id; this.linkedIds=Array.isArray(linkedIds)?linkedIds:[linkedIds]; this.isPressed=false; this.arrivalTicks=[]; }
+    constructor(id, x, y, linkedIds) { super(x, y, 40, 40, 'plate'); this.id=id; this.linkedIds=Array.isArray(linkedIds)?linkedIds:[linkedIds]; this.isPressed=false; this.arrivalTicks=[]; this.pressFlash=0; }
+    notePressEdge(wasPressed) {
+        if (this.pressFlash > 0) this.pressFlash--;
+        if (this.isPressed && !wasPressed) {
+            SFX.platePress();
+            this.pressFlash = PRESS_FLASH_TICKS;
+        }
+    }
+    // True when a burrower's countdown tile touches this core plate.
+    isBurrowerHighlight() {
+        for (const boss of state.burrowers || []) {
+            if (typeof boss.getUiState !== 'function') continue;
+            if (boss.getUiState().highlightPlateId === this.id) return true;
+        }
+        return false;
+    }
+    // What render draws for a press. Tests read this so the glow cannot drift from the flag.
+    pressVisual() {
+        const pressed = !!this.isPressed;
+        const core = this.isCorePlate();
+        return {
+            pressed,
+            core,
+            glow: pressed ? '#ffe14a' : null,
+            fill: pressed ? 'rgba(255, 225, 74, 0.45)' : null,
+            // Pressed-in look: the pad is drawn inset this many px with a dark lip.
+            insetPx: pressed ? 4 : 0,
+            // Outer bloom; bigger for a short burst right after the press.
+            glowBlur: pressed ? (this.pressFlash > 0 ? 24 : 12) : 0,
+            flash: this.pressFlash > 0,
+            highlight: core && this.isBurrowerHighlight(),
+            label: core ? (pressed ? 'HELD' : 'CORE') : ''
+        };
+    }
+    drawPressFeedback(ctx) {
+        const vis = this.pressVisual();
+        if (vis.highlight) {
+            const t = Number(state.currentTick) || 0;
+            ctx.save();
+            ctx.strokeStyle = `rgba(255, 196, 90, ${0.6 + 0.4 * Math.abs(Math.sin(t * 0.2))})`;
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 4]);
+            ctx.strokeRect(this.x - 5, this.y - 5, this.w + 10, this.h + 10);
+            ctx.restore();
+        }
+        if (vis.pressed) {
+            const i = vis.insetPx;
+            ctx.save();
+            // Dark lip around the sunk pad.
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+            ctx.fillRect(this.x, this.y, this.w, i);
+            ctx.fillRect(this.x, this.y, i, this.h);
+            ctx.shadowColor = vis.glow;
+            ctx.shadowBlur = vis.glowBlur;
+            ctx.fillStyle = vis.fill;
+            ctx.fillRect(this.x + i, this.y + i, this.w - i, this.h - i);
+            ctx.strokeStyle = vis.glow;
+            ctx.lineWidth = vis.flash ? 6 : 4;
+            ctx.strokeRect(this.x + 1, this.y + 1, this.w - 2, this.h - 2);
+            if (vis.flash) {
+                const k = this.pressFlash / PRESS_FLASH_TICKS;
+                ctx.strokeStyle = `rgba(255, 240, 160, ${k})`;
+                ctx.lineWidth = 3;
+                const g = 4 + (1 - k) * 14;
+                ctx.strokeRect(this.x - g, this.y - g, this.w + g * 2, this.h + g * 2);
+            }
+            ctx.restore();
+        }
+        if (!vis.label) return;
+        ctx.save();
+        ctx.font = 'bold 10px "Space Grotesk", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = vis.pressed ? '#ffe14a' : '#ffb000';
+        ctx.fillText(vis.label, this.x + this.w / 2, this.y - 2);
+        ctx.restore();
+    }
     update(actors, pkgs) {
         const now = Number(state.currentTick) || 0;
+        const wasPressed = this.isPressed;
         const prev = this._occupantArrivals || new Map();
         const next = new Map();
         const consider = (key, box) => {
@@ -321,6 +399,7 @@ export class PressurePlate extends Entity {
         this._occupantArrivals = next;
         this.isPressed = next.size > 0;
         this.arrivalTicks = [...next.values()];
+        this.notePressEdge(wasPressed);
     }
     isCorePlate() {
         const id = this.id;
@@ -360,11 +439,13 @@ export class PressurePlate extends Entity {
             ctx.fillStyle = this.isPressed ? '#ffe14a' : '#ffcc33';
             ctx.fill();
             ctx.restore();
+            this.drawPressFeedback(ctx);
             return;
         }
         if (img) drawSprite(ctx, img, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
         else super.render(ctx);
         if (this.isPressed) { ctx.strokeStyle='#ffdd00'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
+        this.drawPressFeedback(ctx);
     }
 }
 
@@ -373,12 +454,14 @@ export class TemporalPlate extends PressurePlate {
         super(id, x, y, linkedIds); 
         this.requiredTimeline = normalizeTimeline(requiredTimeline); 
     }
-    update(actors) { 
+    update(actors) {
+        const wasPressed = this.isPressed;
         this.isPressed = false;
         // `last` resolves to the newest surviving echo id after maxGhosts pruning.
         const validActor = pickTemporalActor(this.requiredTimeline, actors, state.activeGhosts);
         
         if (validActor && actorPressesPlate(validActor, this, PLATE_PRESS_FRACTION)) this.isPressed = true;
+        this.notePressEdge(wasPressed);
     }
     render(ctx) {
         const tintKey = this.requiredTimeline === 'present' ? 'platePresent'
@@ -397,6 +480,7 @@ export class TemporalPlate extends PressurePlate {
         const pulse = this.isPressed ? 1 : 0.75;
         if (img) drawSprite(ctx, img, this.x, this.y, this.w, this.h, { valign: 'center', alpha: pulse });
         if (this.isPressed) { ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(this.x, this.y, this.w, this.h); }
+        this.drawPressFeedback(ctx);
         drawTemporalGlyph(ctx, this.requiredTimeline, this.x + this.w / 2, this.y + this.h / 2, 13);
     }
 }

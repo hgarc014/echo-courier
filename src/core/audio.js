@@ -11,7 +11,7 @@ const BASE_TRACK_VOLUME = 0.4;
 const BASE_BOSS_VOLUME = 0.5;
 
 export function playTone(freq, type, duration, vol=0.5, slideFreq=null) {
-    if (audioCtx.state === 'suspended') return;
+    if (!audioCtx || audioCtx.state === 'suspended' || typeof audioCtx.createOscillator !== 'function') return;
     const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
     osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
     if (slideFreq) osc.frequency.exponentialRampToValueAtTime(slideFreq, audioCtx.currentTime + duration);
@@ -21,6 +21,9 @@ export function playTone(freq, type, duration, vol=0.5, slideFreq=null) {
 
 export const SFX = {
     interact: () => playTone(600, 'sine', 0.1, 0.3, 800),
+    // Short click on the frame a plate goes down. Not a loop, so holding it stays quiet.
+    // Two-step chime, louder than a UI click, so a cold player hears the press.
+    platePress: () => { playTone(660, 'square', 0.09, 0.4, 990); setTimeout(() => playTone(1320, 'triangle', 0.12, 0.35, 1760), 70); },
     pickup: () => playTone(520, 'triangle', 0.12, 0.28, 760),
     drop: () => playTone(280, 'sine', 0.1, 0.25, 140),
     break: () => { playTone(180, 'sawtooth', 0.25, 0.45, 60); setTimeout(() => playTone(90, 'square', 0.15, 0.2), 80); },

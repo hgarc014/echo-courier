@@ -2,6 +2,13 @@
 // Times on the entity are seconds (60 Hz). Home is startX/startY; between strikes
 // it waits there (on or under the den) and slides to the victim's crack during the
 // dust telegraph so replays stay stable.
+//
+// A telegraphed tile is always an intact crack: not broken, not collapsing, and not
+// overlapping a plate. If the locked tile later breaks, the next tick retargets.
+// Cracks heal when the loop reloads (rewind). If none are left mid-loop, spent tiles
+// that no body is standing on are knitted back; if every spent tile is occupied, the
+// burrower surfaces at its den on the same timer instead of idling. Dormant (the
+// per-loop stun cap) is a countdown to that rewind, not a freeze.
 import { state } from '../../core/state.js';
 import { Entity } from '../base.js';
 import { AABB } from '../../core/physics.js';
@@ -10,6 +17,14 @@ import { actorPressesPlate, killZone } from '../../core/hitZones.js';
 import { drawKillRing } from '../hazards.js';
 
 const TICKS_PER_SECOND = 60;
+// Every loop starts with the courier and all echoes stacked on the spawn tile, so
+// "nearest actor" is a tie on tick 1. The cycle waits (counting toward the same
+// interval, so the cadence is unchanged) until bodies separate, at most this long,
+// before it locks. A tie that survives the wait goes to the echo, so an echo lure
+// works from the first strike of a loop.
+// A locked crack this close to the lure (centre to centre, at lock time) is a lure strike.
+export const LURE_NEAR_PX = 120;
+const TIE_EPS = 1;
 
 export function burrowerTicks(seconds) {
     const n = Number(seconds);
@@ -40,6 +55,16 @@ function center(a) {
 }
 
 // Ghosts carry a numeric id (and runData). The live courier does not.
+export function firstEchoOf(actors) {
+    let best = null;
+    for (const a of actors || []) {
+        if (!a || a.isActive === false || a.isDestroyed) continue;
+        if (actorTargetInfo(a).kind !== 'echo') continue;
+        if (!best || (a.id ?? 0) < (best.id ?? 0)) best = a;
+    }
+    return best;
+}
+
 export function actorTargetInfo(actor) {
     if (!actor) return { kind: null, id: null };
     if (typeof actor.id === 'number' || Array.isArray(actor.runData)) {
@@ -133,6 +158,8 @@ export class Burrower extends Entity {
         this.phaseTicks = 0;
         this.cycleTicks = 0;
         this.cycleLocked = false;
+        this.firstLockPending = true;
+        this.lockStart = null;
         this.lockedTile = null;
         this.teleOriginX = x;
         this.teleOriginY = y;
@@ -143,6 +170,7 @@ export class Burrower extends Entity {
         this.aimX = null;
         this.aimY = null;
         this.previewTile = null;
+        this.homeFallback = false;
         const saved = state.bossCheckpointLive && state.bossCheckpoint ? state.bossCheckpoint[this.id] : null;
         if (saved && Number.isFinite(saved.hp)) this.hp = saved.hp;
         if (this.hp <= 0) {
@@ -166,18 +194,65 @@ export class Burrower extends Entity {
         return 0;
     }
 
+    loopClock() {
+        const seconds = Number(state.currentLevelMeta?.loopTime);
+        if (!Number.isFinite(seconds) || seconds <= 0) return null;
+        // Round to the sim rate. 1000 / (1000/60) is not always exactly 60, and a
+        // fractional tick would make Math.ceil jump the visible clock up a second.
+        const tps = Math.max(1, Math.round(ticksPerSecond()));
+        const cap = Math.round(seconds * tps);
+        if (cap <= 0) return null;
+        const ticks = Math.max(0, cap - (Number(state.currentTick) || 0));
+        return { ticks, seconds: ticks / tps, cap };
+    }
+
     getUiState() {
         const tps = ticksPerSecond();
         const stunTicksLeft = this.phase === 'stun' ? Math.max(0, this.stunTicks() - this.phaseTicks) : 0;
+        const clock = this.loopClock();
+        const dormant = this.phase === 'dormant';
         return {
             phase: this.phase,
-            dormant: this.phase === 'dormant',
+            dormant,
             stunTicksLeft,
             stunSeconds: stunTicksLeft / tps,
             targetKind: this.aimKind,
             targetId: this.aimId,
-            surfaceInTicks: this.surfaceInTicks()
+            targetLabel: this.targetLabel(),
+            surfaceInTicks: this.surfaceInTicks(),
+            homeFallback: !!this.homeFallback,
+            ...this.targetPointers(),
+            loopTicksLeft: clock ? clock.ticks : null,
+            loopSecondsLeft: clock ? clock.seconds : null,
+            statusText: dormant
+                ? ('DORMANT — wakes on rewind · ' + (clock ? `loop clock ${Math.ceil(clock.seconds)}s` : 'rewind to wake'))
+                : null
         };
+    }
+
+    // One target, four pointers. The arrow, the dust ring, the countdown and the
+    // highlighted core plate are all derived from the same aimed tile, so they
+    // cannot point at different places.
+    targetPointers() {
+        const tile = (this.phase === 'burrow' || this.phase === 'telegraph') && !this.homeFallback ? this.aimedTile() : null;
+        if (!tile) return { targetTile: null, ringTile: null, countdownTile: null, arrowTo: null, highlightPlateId: null };
+        const t = tileOf(tile);
+        return {
+            targetTile: t,
+            ringTile: t,
+            countdownTile: t,
+            arrowTo: { x: t.x + t.w / 2, y: t.y + t.h / 2 },
+            highlightPlateId: this.corePlateBeside(t)
+        };
+    }
+
+    corePlateBeside(tile) {
+        if (!tile) return null;
+        const ids = this.corePlateIds || [];
+        for (const plate of state.plates || []) {
+            if (ids.includes(plate.id) && orthoAdjacent(tile, plate)) return plate.id;
+        }
+        return null;
     }
 
     clearAim() {
@@ -186,6 +261,7 @@ export class Burrower extends Entity {
         this.aimX = null;
         this.aimY = null;
         this.previewTile = null;
+        this.homeFallback = false;
     }
 
     noteAim(actor) {
@@ -225,30 +301,44 @@ export class Burrower extends Entity {
     // Nearest living actor to the burrower's current position. Ties keep the earlier actor
     // (player is listed before echoes). Inactive echoes are ignored.
     pickTarget(actors) {
+        return this.pickTargetInfo(actors).actor;
+    }
+
+    // Nearest living actor. `tied` is true when another living actor is within
+    // TIE_EPS of the same distance. On a tie an echo wins over the courier
+    // (lowest echo id first), so stacked spawns resolve to the lure.
+    pickTargetInfo(actors) {
         const origin = center(this);
-        let best = null;
-        let bestD = Infinity;
+        const live = [];
         for (const actor of actors || []) {
             if (!actor || actor.isActive === false || actor.isDestroyed) continue;
             const c = center(actor);
-            const d = Math.hypot(c.x - origin.x, c.y - origin.y);
-            if (d < bestD) {
-                bestD = d;
-                best = actor;
-            }
+            live.push({ actor, d: Math.hypot(c.x - origin.x, c.y - origin.y) });
         }
-        return best;
+        if (!live.length) return { actor: null, tied: false };
+        let bestD = Infinity;
+        for (const e of live) if (e.d < bestD) bestD = e.d;
+        const near = live.filter(e => e.d <= bestD + TIE_EPS);
+        if (near.length === 1) return { actor: near[0].actor, tied: false };
+        const echoes = near.filter(e => actorTargetInfo(e.actor).kind === 'echo')
+            .sort((a, b) => (a.actor.id ?? 0) - (b.actor.id ?? 0));
+        return { actor: (echoes[0] || near[0]).actor, tied: true };
+    }
+
+    crackIsTargetable(crack) {
+        if (!crack || crack.broken || crack.collapsing) return false;
+        if (typeof crack.overlapsPlate === 'function' && crack.overlapsPlate()) return false;
+        return true;
     }
 
     nearestCrack(actor) {
-        if (!actor) return null;
-        const aim = center(actor);
+        const aim = actor ? center(actor) : { x: this.startX + this.w / 2, y: this.startY + this.h / 2 };
         let best = null;
         let bestD = Infinity;
         let bestX = Infinity;
         let bestY = Infinity;
         for (const crack of state.cracks || []) {
-            if (!crack || crack.broken || crack.overlapsPlate?.()) continue;
+            if (!this.crackIsTargetable(crack)) continue;
             const c = center(crack);
             const d = Math.hypot(c.x - aim.x, c.y - aim.y);
             const tie = Math.abs(d - bestD) <= 1e-6;
@@ -261,6 +351,94 @@ export class Burrower extends Entity {
             }
         }
         return best ? tileOf(best) : null;
+    }
+
+    bodyCoversCrack(crack, actors) {
+        // Inactive too: a body that just fell is still on the tile. Knitting that
+        // hole would erase it under them. Targeting ignores inactive actors elsewhere.
+        for (const actor of actors || []) {
+            if (!actor) continue;
+            const c = center(actor);
+            if (c.x >= crack.x && c.x < crack.x + crack.w && c.y >= crack.y && c.y < crack.y + crack.h) return true;
+        }
+        return false;
+    }
+
+    // Knit spent cracks nobody is standing on, so a later telegraph has a real tile.
+    // Occupied tiles stay spent: restoring a hole under a body would drop them in.
+    restoreClearCracks(actors) {
+        let restored = 0;
+        for (const crack of state.cracks || []) {
+            if (!crack || crack.overlapsPlate?.()) continue;
+            if (!crack.broken && !crack.collapsing) continue;
+            if (this.bodyCoversCrack(crack, actors)) continue;
+            if (typeof crack.restoreIntact === 'function') crack.restoreIntact();
+            else {
+                crack.broken = false;
+                crack.collapsing = false;
+            }
+            restored++;
+        }
+        return restored;
+    }
+
+    // Once a tile is locked it never moves. If that tile stops being a legal crack
+    // (it broke or started collapsing) the cycle is called off: the mark clears,
+    // the boss goes home and the next update locks a fresh tile with a full countdown.
+    validateLock() {
+        if (this.phase !== 'burrow' && this.phase !== 'telegraph') return true;
+        if (!this.lockedTile || this.homeFallback) return true;
+        if (this.crackIsTargetable(this.findCrack(this.lockedTile))) return true;
+        this.phase = 'burrow';
+        this.phaseTicks = 0;
+        this.cycleTicks = 0;
+        this.cycleLocked = false;
+        this.lockedTile = null;
+        this.previewTile = null;
+        this.lockStart = null;
+        this.goHome();
+        return false;
+    }
+
+    // Keep the locked tile when it is still a legal crack. Otherwise pick another,
+    // knit clear tiles, or fall back to the den. Does not reset the countdown.
+    ensureTarget(actors) {
+        const current = this.findCrack(this.lockedTile);
+        if (this.crackIsTargetable(current)) {
+            this.homeFallback = false;
+            this.lockedTile = tileOf(current);
+            return;
+        }
+        const aimActor = this.aimKind != null ? this.actorMatchingAim(actors) : null;
+        const aim = aimActor || this.pickTarget(actors);
+        let tile = this.nearestCrack(aim || null);
+        if (!tile) {
+            this.restoreClearCracks(actors);
+            tile = this.nearestCrack(aim || null);
+        }
+        if (tile) {
+            const moved = !sameTile(tile, this.lockedTile);
+            this.lockedTile = tile;
+            this.previewTile = tile;
+            this.homeFallback = false;
+            if (moved && this.phase === 'telegraph') {
+                this.teleOriginX = this.x;
+                this.teleOriginY = this.y;
+            }
+            return;
+        }
+        this.lockedTile = null;
+        this.previewTile = null;
+        this.homeFallback = true;
+    }
+
+    actorMatchingAim(actors) {
+        if (this.aimKind == null) return null;
+        for (const actor of actors || []) {
+            const info = actorTargetInfo(actor);
+            if (info.kind === this.aimKind && info.id === this.aimId) return actor;
+        }
+        return null;
     }
 
     findCrack(tile) {
@@ -320,29 +498,45 @@ export class Burrower extends Entity {
     beginTelegraph() {
         this.phase = 'telegraph';
         this.phaseTicks = 0;
-        this.previewTile = this.lockedTile;
+        this.previewTile = this.homeFallback ? null : this.lockedTile;
         this.teleOriginX = this.x;
         this.teleOriginY = this.y;
         this.stunFlash = 0;
         this.cycleLocked = false;
-        this.markLockedWarning();
+        if (!this.homeFallback) this.markLockedWarning();
     }
 
     slideToTile() {
-        const tile = this.lockedTile;
-        if (!tile) return;
         const total = this.telegraphTicks();
         const t = Math.min(1, this.phaseTicks / total);
-        const destX = tile.x + tile.w / 2 - this.w / 2;
-        const destY = tile.y + tile.h / 2 - this.h / 2;
+        let destX = this.startX;
+        let destY = this.startY;
+        const tile = this.lockedTile;
+        if (tile && !this.homeFallback) {
+            destX = tile.x + tile.w / 2 - this.w / 2;
+            destY = tile.y + tile.h / 2 - this.h / 2;
+        }
         this.x = this.teleOriginX + (destX - this.teleOriginX) * t;
         this.y = this.teleOriginY + (destY - this.teleOriginY) * t;
     }
 
     strike(actors) {
+        if (this.homeFallback) {
+            this.phase = 'burrow';
+            this.phaseTicks = 0;
+            this.cycleTicks = 0;
+            this.cycleLocked = false;
+            this.lockedTile = null;
+            this.homeFallback = false;
+            this.goHome();
+            return;
+        }
         const tile = this.lockedTile;
         const crack = this.findCrack(tile);
-        if (crack && typeof crack.startCollapse === 'function') crack.startCollapse();
+        if (crack && this.crackIsTargetable(crack)) {
+            if (typeof crack.showWarningRing === 'function') crack.showWarningRing();
+            if (typeof crack.startCollapse === 'function') crack.startCollapse();
+        }
         if (this.tileStuns(tile, actors)) {
             this.hp -= 1;
             this.rememberCheckpoint();
@@ -367,6 +561,8 @@ export class Burrower extends Entity {
         this.cycleTicks = 0;
         this.cycleLocked = false;
         this.lockedTile = null;
+        this.previewTile = null;
+        this.homeFallback = false;
         this.goHome();
     }
 
@@ -378,6 +574,7 @@ export class Burrower extends Entity {
         this.cycleTicks = 0;
         this.cycleLocked = false;
         this.lockedTile = null;
+        this.previewTile = null;
         this.goHome();
         const cap = this.maxStunsPerLoop;
         if (cap != null && this.stunsThisLoop >= cap) {
@@ -408,25 +605,37 @@ export class Burrower extends Entity {
         if (this.phase === 'telegraph') {
             this.phaseTicks++;
             this.refreshAimPosition(actors);
+            if (!this.validateLock()) return;
+            if (!this.homeFallback) this.markLockedWarning();
             this.slideToTile();
-            this.markLockedWarning();
             if (this.phaseTicks >= this.telegraphTicks()) this.strike(actors);
             return;
         }
-        // Lock the next strike once, when a target exists. Re-picking every tick
-        // moved the marker (and never let the watched tile reach 0).
+        // Lock the strike tile once. Later movement never re-aims it. A locked tile
+        // that breaks calls the cycle off (validateLock) instead of moving the mark.
         if (!this.cycleLocked) {
-            const target = this.pickTarget(actors);
-            if (!target) {
-                this.clearAim();
-                this.lockedTile = null;
-                this.cycleTicks = 0;
-                return;
-            }
-            this.lockCycle(target);
+            // First lock of a loop: an echo, when one is on the floor, is the lure
+            // (lowest echo id). Which way the echo or courier steps first does not
+            // matter. Later cycles go to the nearest body.
+            let target = null;
+            if (this.firstLockPending) target = firstEchoOf(actors);
+            if (!target) target = this.pickTarget(actors);
+            this.firstLockPending = false;
+            if (target) this.noteAim(target);
+            else this.clearAim();
+            this.ensureTarget(actors);
+            this.cycleLocked = true;
+            this.lockStart = target ? center(target) : null;
+            if (!this.homeFallback) this.previewTile = this.lockedTile;
         } else {
-            this.refreshAimPosition(actors);
-            this.previewTile = this.lockedTile;
+            if (this.aimKind == null) {
+                const target = this.pickTarget(actors);
+                if (target) this.noteAim(target);
+            } else {
+                this.refreshAimPosition(actors);
+            }
+            if (!this.validateLock()) return;
+            this.previewTile = this.homeFallback ? null : this.lockedTile;
         }
         this.cycleTicks++;
         if (this.cycleTicks >= this.intervalTicks()) {
@@ -464,38 +673,52 @@ export class Burrower extends Entity {
         ctx.restore();
     }
 
+    // The arrow ends on the locked crack (the same tile as the dust ring and the
+    // countdown), never on the lure's live position. The label names who drew it.
     drawTargetMark(ctx) {
-        if (this.aimX == null || this.aimKind == null) return;
-        if (this.phase !== 'burrow' && this.phase !== 'telegraph') return;
+        const ptr = this.targetPointers();
+        if (!ptr.arrowTo) return;
         const color = this.aimKind === 'echo' ? '#e070ff' : '#3ee0ff';
-        const label = this.aimKind === 'echo'
+        drawArrow(ctx, this.x + this.w / 2, this.y + this.h / 2, ptr.arrowTo.x, ptr.arrowTo.y, color);
+        const text = this.targetLabel();
+        if (text) {
+            // Below the tile when there is no room above it, so it clears the HP pips.
+            const above = ptr.targetTile.y - 10;
+            const y = above < 24 ? ptr.targetTile.y + ptr.targetTile.h + 10 : above;
+            paintLabel(ctx, text, ptr.arrowTo.x, y, { color, h: 15 });
+        }
+    }
+
+    // Names what the boss is actually going for: the locked crack, and the body it
+    // was nearest to when it locked. A crack far from that body is not called a lure.
+    targetLabel() {
+        const ptr = this.targetPointers();
+        if (!ptr.targetTile) return null;
+        const who = this.aimKind === 'echo'
             ? `ECHO ${typeof this.aimId === 'number' ? this.aimId + 1 : this.aimId}`
-            : 'PLAYER';
-        drawArrow(ctx, this.x + this.w / 2, this.y + this.h / 2, this.aimX, this.aimY, color);
-        ctx.save();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(this.aimX, this.aimY, 16, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(this.aimX - 8, this.aimY);
-        ctx.lineTo(this.aimX + 8, this.aimY);
-        ctx.moveTo(this.aimX, this.aimY - 8);
-        ctx.lineTo(this.aimX, this.aimY + 8);
-        ctx.stroke();
-        ctx.restore();
-        // The echo end-badge sits above the actor (filled disc, r=11). Keep the
-        // words to the side of that disc so "ECHO 1" is not drawn underneath it.
-        paintLabel(ctx, label, this.aimX + 54, this.aimY - 6, { color, h: 15 });
+            : (this.aimKind === 'player' ? 'YOU' : null);
+        if (!who) return 'STRIKES HERE';
+        const from = this.lockStart;
+        const near = from && Math.hypot(from.x - ptr.arrowTo.x, from.y - ptr.arrowTo.y) <= LURE_NEAR_PX;
+        return near ? `STRIKES HERE · lured by ${who}` : `STRIKES HERE · nearest open crack to ${who}`;
     }
 
     drawSurfaceMark(ctx) {
-        const tile = this.aimedTile();
-        if (!tile || (this.phase !== 'burrow' && this.phase !== 'telegraph')) return;
+        if (this.phase !== 'burrow' && this.phase !== 'telegraph') return;
         const ui = this.getUiState();
         const total = this.intervalTicks() + this.telegraphTicks();
         const frac = total > 0 ? 1 - ui.surfaceInTicks / total : 0;
+        if (this.homeFallback) {
+            const den = { x: this.startX + this.w / 2 - 20, y: this.startY + this.h / 2 - 20, w: 40, h: 40 };
+            drawKillRing(ctx, den, undefined, 'rgba(180, 180, 170, 0.9)');
+            const cx = den.x + den.w / 2;
+            const cy = den.y + den.h / 2;
+            const secs = (ui.surfaceInTicks / ticksPerSecond());
+            paintLabel(ctx, 'DEN ' + secs.toFixed(1) + 's', cx, cy, { color: '#f2f2ea', h: 14, font: 'bold 11px "Space Grotesk", sans-serif' });
+            return;
+        }
+        const tile = this.aimedTile();
+        if (!tile) return;
         drawKillRing(ctx, tile, undefined, 'rgba(255, 196, 90, 0.95)');
         const z = killZone(tile);
         const cx = z.x + z.w / 2;
@@ -518,7 +741,6 @@ export class Burrower extends Entity {
         const dormant = this.phase === 'dormant';
         ctx.save();
         this.drawSurfaceMark(ctx);
-        this.drawTargetMark(ctx);
 
         if (this.phase === 'stun' || this.stunFlash > 0) {
             const flash = 0.35 + 0.45 * Math.abs(Math.sin(tick * 0.7));
@@ -578,12 +800,24 @@ export class Burrower extends Entity {
         }
 
         if (dormant) {
-            const zBob = Math.sin(tick * 0.08) * 1.5;
-            paintLabel(ctx, 'Zzz', cx + 16, this.y - 36 + zBob, { color: '#d9d4cc', h: 14, font: 'bold 13px "Space Grotesk", sans-serif' });
-            paintLabel(ctx, 'dormant until rewind', cx, this.y - 22, { color: '#c8c2b8', h: 15, font: 'bold 11px "Space Grotesk", sans-serif' });
+            const ui = this.getUiState();
+            const clock = ui.loopSecondsLeft;
+            const frac = ui.loopTicksLeft == null ? 1 : (this.loopClock().cap > 0 ? ui.loopTicksLeft / this.loopClock().cap : 0);
+            ctx.save();
+            ctx.strokeStyle = '#c8c2b8';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(cx, cy, this.w * 0.7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, frac)));
+            ctx.stroke();
+            ctx.restore();
+            const clockText = clock == null ? 'rewind to wake' : `loop clock ${Math.ceil(clock)}s`;
+            paintLabel(ctx, 'DORMANT — wakes on rewind', cx, this.y - 40, { color: '#f3efe6', h: 16, font: 'bold 11px "Space Grotesk", sans-serif' });
+            paintLabel(ctx, clockText, cx, this.y - 22, { color: '#ffe7a3', h: 15, font: 'bold 12px "Space Grotesk", sans-serif' });
         }
 
         this.drawHpPips(ctx, cx);
+        // Last, so the boss body and HP pips never cover the arrow label.
+        this.drawTargetMark(ctx);
         ctx.restore();
     }
 }
