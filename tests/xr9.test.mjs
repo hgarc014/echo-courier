@@ -9,6 +9,7 @@ installDomStubs();
 const { state } = await import('../src/core/state.js');
 const { serializeLevel, deserializeLevel } = await import('../src/data/levels.js');
 const { ShooterRobot, ROBOT_XR9_DEFAULTS, normalizeRobotParams, wallRayDistance } = await import('../src/entities/hazards.js');
+const { getDashDestination } = await import('../src/core/physics.js');
 const { applyRobotConfig } = await import('../src/ui/editorInspector.js');
 
 let failures = 0;
@@ -61,19 +62,33 @@ check('damage only from behind (±backArc around the back)', () => {
     assert.equal(r.isBehind(c.x, c.y + 60), false, 'side (90°) is not the back');
 });
 
-check('back panel touch hits; front touch does not', () => {
+check('back panel touch hits only while locked on an echo, once per loop', () => {
     reset();
     const r = xr9();
     r.facingAngle = 0;
     state.doors = [{ id: 'boss_door', isOpen: false }];
     r.update(player(r.x + 30, r.y), [], []);
     assert.equal(r.hp, 3, 'front touch is not a hit');
-    r.facingAngle = 0;
-    r.update(player(r.x - 28, r.y), [], []);
+    r.facingAngle = 0; r.lockTarget = null;
+    assert.equal(r.backPanelOpen(player(0, 0)), false, 'panel shut without an echo lock');
+    const echo = { x: r.x + 200, y: r.y, w: 20, h: 20, isActive: true };
+    r.lockTarget = echo;
+    const p = player(r.x - 28, r.y);
+    assert.equal(r.backPanelOpen(p), true);
+    r.takeHit();
     assert.equal(r.hp, 2, 'back touch is a hit');
     assert.ok(r.hitFlicker > 0, 'hit stun prevents repeat hits');
-    r.update(player(r.x - 28, r.y), [], []);
-    assert.equal(r.hp, 2);
+    r.hitFlicker = 0; r.lockTarget = echo;
+    assert.equal(r.backPanelOpen(p), false, 'second hit in the same loop is refused');
+});
+
+check('XR-9 body is solid: a dash stops at the armour instead of passing through', () => {
+    reset();
+    const r = xr9();
+    state.walls = []; state.doors = []; state.robots = [r];
+    const d = getDashDestination(r.x + 60, r.y, -1, 0, 150, 20, 20);
+    assert.ok(d.x >= r.x + r.w, `dash ended at x ${d.x}, inside/behind the body at ${r.x}`);
+    state.robots = [];
 });
 
 check('telegraph is 1.5s of locked aim, and the shot follows the warned lane', () => {

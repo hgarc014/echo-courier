@@ -1,7 +1,7 @@
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
-import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
+import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -1485,8 +1485,8 @@ function update() {
 
     let nextPlayerX = { x: state.player.x + dx, y: state.player.y, w: state.player.w, h: state.player.h };
     let nextPlayerY = { x: state.player.x, y: state.player.y + dy, w: state.player.w, h: state.player.h };
-    let pCanMoveX = !checkWallCollision(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h);
-    let pCanMoveY = !checkWallCollision(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h);
+    let pCanMoveX = !checkCourierCollision(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h);
+    let pCanMoveY = !checkCourierCollision(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h);
     if (pCanMoveX) state.player.x += dx;
     if (pCanMoveY) state.player.y += dy;
 
@@ -1496,8 +1496,8 @@ function update() {
         if (gDx === 0 && gDy === 0) return;
         let nextGhostX = { x: g.x + gDx, y: g.y, w: g.w, h: g.h };
         let nextGhostY = { x: g.x, y: g.y + gDy, w: g.w, h: g.h };
-        let gCanMoveX = !checkWallCollision(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h);
-        let gCanMoveY = !checkWallCollision(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h);
+        let gCanMoveX = !checkCourierCollision(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h);
+        let gCanMoveY = !checkCourierCollision(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h);
         state.activeGhosts.forEach(otherG => {
             if (otherG !== g && otherG.isActive) {
                 if (AABB(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h, otherG.x, otherG.y, otherG.w, otherG.h) && ghostShieldBlocks(otherG, nextGhostX)) gCanMoveX = false;

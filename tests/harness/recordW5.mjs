@@ -33,7 +33,7 @@ function tick(dir = {}, extra = [], soft = false) {
     if (dir.y > 0) keys.s = true;
     if (dir.y < 0) keys.w = true;
     for (const k of extra) keys[k] = true;
-    keys.shift = dashSpam && state.currentTick % 2 === 0;
+    keys.shift = extra.includes('shift') || (dashSpam && state.currentTick % 2 === 0);
     main.stepSimulation();
     if (process.env.XR9DBG && state.robots?.[0]) xr9Debug();
     if (!soft && state.failMessage) {
@@ -387,6 +387,38 @@ export function dashRushL3() {
     return { tick: state.currentTick, gateOpen: doorOpen('gate'), dashes: state.runStats?.dashes ?? 0 };
 }
 
+// Port of QA B's cold driver (qab-evidence/pr56/xr.js): plan = loops of steps
+// ['go',cx,cy,dash?] (player centre), ['wait',n], ['sp'], ['end'] (until the loop resets).
+const QA_XR9_PLANS = {
+    // Echo on blue, then dash through XR-9 into the back arc and sit on the panel.
+    'xr-cheese-2loop': [[['go', 60, 200], ['go', 720, 200], ['go', 720, 300], ['end']],
+        [['go', 60, 200], ['go', 500, 200], ['go', 500, 300], ['go', 470, 300], ['go', 400, 300, 1], ['wait', 100],
+            ['go', 500, 300], ['go', 560, 300], ['go', 560, 550], ['go', 655, 550], ['sp'], ['go', 735, 535], ['sp'], ['wait', 60]]],
+    'xr-cheese-front-walk': [[['go', 60, 200], ['go', 720, 200], ['go', 720, 300], ['end']],
+        [['go', 60, 200], ['go', 500, 200], ['go', 500, 300], ['go', 470, 300], ['go', 420, 300], ['wait', 200]]],
+};
+function runQaPlan(plan) {
+    const dead = () => state.gameState !== 'PLAYING';
+    const pc = () => ({ x: state.player.x + state.player.w / 2, y: state.player.y + state.player.h / 2 });
+    for (const loop of plan) {
+        const L0 = state.loopNumber;
+        for (const s of loop) {
+            if (dead()) break;
+            if (s[0] === 'go') {
+                for (let n = 0; n < 3000 && !dead() && state.loopNumber === L0; n++) {
+                    const p = pc(); const dx = s[1] - p.x; const dy = s[2] - p.y;
+                    if (Math.abs(dx) < 3 && Math.abs(dy) < 3) break;
+                    tick({ x: dx > 2 ? 1 : (dx < -2 ? -1 : 0), y: dy > 2 ? 1 : (dy < -2 ? -1 : 0) }, s[3] ? ['shift'] : [], true);
+                    // both axes: tick() only sets one key per axis, which matches QA's driver
+                }
+            } else if (s[0] === 'wait') wait(s[1], true);
+            else if (s[0] === 'sp') { tick({}, ['space'], true); tick({}, [], true); }
+            else if (s[0] === 'end') { for (let n = 0; n < 4000 && !dead() && state.loopNumber === L0; n++) tick({}, [], true); }
+        }
+    }
+    for (let i = 0; i < 120 && state.gameState === 'PLAYING'; i++) tick({}, [], true);
+}
+
 export function runNaive(which, arg) {
     const softMove = (x, y) => moveTo(x, y, 4, 700, true);
     const plateLoop = ([x, y]) => {
@@ -504,6 +536,9 @@ export function runNaive(which, arg) {
                 xr9Hit(t, true); wait(10, true); xr9Retreat(true);
             }
         },
+        // QA B's 2-loop cheese and its front-walk control, replayed tick for tick.
+        'x9-qa-cheese': () => { loadLevel({ level: levelIndex('W5-BOSS') }); runQaPlan(QA_XR9_PLANS['xr-cheese-2loop']); },
+        'x9-qa-front-walk': () => { loadLevel({ level: levelIndex('W5-BOSS') }); runQaPlan(QA_XR9_PLANS['xr-cheese-front-walk']); },
         // One echo camps on blue all loop while another decoys all three slots.
         'x9-camp': () => {
             const { Ta, Tb, Tc } = XR9;

@@ -11,6 +11,19 @@ export function checkWallCollision(newX, newY, w, h) {
     return false;
 }
 
+/** XR-9's armored body is solid to couriers (player and echoes): no dashing through it. */
+export function robotBodyBlocks(newX, newY, w, h) {
+    for (const r of (state.robots || [])) {
+        if (r && r.backTouch && r.hp > 0 && AABB(newX, newY, w, h, r.x, r.y, r.w, r.h)) return true;
+    }
+    return false;
+}
+
+/** Courier movement collision: walls, closed doors, and solid robot bodies. */
+export function checkCourierCollision(newX, newY, w, h) {
+    return checkWallCollision(newX, newY, w, h) || robotBodyBlocks(newX, newY, w, h);
+}
+
 export function lineOfSightBlocked(x1, y1, x2, y2) {
     let dx = x2 - x1; let dy = y2 - y1; let dist = Math.hypot(dx, dy);
     let steps = Math.ceil(dist / 5);
@@ -34,7 +47,7 @@ export function getDashDestination(startX, startY, dx, dy, maxDist, w, h) {
     for (let i = 5; i <= maxDist; i += 5) {
         let testX = startX + dx * i;
         let testY = startY + dy * i;
-        if (checkWallCollision(testX, testY, w, h)) {
+        if (checkCourierCollision(testX, testY, w, h)) {
             return { x: currentX, y: currentY };
         }
         currentX = testX;

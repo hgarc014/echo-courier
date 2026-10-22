@@ -343,6 +343,7 @@ export class ShooterRobot extends Entity {
         this.phaseChangeTimer = 0;
         this.muzzleFlash = 0;
         this.lockTarget = null;
+        this.hitThisLoop = false;
         this.lockTimer = 0;
         this.maxHp = 3;
         this.aimLocked = false;
@@ -363,6 +364,12 @@ export class ShooterRobot extends Entity {
         if (!this.checkpoint) return;
         if (!state.bossCheckpoint || typeof state.bossCheckpoint !== 'object') state.bossCheckpoint = {};
         state.bossCheckpoint[this.id] = { hp: this.hp };
+    }
+    /** XR-9's back panel is exposed only while its attention is on an echo, once per loop. */
+    backPanelOpen(player) {
+        if (this.hitThisLoop) return false;
+        const t = this.lockTarget;
+        return !!(t && t !== player && !t.vaporized);
     }
     center() { return { x: this.x + this.w / 2, y: this.y + this.h / 2 }; }
     /** True when (px, py) sits inside the back arc (always true without a backArc). */
@@ -427,6 +434,7 @@ export class ShooterRobot extends Entity {
     takeHit() {
         if (this.hp <= 0) return;
         this.hp--;
+        this.hitThisLoop = true;
         this.hitFlicker = BOSS_HIT_STUN;
         this.windingUp = false;
         this.telegraphArmed = false;
@@ -484,7 +492,9 @@ export class ShooterRobot extends Entity {
         // Back-panel touch (XR-9): the courier pressing the back plate is a hit.
         if (this.backTouch && player && AABB(player.x, player.y, player.w, player.h, this.x - 4, this.y - 4, this.w + 8, this.h + 8)) {
             const pc = { x: player.x + player.w / 2, y: player.y + player.h / 2 };
-            if (this.isBehind(pc.x, pc.y)) {
+            // The panel only opens while XR-9 is locked on an echo (the decoy route),
+            // and it can only be cracked once per loop (instances are rebuilt on rewind).
+            if (this.isBehind(pc.x, pc.y) && this.backPanelOpen(player)) {
                 this.takeHit();
                 if (this.hp <= 0) {
                     const door = (state.doors || []).find(d => d.id === this.defeatDoorId);

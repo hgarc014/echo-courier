@@ -74,12 +74,23 @@ for (const f of ['w5-l1.json', 'w5-l2.json', 'w5-l3.json', 'w5-l4.json', 'w5-bos
     });
 }
 
-for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park', 'l4-no-decoy', 'l4-sneak', 'l4-blue-middle', 'l4-decoy-first', 'l4-ignore-static', 'l4-miss-window', 'x9-frontal', 'x9-early-blue', 'x9-wrong-order', 'x9-camp']) {
+for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park', 'l4-no-decoy', 'l4-sneak', 'l4-blue-middle', 'l4-decoy-first', 'l4-ignore-static', 'l4-miss-window', 'x9-frontal', 'x9-early-blue', 'x9-wrong-order', 'x9-camp', 'x9-triple', 'x9-qa-cheese', 'x9-qa-front-walk']) {
     check(`naive W5 ${plan} fails`, () => {
         const r = runNaiveW5(plan);
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
     });
 }
+
+// QA B (B1): dash through XR-9's body into the back arc, then sit on the panel.
+check('W5 x9-qa-cheese: no dash-through, at most one panel hit per loop', () => {
+    const r = runNaiveW5('x9-qa-cheese');
+    assert.equal(r.completed, false);
+    assert.ok(r.hp >= 2, `QA cheese took XR-9 to hp ${r.hp} in 2 loops`);
+});
+check('W5 x9-triple: one panel hit per loop', () => {
+    const r = runNaiveW5('x9-triple');
+    assert.ok(r.hp >= 2, `triple route left hp ${r.hp}`);
+});
 
 check('W5 l4-ignore-static fails only because of static: the same inputs complete with the static removed', () => {
     const r = runNaiveW5('l4-ignore-static', { noStatic: true });
