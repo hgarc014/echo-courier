@@ -985,8 +985,14 @@ export class Burrower extends Entity {
             // The ECHO n marker label sits above the same tile: go below so they never overlap.
             const pt = (this._lastPrediction || {}).tile;
             const markerHere = pt && Math.abs(pt.x - ptr.targetTile.x) < GRID * 2 && Math.abs(pt.y - ptr.targetTile.y) < GRID * 2;
-            const y = this.playerMode ? Math.max(12, ptr.targetTile.y - 58) : (above < 24 || markerHere ? below : above);
-            paintLabel(ctx, text, ptr.arrowTo.x, y, { color, h: 15 });
+            let y = this.playerMode ? Math.max(12, ptr.targetTile.y - 58) : (above < 24 || markerHere ? below : above);
+            let x = ptr.arrowTo.x;
+            // HOLD is about the lit plate: draw it by that plate, not the locked tile.
+            const lit = /^HOLD/.test(text) ? this.litPlate() : null;
+            if (lit) { x = lit.x + lit.w / 2; y = lit.y - 30; }
+            const pos = this.labelSpot(ctx, text, x, y);
+            this._targetLabelBox = pos.box;
+            paintLabel(ctx, text, pos.x, pos.y, { color, h: 15 });
         }
     }
 
@@ -1006,6 +1012,33 @@ export class Burrower extends Entity {
         const on = this.liveRingCracks().some(c => this.echoStamped(c, actors));
         if (on) this.stampSeen = true;
         else if (this.stampSeen) this.echoLeft = true;
+    }
+
+    litPlate() {
+        const ids = this.liveCoreIds();
+        return (state.plates || []).find(p => ids.includes(p.id)) || null;
+    }
+
+    // Echo sprites and their number badges ("ECHO n" markers): labels keep clear.
+    echoMarkerBoxes() {
+        return (state.activeGhosts || []).filter(g => g && g.isActive !== false).map(g => {
+            const w = g.w || 30, h = g.h || 30;
+            return { x: g.x - 4, y: g.y - 24, w: w + 8, h: h + 24 };
+        });
+    }
+
+    // First of y, above, below (stepping out) whose label box hits no echo marker.
+    labelSpot(ctx, text, x, y, h = 15) {
+        ctx.save(); ctx.font = 'bold 12px "Space Grotesk", sans-serif';
+        const tw = (ctx.measureText(text).width || text.length * 7) + 10; ctx.restore();
+        const boxes = this.echoMarkerBoxes();
+        const boxAt = yy => ({ x: x - tw / 2, y: yy - h / 2, w: tw, h });
+        const hits = b => boxes.some(m => b.x < m.x + m.w && b.x + b.w > m.x && b.y < m.y + m.h && b.y + b.h > m.y);
+        for (const dy of [0, -18, 18, -36, 36, -54, 54, -72, 72]) {
+            const yy = Math.max(h / 2 + 2, y + dy);
+            if (!hits(boxAt(yy))) return { x, y: yy, box: boxAt(yy) };
+        }
+        return { x, y, box: boxAt(y) };
     }
 
     targetLabel() {

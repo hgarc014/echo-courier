@@ -620,11 +620,155 @@ check("echo steps off during the cue: HOLD/STAMP NOW drop at once and it says 'E
     assert.deepEqual(left, { label: 'ECHO LEFT — step off!', cue: false });
 });
 
+
+// ---- QA C (round 6) on PR #57: behavioral checks for each item ----
+
+// Courier holds c1; ECHO 2 makes the newest noise on a far crack so the lock is THERE;
+// ECHO 1 steps onto the ring crack `lead` ticks before the strike and stays.
+function lockElsewhereRun(lead, { hold = 0 } = {}) {
+    resetWorld();
+    state.plates = [new PressurePlate('c1', 80, 80, [])];
+    const ring = new CrackedFloor(80, 120, 40, 40, 'fast');
+    const far = new CrackedFloor(480, 80, 40, 40, 'fast');
+    state.cracks = [ring, far];
+    const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1.5, corePlateIds: ['c1'], maxStunsPerLoop: 1 });
+    state.burrowers = [boss];
+    const player = { x: 200, y: 200, w: 30, h: 30 }; state.player = player;
+    const e1 = { id: 0, runData: [], x: 200, y: 125, w: 30, h: 30, isActive: true };
+    const e2 = { id: 1, runData: [], x: 485, y: 85, w: 30, h: 30, isActive: true };
+    state.activeGhosts = [];
+    const strikeAt = boss.intervalTicks() + boss.telegraphTicks();
+    const log = { aim: null, feedback: null, ringEver: false, cueAtStamp: null };
+    for (let t = 1; t <= strikeAt + 2 + hold; t++) {
+        state.currentTick = t;
+        if (t === 10) { player.x = 85; player.y = 85; } // onto c1 after the lock
+        if (t === strikeAt - lead + 1) { e1.x = 85; log.cueAtStamp = boss.stampNowActive(); }
+        boss.update([player, e1, e2]);
+        ring.update([player, e1, e2]); far.update([player, e1, e2]);
+        if (t === strikeAt - 1) log.aim = boss.aimedTile();
+        if (ring.collapsing || ring.broken) log.ringEver = true;
+        if (boss.feedback && !log.feedback) log.feedback = boss.feedback.text;
+    }
+    state.bossCheckpoint = null; state.bossCheckpointLive = false;
+    return { boss, ring, far, log };
+}
+
+check('ring stamp stuns when the strike is locked elsewhere, and ring cracks never crumble', () => {
+    const r = lockElsewhereRun(30, { hold: 300 });
+    assert.ok(r.log.aim && r.log.aim.x === 480, "strike was locked on the far crack: " + JSON.stringify(r.log.aim) + " " + r.boss.aimKind + r.boss.aimId);
+    assert.equal(r.boss.hp, 2, 'stunned');
+    assert.match(r.log.feedback || '', /STAMP OK/);
+    assert.equal(r.log.ringEver, false, 'ring crack never collapsed under the echo');
+});
+
+check('item 3: a ring stamp before the warning (before STAMP NOW) reads TOO EARLY', () => {
+    const r = lockElsewhereRun(120);
+    assert.equal(r.log.cueAtStamp, false, 'stamp landed before the cue was up');
+    assert.equal(r.boss.hp, 3);
+    assert.equal(r.log.feedback, 'TOO EARLY');
+});
+
+check('item 1: after a stun the next lit plate is lit and a later strike on it gets STAMP NOW', () => {
+    let stunAt = null, nextLit = null, cueOnNext = false;
+    replaySolution(sol, { onTick: () => {
+        const b = state.burrowers && state.burrowers[0];
+        if (!b) return;
+        if (b.hp === 2 && stunAt == null) { stunAt = true; nextLit = b.liveCoreIds()[0]; }
+        if (b.hp === 2 && b.phase === 'telegraph' && b.stampNowActive() && b.liveCoreIds()[0] === nextLit) cueOnNext = true;
+    } });
+    assert.ok(nextLit && nextLit !== 'c3', 'lit plate moved on: ' + nextLit);
+    assert.ok(cueOnNext, 'STAMP NOW shown for the next lit plate');
+});
+
+check('item 2: every awake strike on or beside the lit plate (c1 included) had >= 89 ticks of warning + STAMP NOW', () => {
+    const near = (t, p) => t && p && Math.abs(t.x - p.x) <= 40 && Math.abs(t.y - p.y) <= 40;
+    // A strike counts as 'on the lit plate' when it lands on/beside it, or when it stuns
+    // from that plate (a ring stamp while the lock is elsewhere, as c1 in loop 4).
+    const out = []; let first = null, warnFirst = null, prev = null, hp = 3, cur = null;
+    replaySolution(sol, { onTick: () => {
+        const b = state.burrowers && state.burrowers[0];
+        if (!b) return;
+        if (b.hp < hp && cur) { out.push({ ...cur, stun: true }); prev = null; first = null; warnFirst = null; }
+        hp = b.hp;
+        if (b.phase === 'telegraph') {
+            const p = b.litPlate(); const t = b.aimedTile();
+            if (warnFirst == null) warnFirst = b.ticksToStrike();
+            if (first == null && b.stampNowActive()) first = b.ticksToStrike();
+            cur = { plate: p.id, first, warnFirst };
+            if (near(t, p)) {
+                prev = cur;
+            }
+        } else if (prev) { out.push(prev); prev = null; first = null; warnFirst = null; cur = null; }
+        else if (b.phase !== 'stun') { first = null; warnFirst = null; cur = null; }
+    } });
+    assert.ok(out.length >= 3, 'strikes near the lit plate: ' + JSON.stringify(out));
+    assert.ok(out.some(o => o.plate === 'c1'), 'c1 covered');
+    for (const o of out) {
+        assert.ok(o.warnFirst >= 89, `${o.plate} warning ${o.warnFirst}`);
+        assert.ok(o.first != null && o.first >= 89, `${o.plate} STAMP NOW lead ${o.first}`);
+    }
+});
+
+check("item 4: when the echo steps off, HOLD drops and 'ECHO LEFT — step off!' shows", () => {
+    resetWorld();
+    state.plates = [new PressurePlate('c1', 80, 80, [])];
+    state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast')];
+    const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1.5, corePlateIds: ['c1'], maxStunsPerLoop: 1 });
+    state.burrowers = [boss];
+    const player = { x: 85, y: 85, w: 30, h: 30 }; state.player = player;
+    const echo = { id: 0, runData: [], x: 200, y: 125, w: 30, h: 30, isActive: true };
+    const strikeAt = boss.intervalTicks() + boss.telegraphTicks();
+    let on = null, off = null;
+    for (let t = 1; t < strikeAt; t++) {
+        if (t === strikeAt - 60) echo.x = 85;
+        if (t === strikeAt - 30) echo.x = 200;
+        boss.update([player, echo]);
+        if (t === strikeAt - 40) on = boss.targetLabel();
+        if (t === strikeAt - 29) off = boss.targetLabel();
+    }
+    assert.match(on, /^HOLD/);
+    assert.equal(off, 'ECHO LEFT — step off!');
+});
+
+function boxCtx() {
+    const rects = [], texts = [];
+    const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? (t) => ({ width: t.length * 7 }) : k === 'fillRect' ? (x, y, w, h) => rects.push({ x, y, w, h }) : k === 'fillText' ? (t, x, y) => texts.push({ t, x, y }) : () => {}), set: () => true });
+    return { ctx, rects, texts };
+}
+const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+check("item 5: the 'locked on' label never overlaps the ECHO 2 marker", () => {
+    const r = lockElsewhereRun(30);
+    const boss = r.boss;
+    boss.phase = 'telegraph'; boss.playerMode = false; boss.aimKind = 'echo'; boss.aimId = 2; boss.echoLeft = false;
+    state.player = { x: 300, y: 300, w: 30, h: 30 };
+    const tile = boss.aimedTile() || r.far;
+    // ECHO 2 standing right above the locked tile (where the label would go).
+    for (const dy of [-40, -30, 0, 40]) {
+        const g = { id: 1, x: tile.x + 5, y: tile.y + dy, w: 30, h: 30, isActive: true };
+        state.activeGhosts = [g];
+        const { ctx } = boxCtx();
+        boss.drawTargetMark(ctx);
+        const label = boss._targetLabelBox;
+        assert.ok(label, 'label drawn');
+        const marker = { x: g.x - 4, y: g.y - 24, w: g.w + 8, h: g.h + 24 };
+        assert.ok(!overlap(label, marker), `overlap at dy ${dy}: ${JSON.stringify(label)}`);
+    }
+    state.activeGhosts = [];
+});
+
+check('the HOLD label is drawn by the lit plate, not the locked tile', () => {
+    const r = lockElsewhereRun(30);
+    const boss = r.boss;
+    boss.phase = 'telegraph'; boss.playerMode = false; boss.echoLeft = false;
+    state.player = { x: 85, y: 85, w: 30, h: 30 };
+    state.activeGhosts = [];
+    const { ctx, texts } = boxCtx();
+    boss.drawTargetMark(ctx);
+    const h = texts.find(t => /^HOLD/.test(t.t));
+    assert.ok(h, 'HOLD drawn: ' + texts.map(t => t.t).join('|'));
+    assert.ok(Math.abs(h.x - 100) < 40 && Math.abs(h.y - 100) < 80, `HOLD at ${h.x},${h.y}`);
+});
+
 if (failures) { console.log(`${failures} failed`); process.exit(1); }
 console.log('loudest wins checks passed');
-
-check('holding the lit plate + echo ring stamp stuns even when the strike was locked elsewhere', async () => {
-    const src = (await import('node:fs')).readFileSync(new URL('../src/entities/bosses/Burrower.js', import.meta.url), 'utf8');
-    assert.match(src, /const ringStamp = this\.playerModeStampCrack\(actors\)/);
-    assert.match(src, /this\.playerMode \|\| this\.playerHoldsLivePlate\(\)/);
-});
