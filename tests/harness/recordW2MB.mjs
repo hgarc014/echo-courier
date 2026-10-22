@@ -23,6 +23,7 @@ function tick(dir = {}, extra = []) {
     if (dir.y < 0) keys.w = true;
     for (const k of extra) keys[k] = true;
     main.stepSimulation();
+    const b1 = state.burrowers?.[0]; const ph2 = b1 && b1.phase + (b1.playerMode ? 'P' : '') + JSON.stringify(b1.lockedTile);
     if (state.failMessage) throw new Error(`failed: ${state.failMessage} at ${Math.round(state.player.x)},${Math.round(state.player.y)} tick ${state.currentTick} loop ${state.pastRuns.length + 1}`);
 }
 function moveTo(x, y, tol = 2, max = 600) {
@@ -40,35 +41,47 @@ function waitUntilTick(t) { while (state.currentTick < t) tick(); }
 function pressR() { tick({}, ['r']); for (let i = 0; i < 40 && state.rewindFreeze > 0; i++) tick(); }
 const hp = () => state.burrowers[0].hp;
 
+const log = (...a) => { if (process.env.MBDEBUG) console.error(...a); };
+
+// Live courier: stay off the frozen player-mode tile for the 240 strike, then
+// go up through c3's south crack only after the 241 lock (so the echo is still
+// the loudest), and hold c3 through the 481 strike.
 function holdC3() {
+    moveTo(530, 450);
+    waitUntilTick(230);
     moveTo(485, 450);
-    moveTo(485, 285);       // up through c3's south crack onto the plate
-    waitUntilTick(250);     // first strike at tick 240
+    moveTo(485, 285);
+    waitUntilTick(490);
 }
 
 export function solve() {
     loadLevel({ level: levelIdx() });
-    // Loop 1: stamper.
-    moveTo(405, 450);
-    moveTo(405, 285);
-    waitUntilTick(212);
-    moveTo(431, 285, 1);    // onto 440,280 (centre inside) inside the stamp window
-    waitUntilTick(241);
-    moveTo(400, 285);       // off before it falls
-    tick();
+    // Loop 1: the stamper. Pass over c3's west crack (noise ~213, inside the 1.5 s
+    // before the 241 lock), stand north of the plate so the nearest crack at lock
+    // is c3's north crack, then step onto it ~20 ticks before the 481 strike and
+    // stay ON it through the strike. Step back off before it breaks.
+    moveTo(445, 450);
+    waitUntilTick(180);
+    moveTo(445, 215);
+    waitUntilTick(458);
+    moveTo(470, 215);
+    waitUntilTick(486);
+    moveTo(445, 215);
+    waitUntilTick(510);
+    log('loop1 done hp', hp());
     pressR();
-    // Loops 2 and 3: hold c3 while echo 1 stamps.
-    for (let n = 1; n <= 2; n++) {
+    // Loops 2-4: hold c3 while echo 1 stamps (one stun per loop).
+    for (let n = 1; n <= 3; n++) {
+        if (n === 3) {
+            moveTo(335, 455);
+            tick({}, ['space']); tick();
+            if (!state.packages.some(p => p.carriedBy === 'player')) throw new Error('grab failed');
+        }
         holdC3();
+        log(`loop ${n + 1} hp`, hp(), state.burrowers[0].feedback?.text);
         if (hp() !== 3 - n) throw new Error(`loop ${n + 1}: expected hp ${3 - n}, got ${hp()}`);
-        pressR();
+        if (n < 3) pressR();
     }
-    // Loop 4: parcel, hold, stun 3, deliver.
-    moveTo(335, 455);
-    tick({}, ['space']); tick();
-    if (!state.packages.some(p => p.carriedBy === 'player')) throw new Error('grab failed');
-    holdC3();
-    if (hp() !== 0) throw new Error(`loop 4: expected hp 0, got ${hp()}`);
     moveTo(525, 285);
     moveTo(525, 470);
     const z = state.deliveryZone;

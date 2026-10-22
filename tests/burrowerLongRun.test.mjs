@@ -64,6 +64,11 @@ function assertTelegraph(boss, where) {
         assert.equal(boss.lockedTile, null, where + ' den fallback has no crack');
         return;
     }
+    // Player mode strikes the courier's own grid tile, on any floor.
+    if (boss.playerMode) {
+        assert.ok(boss.lockedTile && boss.lockedTile.w === 40 && boss.lockedTile.h === 40, where + ' player tile');
+        return;
+    }
     const crack = boss.findCrack(boss.lockedTile);
     assert.ok(crack, where + ' telegraph has no crack');
     assert.equal(crack.broken, false, where);
@@ -131,7 +136,10 @@ check('a collapsing or broken crack is never the telegraphed tile', () => {
         step(boss, [body(spent.x + 5, spent.y + 5)], 'skip broken');
         if (boss.phase === 'telegraph' && !boss.homeFallback) {
             saw = true;
-            assert.ok(!(boss.lockedTile.x === spent.x && boss.lockedTile.y === spent.y));
+            // With no noise the courier is the target: the strike goes to their own
+            // tile on any floor (here a spent crack), never to some other crack.
+            assert.equal(boss.playerMode, true);
+            assert.deepEqual(boss.lockedTile, boss.playerTile(body(spent.x + 5, spent.y + 5)));
         }
     }
     assert.equal(saw, true);

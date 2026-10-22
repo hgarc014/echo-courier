@@ -83,9 +83,8 @@ for (const { level, index } of w2) {
             assert.equal(loaded.burrowers[0].maxStunsPerLoop, 1);
             assert.equal(json.meta.isBoss, true);
             assert.equal(json.meta.hintLine, level.hintLine);
-            assert.match(json.meta.hintLine, /hold the CORE plate beside the marked crack AND an echo steps onto that crack/);
-            assert.match(json.meta.hintLine, /once per loop/);
-            assert.match(json.meta.hintLine, /becomes an echo/);
+            assert.match(json.meta.hintLine, /staying ON it/);
+            assert.match(json.meta.hintLine, /1 stun per loop/);
             assert.equal(json.meta.pitKillFraction, undefined);
         } else {
             assert.equal(json.meta.hintLine, undefined);
@@ -169,9 +168,16 @@ function runUntil(boss, actors, pred, max = 40) {
 // steps onto the locked tile in the last 2 ticks of each telegraph.
 function withStamper(boss, player) {
     const echo = { x: 300, y: 300, w: 30, h: 30, isActive: true, id: 0, runData: [] };
+    let first = true;
     return () => {
         const t = boss.lockedTile;
-        if (boss.phase === 'telegraph' && t && boss.telegraphTicks() - boss.phaseTicks <= 2) {
+        // Lure: the echo's step onto the first crack is the newest noise at the
+        // first lock (it is listed after the courier, so it wins the tie).
+        if (first) {
+            first = false;
+            const c = state.cracks[0];
+            echo.x = c.x + 5; echo.y = c.y + 5;
+        } else if (boss.phase === 'telegraph' && t && boss.telegraphTicks() - boss.phaseTicks <= 2) {
             echo.x = t.x + 5; echo.y = t.y + 5;
         } else { echo.x = 300; echo.y = 300; }
         return [player, echo];
@@ -206,8 +212,9 @@ check('inactive echoes are not targets', () => {
     const echo = { x: 0, y: 0, w: 30, h: 30, isActive: false, id: 0 };
     const boss = fastBoss(80, 80, { telegraphTime: 1 });
     runUntil(boss, [player, echo], () => boss.phase === 'telegraph');
-    assert.equal(boss.lockedTile.x, 500);
-    assert.equal(boss.lockedTile.y, 500);
+    // The inactive echo's crack is ignored; the courier draws the strike to their own tile.
+    assert.equal(boss.playerMode, true);
+    assert.deepEqual(boss.lockedTile, { x: 480, y: 480, w: 40, h: 40 });
 });
 
 check('dust telegraph finishes before the crack collapses', () => {
@@ -329,7 +336,8 @@ check('a pressed non-core plate collapses the tile without a stun', () => {
     state.plates = [plate];
     state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast')];
     state.doors = [];
-    const actor = { x: 85, y: 85, w: 30, h: 30 };
+    // An echo stepping onto the plate is the loudest, so the strike locks the crack beside it.
+    const actor = { x: 85, y: 85, w: 30, h: 30, isActive: true, id: 0, runData: [] };
     const boss = fastBoss(10, 10, { corePlateIds: ['c1'], stunTime: 2 });
     runUntil(boss, [actor], () => state.cracks[0].collapsing);
     assert.equal(boss.hp, 3);

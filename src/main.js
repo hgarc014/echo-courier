@@ -1450,7 +1450,7 @@ function update() {
     }
 
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
-    for (const burrower of state.burrowers || []) burrower.update(allActors);
+    for (const burrower of state.burrowers || []) { const fail = burrower.update(allActors); if (fail) { levelFailed(fail); return; } }
     syncBossHud();
     for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
     // The floor resolves after the strike decision. Drop a mark that the crack

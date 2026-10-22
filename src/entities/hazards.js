@@ -1114,7 +1114,8 @@ export class CrackedFloor extends Entity {
             if (playerFell) return 'Fell into pit!';
             return cargoFail;
         }
-        if (!this.collapsing) {
+        // A crack the burrower has locked holds until its strike (no weight crumble).
+        if (!this.collapsing && !this.burrowerHold) {
             for (let a of actors || []) {
                 if (!a || a.isActive === false) continue;
                 if (AABB(a.x, a.y, a.w || 30, a.h || 30, this.x, this.y, this.w, this.h)) {
@@ -1123,7 +1124,7 @@ export class CrackedFloor extends Entity {
                 }
             }
         }
-        if (this.warningCommitted && !this.collapsing) {
+        if (this.warningCommitted && !this.collapsing && !this.burrowerHold) {
             this.warningTicks++;
             this.showingWarning = true;
             this.ringShown = true;

@@ -147,5 +147,109 @@ check('recorded route clears in 4 loops at par 4', () => {
     assert.equal(r.par, 4);
 });
 
+// ---- QA C on PR #57 (design) ----
+
+// Boss with an echo lure: the echo's step onto crack k (tick 1) is the newest noise
+// at the first lock, so the lock is k. The echo then waits off the floor and steps
+// back onto k `lead` ticks before the strike (lead 1 = the strike tick itself).
+function stampRun(lead, { courierOnPlate = true } = {}) {
+    resetWorld();
+    const core = new PressurePlate('c1', 80, 80, []);
+    state.plates = [core];
+    const k = new CrackedFloor(80, 120, 40, 40, 'fast');
+    state.cracks = [k];
+    const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1, corePlateIds: ['c1'], maxStunsPerLoop: 1 });
+    state.burrowers = [boss];
+    const player = { x: courierOnPlate ? 85 : 300, y: courierOnPlate ? 85 : 200, w: 30, h: 30 };
+    const echo = { id: 0, runData: [], x: 85, y: 125, w: 30, h: 30, isActive: true };
+    const strikeAt = boss.intervalTicks() + boss.telegraphTicks();
+    const log = { feedback: null, crackBeforeStrike: null };
+    for (let t = 1; t <= strikeAt + 2; t++) {
+        if (t === 2) { echo.x = 200; echo.y = 125; }
+        if (t === strikeAt - lead + 1) { echo.x = 85; echo.y = 125; }
+        if (t === strikeAt) log.crackBeforeStrike = { collapsing: k.collapsing, broken: k.broken };
+        boss.update([player, echo]);
+        k.update([player, echo]);
+        if (boss.feedback && !log.feedback) log.feedback = boss.feedback.text;
+    }
+    return { boss, k, log };
+}
+
+check('stamp window is exactly 0.5 s (30 ticks): a stamp 30 ticks out stuns, 31 ticks out is TOO EARLY', () => {
+    assert.equal(STAMP_WINDOW_TICKS, 30);
+    const ok = stampRun(30);
+    assert.equal(ok.boss.hp, 2, 'stamp inside the window stuns');
+    assert.equal(ok.log.feedback, 'STAMP OK');
+    const late = stampRun(1);
+    assert.equal(late.boss.hp, 2, 'stamp on the strike tick stuns');
+    const early = stampRun(31);
+    assert.equal(early.boss.hp, 3, 'stamp outside the window does not stun');
+    assert.equal(early.log.feedback, 'TOO EARLY');
+});
+
+check('an early stamp keeps the locked crack intact until the strike (no crumble, no early fire)', () => {
+    const early = stampRun(55);
+    assert.deepEqual(early.log.crackBeforeStrike, { collapsing: false, broken: false });
+    assert.equal(early.k.collapsing || early.k.broken, true, 'the strike itself collapses it');
+    assert.equal(early.boss.hp, 3);
+});
+
+check('STAMP OK without the courier on the core plate says so and does not stun', () => {
+    const r = stampRun(10, { courierOnPlate: false });
+    assert.equal(r.boss.hp, 3);
+    assert.equal(r.log.feedback, 'STAMP OK · hold the CORE plate');
+});
+
+check('a diagonal (corner) entry that loads a crack is also a noise', () => {
+    resetWorld();
+    const k = new CrackedFloor(40, 40, 40, 40, 'fast');
+    state.cracks = [k];
+    const boss = new Burrower(300, 300, {});
+    const echo = { id: 0, runData: [], x: 0, y: 0, w: 30, h: 30, isActive: true };
+    boss.update([echo]);
+    // Corner overlap only: centre (29,29) is outside the tile, the box overlaps it.
+    echo.x = 14; echo.y = 14;
+    boss.update([echo]);
+    const free = new CrackedFloor(40, 40, 40, 40, 'fast');
+    free.update([echo]);
+    assert.equal(free.warningCommitted, true, 'an unlocked crack takes that weight');
+    const n = boss.noise.get('echo:0');
+    assert.ok(n && n.surface === 'k40,40', 'and the step is heard');
+});
+
+check('player-mode label: one STRIKES label on the courier tile, no stacked hunting label', () => {
+    start();
+    main.stepSimulation();
+    const b = state.burrowers[0];
+    assert.equal(b.playerMode, true);
+    const calls = [];
+    const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? () => ({ width: 10 }) : (k === 'fillText' ? (t) => calls.push(t) : () => {})), set: () => true });
+    b.render(ctx);
+    assert.ok(calls.includes('STRIKES YOUR TILE'));
+    assert.ok(!calls.some(t => /^hunting /.test(t)), `hunt label drawn too: ${calls.join(' | ')}`);
+});
+
+check("hint no longer says 'Step off fast'; it says stay ON the crack", () => {
+    const lvl = LEVELS[sinkhole];
+    assert.doesNotMatch(lvl.hintLine, /Step off fast/);
+    assert.match(lvl.hintLine, /staying ON it/);
+    assert.ok(lvl.hintLine.length < 200, 'short hint');
+});
+
+check('loop 1 shows the REC stamp cue on cracks beside core plates; later loops do not', () => {
+    start();
+    const b = state.burrowers[0];
+    const draw = () => {
+        const calls = [];
+        const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? () => ({ width: 10 }) : (k === 'fillText' ? (t) => calls.push(t) : () => {})), set: () => true });
+        b.drawRecordCue(ctx);
+        return calls.filter(t => t === 'REC stamp').length;
+    };
+    assert.equal(draw(), 12);
+    state.pastRuns = [[]];
+    assert.equal(draw(), 0);
+    state.pastRuns = [];
+});
+
 if (failures) { console.log(`${failures} failed`); process.exit(1); }
 console.log('loudest wins checks passed');

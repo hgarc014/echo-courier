@@ -32,7 +32,9 @@ function makeAudit() {
     a.tick = () => {
         const b = state.burrowers[0];
         if (!b) return;
-        const lock = (b.phase === 'burrow' || b.phase === 'telegraph') ? key(b.lockedTile) : null;
+        // A crack lock is fixed from lock to strike. A player-mode tile follows the
+        // courier while burrowing and freezes when the telegraph starts.
+        const lock = (b.phase === 'telegraph' || (b.phase === 'burrow' && !b.playerMode)) ? key(b.lockedTile) : null;
         if (lock && !a.open) { a.open = { tile: lock, kind: b.aimKind, id: b.aimId, from: state.currentTick, tiles: new Set([lock]) }; a.cycles.push(a.open); }
         else if (lock && a.open) a.open.tiles.add(lock);
         else if (!lock) a.open = null;
@@ -73,16 +75,49 @@ check("QA F6 path under Loudest wins: a silent walking echo is ignored; loop 2's
     assert.equal(first.tiles.size, 1, 'that lock never moved');
 });
 
-check('a locked tile never moves mid-countdown (QA: 440,280 -> 480,240): 40 s idle, plus a loop with an echo on the QA path', () => {
+check('a locked tile never moves once telegraphed (QA: 440,280 -> 480,240): 40 s of pacing, plus a loop with an echo on the QA path', () => {
     start();
     const audit = makeAudit();
-    idle(audit, 2400);
-    go(audit, 120, 450); go(audit, 120, 200); go(audit, 200, 150);
+    // Idling now dies (the courier's own tile is struck), so pace to stay alive.
+    for (let i = 0; i < 20 && state.gameState === 'PLAYING'; i++) { go(audit, 120, 450); go(audit, 240, 450); }
+    assert.equal(state.gameState, 'PLAYING', `pacing survives: ${state.failMessage}`);
+    go(audit, 120, 200); go(audit, 200, 150);
     pressR();
-    idle(audit, 1500);
+    for (let i = 0; i < 12 && state.gameState === 'PLAYING'; i++) { go(audit, 120, 450); go(audit, 240, 450); }
     assert.ok(audit.cycles.length >= 8, `saw ${audit.cycles.length} locks`);
     for (const c of audit.cycles) assert.equal(c.tiles.size, 1, `lock at tick ${c.from} moved: ${[...c.tiles].join(' -> ')}`);
     assert.deepEqual(audit.markerMismatch, [], 'drawn marker always equals the locked tile');
+});
+
+check('QA C pressure: idling at spawn dies to the first strike on your own tile (was 28 strikes, 0 deaths)', () => {
+    start();
+    clear();
+    let died = null;
+    for (let i = 0; i < 400 && !died; i++) { main.stepSimulation(); if (state.failMessage) died = [state.failMessage, state.currentTick]; }
+    assert.ok(died, 'idling at spawn must die');
+    assert.equal(died[0], 'Struck by the Burrower!');
+    assert.ok(died[1] <= 245, `died at tick ${died[1]}`);
+});
+
+check('the player-mode strike hits plain floor: the courier on a non-crack tile at the strike dies', () => {
+    start();
+    const b = state.burrowers[0];
+    idle(makeAudit(), 2);
+    assert.equal(b.playerMode, true);
+    const t = b.lockedTile;
+    assert.equal(state.cracks.some(c => c.x === t.x && c.y === t.y), false, 'spawn tile is plain floor');
+});
+
+check('stepping off the frozen tile during the telegraph survives the strike', () => {
+    start();
+    const audit = makeAudit();
+    idle(audit, 185);
+    const b = state.burrowers[0];
+    assert.equal(b.phase, 'telegraph');
+    go(audit, 160, 450);
+    let fail = '';
+    for (let i = 0; i < 70; i++) { main.stepSimulation(); fail = fail || state.failMessage; }
+    assert.equal(fail, '');
 });
 
 check('exactly one live marker: no crack draws a ring unless it is a running weight/crumble warning', () => {
@@ -101,15 +136,16 @@ check('exactly one live marker: no crack draws a ring unless it is a running wei
     assert.deepEqual(rings, [], 'no stray rings while idle');
 });
 
-check("labels name the real target: 'STRIKES HERE · locked on YOU' and 'hunting YOU (no noise yet)' at spawn", () => {
+check("labels name the real target: 'STRIKES YOUR TILE' and 'hunting YOU (no noise yet)' at spawn", () => {
     start();
     const b = state.burrowers[0];
     idle(makeAudit(), 2);
-    // Courier spawns ~260px from its nearest open crack (440,280): not a lure strike.
+    // No noise yet: the courier is hunted and the strike tile is their own.
     assert.equal(b.aimKind, 'player');
+    assert.equal(b.playerMode, true);
     // Changed for 'Loudest wins': the strike label names who the tile was locked on,
     // and the hunt label names the live target and why.
-    assert.equal(b.targetLabel(), 'STRIKES HERE · locked on YOU');
+    assert.equal(b.targetLabel(), 'STRIKES YOUR TILE');
     assert.equal(b.getUiState().huntLabel, 'hunting YOU (no noise yet)');
 });
 

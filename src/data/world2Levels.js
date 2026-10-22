@@ -221,14 +221,14 @@ export const W2_LEVELS = [
     ),
     level(
         'W2-MB: Sinkhole',
-        'Loudest wins: the Burrower hunts whoever last stepped on a crack or plate. Stun it 3 times: hold the gold CORE plate beside the marked crack while an ECHO stamps that crack as it strikes. One stun per loop. Then carry the package through the door.',
+        'Loudest wins: it strikes whoever last stepped on a crack or plate, or YOUR tile. Stun it 3 times: you on the CORE plate, an echo stamping the marked crack in the last 0.5 s. Then deliver.',
         'Something under the subfloor hunts by sound. Whoever last stepped onto a crack or a plate is the one it hunts; standing still is silent. It locks a crack and surfaces there. Hold the gold core plate beside that crack while an echo stamps the crack right as it surfaces, and it is stunned. One stun per loop, then it sleeps until the loop clock rewinds. Three stuns open the door.',
         4, 3, 30, W2_MB_LAYOUT,
         {
             unlocks: ['dash'],
             flags: {
                 isBoss: true,
-                hintLine: 'NOW: it hunts the last body to step on a crack or plate (no noise yet = you). Stun = you hold the CORE plate beside the marked crack AND an echo steps onto that crack in the last half-second before it surfaces. Step off fast — the crack falls. Stuns once per loop; rewind and that run becomes an echo.',
+                hintLine: 'It hunts the last step on a crack or plate, else YOU: keep moving. Stun: you on the CORE plate + an echo stepping onto the marked crack in its last 0.5 s and staying ON it. 1 stun per loop.',
                 bossIntro: {
                     speaker: 'BURROWER',
                     text: 'I hear every step on cracks and plates, and I hunt the loudest. Stillness is silence. Hold the plate beside my crack and have your echo stamp it as I rise. One stun, then I sleep until your loop clock rewinds.'

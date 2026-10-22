@@ -117,9 +117,11 @@ function loopCapTicks() {
 function holdRestOfLoop1() {
     const cap = loopCapTicks();
     let steps = 0;
+    holdRestOfLoop1.fail = '';
     while (state.gameState === 'PLAYING' && state.loopNumber === 1 && state.pastRuns.length === 0 && state.currentTick < cap && steps < cap + 5) {
         tap('');
         steps++;
+        if (state.failMessage) { holdRestOfLoop1.fail = state.failMessage; break; }
     }
     return cap;
 }
@@ -132,11 +134,12 @@ check('w2-mb one-loop attempt does not clear', () => {
     assert.equal(r.completed, false);
     assert.equal(r.loopsUsed, 1);
     assert.equal(state.pastRuns.length, 0);
-    const cap = holdRestOfLoop1();
+    holdRestOfLoop1();
     assert.notEqual(state.gameState, 'LEVEL_COMPLETE');
     assert.equal(state.loopNumber, 1);
     assert.equal(state.pastRuns.length, 0);
-    assert.equal(state.currentTick, cap);
+    // Standing still for the rest of the loop now gets the courier struck.
+    assert.equal(holdRestOfLoop1.fail, 'Struck by the Burrower!');
     const boss = state.burrowers[0];
     assert.equal(boss.defeated, false);
     assert.ok(boss.hp > 0, `boss died in one loop (hp ${boss.hp})`);
@@ -176,13 +179,12 @@ check('w2-mb idle on one core plate does not solo loop 1', () => {
     }
     assert.equal(parked(), true, `did not park on c3 (player ${state.player.x},${state.player.y})`);
     const boss = state.burrowers[0];
-    const cap = holdRestOfLoop1();
-    assert.equal(state.gameState, 'PLAYING');
+    holdRestOfLoop1();
+    // Camping the plate is not safe any more: the strike lands on the courier's tile.
+    assert.equal(holdRestOfLoop1.fail, 'Struck by the Burrower!');
     assert.equal(state.loopNumber, 1);
     assert.equal(state.pastRuns.length, 0);
     assert.equal(state.activeGhosts.length, 0);
-    assert.equal(state.currentTick, cap);
-    assert.ok(cap >= boss.intervalTicks() * 3, 'loop did not cover several surface cycles');
     assert.equal(boss.hp, boss.maxHp);
     assert.equal(boss.stunsThisLoop, 0);
     assert.notEqual(boss.phase, 'dormant');
@@ -190,7 +192,6 @@ check('w2-mb idle on one core plate does not solo loop 1', () => {
     assert.equal(boss.maxStunsPerLoop, 1);
     const door = state.doors.find(d => d.id === boss.defeatDoorId);
     assert.equal(door.isOpen, false);
-    assert.equal(parked(), true);
 });
 
 process.exit(failures ? 1 : 0);

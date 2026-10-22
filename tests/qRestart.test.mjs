@@ -131,9 +131,9 @@ check('controls list shows dash once the level unlocks it', () => {
     assert.match(hud, /<kbd>SHIFT<\/kbd> Dash/);
     assert.equal(document.getElementById('touch-btn-dash').classList.contains('hidden'), false);
     const hint = document.getElementById('level-hint');
-    assert.match(hint.innerText, /hold the CORE plate beside the marked crack AND an echo steps onto that crack/);
-    assert.match(hint.innerText, /once per loop/);
-    assert.match(hint.innerText, /becomes an echo/);
+    assert.match(hint.innerText, /you on the CORE plate \+ an echo stepping onto the marked crack in its last 0\.5 s and staying ON it/);
+    assert.match(hint.innerText, /1 stun per loop/);
+    assert.doesNotMatch(hint.innerText, /Step off fast/);
     assert.equal(hint.classList.contains('hidden'), false);
 });
 
