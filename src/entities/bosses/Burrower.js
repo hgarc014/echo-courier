@@ -17,14 +17,16 @@ import { actorPressesPlate, killZone } from '../../core/hitZones.js';
 import { drawKillRing } from '../hazards.js';
 
 const TICKS_PER_SECOND = 60;
-// Every loop starts with the courier and all echoes stacked on the spawn tile, so
-// "nearest actor" is a tie on tick 1. The cycle waits (counting toward the same
-// interval, so the cadence is unchanged) until bodies separate, at most this long,
-// before it locks. A tie that survives the wait goes to the echo, so an echo lure
-// works from the first strike of a loop.
-// A locked crack this close to the lure (centre to centre, at lock time) is a lure strike.
-export const LURE_NEAR_PX = 120;
-const TIE_EPS = 1;
+// "Loudest wins": the boss hunts whoever most recently stepped onto a crack or a
+// plate. Standing still is silent, and noise fades, so a parked echo is ignored and
+// the hunt falls back to the live courier.
+export const NOISE_TTL_TICKS = 90;      // 1.5 s: older noise no longer counts
+// A stun needs an echo to stamp the struck crack (step onto it no more than this
+// long before the strike) while the live courier holds the core plate beside it.
+// It matches the 0.5 s weight ring, so a stamp that lands earlier crumbles the
+// tile and calls the strike off instead.
+export const STAMP_WINDOW_TICKS = 30;
+export const RIPPLE_TICKS = 36;
 
 export function burrowerTicks(seconds) {
     const n = Number(seconds);
@@ -55,14 +57,15 @@ function center(a) {
 }
 
 // Ghosts carry a numeric id (and runData). The live courier does not.
-export function firstEchoOf(actors) {
-    let best = null;
-    for (const a of actors || []) {
-        if (!a || a.isActive === false || a.isDestroyed) continue;
-        if (actorTargetInfo(a).kind !== 'echo') continue;
-        if (!best || (a.id ?? 0) < (best.id ?? 0)) best = a;
-    }
-    return best;
+export function whoName(kind, id) {
+    if (kind === 'echo') return `ECHO ${typeof id === 'number' ? id + 1 : id}`;
+    if (kind === 'player') return 'YOU';
+    return null;
+}
+
+export function actorKey(actor) {
+    const info = actorTargetInfo(actor);
+    return info.kind + ':' + info.id;
 }
 
 export function actorTargetInfo(actor) {
@@ -158,7 +161,10 @@ export class Burrower extends Entity {
         this.phaseTicks = 0;
         this.cycleTicks = 0;
         this.cycleLocked = false;
-        this.firstLockPending = true;
+        this.clock = 0;
+        this.footing = new Map();   // actor key -> surface key it stands on
+        this.noise = new Map();     // actor key -> { tick, surface, kind, id }
+        this.ripples = [];
         this.lockStart = null;
         this.lockedTile = null;
         this.teleOriginX = x;
@@ -219,6 +225,10 @@ export class Burrower extends Entity {
             targetKind: this.aimKind,
             targetId: this.aimId,
             targetLabel: this.targetLabel(),
+            huntKind: this.hunt ? this.hunt.kind : null,
+            huntId: this.hunt ? this.hunt.id : null,
+            huntByNoise: this.hunt ? this.hunt.byNoise : false,
+            huntLabel: this.huntLabel(),
             surfaceInTicks: this.surfaceInTicks(),
             homeFallback: !!this.homeFallback,
             ...this.targetPointers(),
@@ -298,31 +308,77 @@ export class Burrower extends Entity {
         state.bossCheckpoint[this.id] = { hp: this.hp };
     }
 
-    // Nearest living actor to the burrower's current position. Ties keep the earlier actor
-    // (player is listed before echoes). Inactive echoes are ignored.
+    // Loudest wins: the live actor whose last step onto a crack or plate is the most
+    // recent, if that step is under NOISE_TTL_TICKS old. Otherwise the live courier.
     pickTarget(actors) {
-        return this.pickTargetInfo(actors).actor;
+        return this.huntInfo(actors).actor;
     }
 
-    // Nearest living actor. `tied` is true when another living actor is within
-    // TIE_EPS of the same distance. On a tie an echo wins over the courier
-    // (lowest echo id first), so stacked spawns resolve to the lure.
-    pickTargetInfo(actors) {
-        const origin = center(this);
-        const live = [];
+    noteHunt(actors) {
+        const { actor, byNoise } = this.huntInfo(actors);
+        if (!actor) { this.hunt = null; return; }
+        const info = actorTargetInfo(actor);
+        this.hunt = { x: actor.x, y: actor.y, w: actor.w || 30, h: actor.h || 30, kind: info.kind, id: info.id, byNoise };
+    }
+
+    huntLabel() {
+        const h = this.hunt;
+        if (!h || this.defeated || this.phase === 'dormant') return null;
+        return `hunting ${whoName(h.kind, h.id)} ${h.byNoise ? '(noise)' : '(no noise yet)'}`;
+    }
+
+    huntInfo(actors) {
+        let best = null;
+        let bestTick = -Infinity;
+        let player = null;
         for (const actor of actors || []) {
             if (!actor || actor.isActive === false || actor.isDestroyed) continue;
-            const c = center(actor);
-            live.push({ actor, d: Math.hypot(c.x - origin.x, c.y - origin.y) });
+            const info = actorTargetInfo(actor);
+            if (info.kind === 'player' && !player) player = actor;
+            const n = this.noise.get(actorKey(actor));
+            if (!n || this.clock - n.tick > NOISE_TTL_TICKS) continue;
+            // Later actors win a same-tick tie, so an echo beats the courier only on
+            // a genuinely simultaneous step (deterministic either way).
+            if (n.tick >= bestTick) { best = actor; bestTick = n.tick; }
         }
-        if (!live.length) return { actor: null, tied: false };
-        let bestD = Infinity;
-        for (const e of live) if (e.d < bestD) bestD = e.d;
-        const near = live.filter(e => e.d <= bestD + TIE_EPS);
-        if (near.length === 1) return { actor: near[0].actor, tied: false };
-        const echoes = near.filter(e => actorTargetInfo(e.actor).kind === 'echo')
-            .sort((a, b) => (a.actor.id ?? 0) - (b.actor.id ?? 0));
-        return { actor: (echoes[0] || near[0]).actor, tied: true };
+        if (best) return { actor: best, byNoise: true };
+        return { actor: player, byNoise: false };
+    }
+
+    surfaceUnder(actor) {
+        const c = center(actor);
+        const inside = r => c.x >= r.x && c.x < r.x + r.w && c.y >= r.y && c.y < r.y + r.h;
+        for (const crack of state.cracks || []) {
+            if (!crack || crack.broken) continue;
+            if (inside(crack)) return { key: 'k' + crack.x + ',' + crack.y, kind: 'crack', tile: tileOf(crack) };
+        }
+        for (const plate of state.plates || []) {
+            if (plate && inside(plate)) return { key: 'p' + (plate.id ?? plate.x + ',' + plate.y), kind: 'plate', tile: tileOf(plate) };
+        }
+        return null;
+    }
+
+    // A step = the actor's centre arriving on a crack or plate it was not on last tick.
+    listen(actors) {
+        this.clock++;
+        const seen = new Set();
+        for (const actor of actors || []) {
+            if (!actor || actor.isActive === false || actor.isDestroyed) continue;
+            const key = actorKey(actor);
+            seen.add(key);
+            const surf = this.surfaceUnder(actor);
+            const prev = this.footing.get(key) || null;
+            if (surf && surf.key !== prev) {
+                const info = actorTargetInfo(actor);
+                this.noise.set(key, { tick: this.clock, surface: surf.key, surfaceKind: surf.kind, kind: info.kind, id: info.id });
+                const c = center(actor);
+                this.ripples.push({ x: c.x, y: c.y, age: 0, kind: info.kind });
+            }
+            this.footing.set(key, surf ? surf.key : null);
+        }
+        for (const key of [...this.footing.keys()]) if (!seen.has(key)) this.footing.delete(key);
+        for (const r of this.ripples) r.age++;
+        this.ripples = this.ripples.filter(r => r.age < RIPPLE_TICKS);
     }
 
     crackIsTargetable(crack) {
@@ -460,14 +516,30 @@ export class Burrower extends Entity {
         return false;
     }
 
-    // Surfacing on a crack that shares an edge with a pressed core plate.
+    // Stun: the strike lands on a crack beside a core plate while the live courier
+    // holds that plate AND an echo stamped this crack within STAMP_WINDOW_TICKS.
     tileStuns(tile, actors) {
         if (!tile) return false;
+        if (!this.echoStamped(tile, actors)) return false;
         const ids = this.corePlateIds || [];
+        const player = (actors || []).find(a => a && a.isActive !== false && actorTargetInfo(a).kind === 'player');
+        if (!player) return false;
         for (const plate of state.plates || []) {
             if (!ids.includes(plate.id)) continue;
             if (!orthoAdjacent(tile, plate)) continue;
-            if (this.plateIsHot(plate, actors)) return true;
+            if (actorPressesPlate(player, plate)) return true;
+        }
+        return false;
+    }
+
+    echoStamped(tile, actors) {
+        const key = 'k' + tile.x + ',' + tile.y;
+        for (const actor of actors || []) {
+            if (!actor || actor.isActive === false || actorTargetInfo(actor).kind !== 'echo') continue;
+            const n = this.noise.get(actorKey(actor));
+            if (!n || n.surface !== key) continue;
+            if (this.footing.get(actorKey(actor)) !== key) continue;
+            if (this.clock - n.tick <= STAMP_WINDOW_TICKS) return true;
         }
         return false;
     }
@@ -589,6 +661,8 @@ export class Burrower extends Entity {
 
     update(actors) {
         if (this.stunFlash > 0) this.stunFlash--;
+        this.listen(actors);
+        this.noteHunt(actors);
         if (this.defeated || this.hp <= 0) {
             this.defeated = true;
             this.phase = 'defeated';
@@ -614,13 +688,8 @@ export class Burrower extends Entity {
         // Lock the strike tile once. Later movement never re-aims it. A locked tile
         // that breaks calls the cycle off (validateLock) instead of moving the mark.
         if (!this.cycleLocked) {
-            // First lock of a loop: an echo, when one is on the floor, is the lure
-            // (lowest echo id). Which way the echo or courier steps first does not
-            // matter. Later cycles go to the nearest body.
-            let target = null;
-            if (this.firstLockPending) target = firstEchoOf(actors);
-            if (!target) target = this.pickTarget(actors);
-            this.firstLockPending = false;
+            // Loudest wins at lock time; the tile then never moves.
+            const target = this.pickTarget(actors);
             if (target) this.noteAim(target);
             else this.clearAim();
             this.ensureTarget(actors);
@@ -689,18 +758,62 @@ export class Burrower extends Entity {
         }
     }
 
-    // Names what the boss is actually going for: the locked crack, and the body it
-    // was nearest to when it locked. A crack far from that body is not called a lure.
+    // The locked strike tile, and whose noise it was locked on. The live hunt (who
+    // the next lock goes to) is drawn separately by drawHunt.
     targetLabel() {
         const ptr = this.targetPointers();
         if (!ptr.targetTile) return null;
-        const who = this.aimKind === 'echo'
-            ? `ECHO ${typeof this.aimId === 'number' ? this.aimId + 1 : this.aimId}`
-            : (this.aimKind === 'player' ? 'YOU' : null);
-        if (!who) return 'STRIKES HERE';
-        const from = this.lockStart;
-        const near = from && Math.hypot(from.x - ptr.arrowTo.x, from.y - ptr.arrowTo.y) <= LURE_NEAR_PX;
-        return near ? `STRIKES HERE · lured by ${who}` : `STRIKES HERE · nearest open crack to ${who}`;
+        const who = whoName(this.aimKind, this.aimId);
+        return who ? `STRIKES HERE · locked on ${who}` : 'STRIKES HERE';
+    }
+
+    // Dashed hunt line to the noisiest actor (it jumps the moment someone else makes
+    // noise), a "!" over them, and "hunting ECHO 1 (noise)".
+    drawHunt(ctx) {
+        const h = this.hunt;
+        const label = this.huntLabel();
+        if (!h || !label) return;
+        const color = h.kind === 'echo' ? '#ff6ad5' : '#7af0ff';
+        const hx = h.x + h.w / 2;
+        const hy = h.y + h.h / 2;
+        ctx.save();
+        ctx.setLineDash([6, 5]);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.w / 2, this.y + this.h / 2);
+        ctx.lineTo(hx, hy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.font = 'bold 20px "Space Grotesk", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.beginPath();
+        ctx.arc(hx, h.y - 14, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = color;
+        ctx.fillText('!', hx, h.y - 13);
+        ctx.restore();
+        paintLabel(ctx, label, hx, h.y - 34, { color, h: 15 });
+    }
+
+    // Noise ripples: an expanding ring under anyone who steps onto a crack or plate.
+    drawRipples(ctx) {
+        if (!this.ripples || !this.ripples.length) return;
+        ctx.save();
+        for (const r of this.ripples) {
+            const t = r.age / RIPPLE_TICKS;
+            ctx.globalAlpha = Math.max(0, 0.9 * (1 - t));
+            ctx.strokeStyle = r.kind === 'echo' ? '#ff6ad5' : '#7af0ff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(r.x, r.y + 10, 8 + t * 30, 4 + t * 14, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
     }
 
     drawSurfaceMark(ctx) {
@@ -816,8 +929,10 @@ export class Burrower extends Entity {
         }
 
         this.drawHpPips(ctx, cx);
-        // Last, so the boss body and HP pips never cover the arrow label.
+        // Last, so the boss body and HP pips never cover the labels.
+        this.drawRipples(ctx);
         this.drawTargetMark(ctx);
+        this.drawHunt(ctx);
         ctx.restore();
     }
 }

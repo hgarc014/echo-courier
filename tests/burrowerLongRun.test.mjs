@@ -141,7 +141,17 @@ check('200s on a core plate: presses, surfaces, then the stun cap is a loop cloc
     const { boss } = sinkhole();
     const plate = state.plates.find(p => p.id === 'c1');
     const player = body(plate.x + (plate.w - 30) / 2, plate.y + (plate.h - 30) / 2);
-    const actorsAt = () => [player];
+    // 'Loudest wins': a stun needs an echo stamping the struck crack while the courier
+    // holds the plate. This echo waits off the floor and steps onto the locked crack in
+    // the last 10 ticks of each telegraph (was: courier alone on the plate stunned).
+    const echo = body(300, 300, { id: 0, runData: [] });
+    const actorsAt = () => {
+        const tile = boss.lockedTile;
+        if (boss.phase === 'telegraph' && tile && boss.telegraphTicks() - boss.phaseTicks <= 10) {
+            echo.x = tile.x + (tile.w - 30) / 2; echo.y = tile.y + (tile.h - 30) / 2;
+        } else { echo.x = 300; echo.y = 300; }
+        return [player, echo];
+    };
     let dormantAt = -1;
     let presses = 0;
     const bound = boss.intervalTicks() + boss.telegraphTicks() + 5;

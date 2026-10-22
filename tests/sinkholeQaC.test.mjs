@@ -55,11 +55,13 @@ function go(audit, tx, ty, max = 900) {
 function idle(audit, n) { clear(); for (let i = 0; i < n && state.gameState === 'PLAYING'; i++) { main.stepSimulation(); audit.tick(); } }
 function pressR() { clear(); keys.r = true; main.stepSimulation(); keys.r = false; main.stepSimulation(); }
 
-check("QA F6 path: echo walks left, up, right; courier stays at spawn; loop 2's first strike is locked on ECHO 1", () => {
+// Changed for 'Loudest wins': QA's F6 path never steps on a crack or plate, so that
+// echo is silent and loop 2's first strike locks on the courier (it used to be ECHO 1
+// by the removed lowest-id rule).
+check("QA F6 path under Loudest wins: a silent walking echo is ignored; loop 2's first strike locks on the courier", () => {
     start();
     const audit = makeAudit();
-    const spawn = { x: state.player.x, y: state.player.y };
-    assert.deepEqual([spawn.x, spawn.y], [240, 450]);
+    assert.deepEqual([state.player.x, state.player.y], [240, 450]);
     go(audit, 120, 450); go(audit, 120, 200); go(audit, 200, 150);
     pressR();
     assert.equal(state.activeGhosts.length, 1, 'loop 1 became echo 1');
@@ -67,19 +69,8 @@ check("QA F6 path: echo walks left, up, right; courier stays at spawn; loop 2's 
     idle(audit, 260);
     const first = audit.cycles[before];
     assert.ok(first, 'loop 2 locked a tile');
-    assert.equal(first.kind, 'echo', `first strike locked on ${first.kind} at ${first.tile}`);
-    assert.equal(first.id, 0);
+    assert.equal(first.kind, 'player', `first strike locked on ${first.kind} at ${first.tile}`);
     assert.equal(first.tiles.size, 1, 'that lock never moved');
-});
-
-check('the courier stepping the other way first does not change who wins loop 2 (echo walks right first)', () => {
-    start();
-    const audit = makeAudit();
-    go(audit, 360, 450); go(audit, 360, 300);
-    pressR();
-    const before = audit.cycles.length;
-    idle(audit, 30);
-    assert.equal(audit.cycles[before].kind, 'echo');
 });
 
 check('a locked tile never moves mid-countdown (QA: 440,280 -> 480,240): 40 s idle, plus a loop with an echo on the QA path', () => {
@@ -110,16 +101,16 @@ check('exactly one live marker: no crack draws a ring unless it is a running wei
     assert.deepEqual(rings, [], 'no stray rings while idle');
 });
 
-check("'lured by' names the real target: a crack far from the lure is called 'nearest open crack', a near one 'lured by'", () => {
+check("labels name the real target: 'STRIKES HERE · locked on YOU' and 'hunting YOU (no noise yet)' at spawn", () => {
     start();
     const b = state.burrowers[0];
     idle(makeAudit(), 2);
     // Courier spawns ~260px from its nearest open crack (440,280): not a lure strike.
     assert.equal(b.aimKind, 'player');
-    assert.equal(b.targetLabel(), 'STRIKES HERE · nearest open crack to YOU');
-    const t = b.getUiState().targetTile;
-    b.lockStart = { x: t.x + t.w / 2 + 20, y: t.y + t.h / 2 };
-    assert.equal(b.getUiState().targetLabel, 'STRIKES HERE · lured by YOU');
+    // Changed for 'Loudest wins': the strike label names who the tile was locked on,
+    // and the hunt label names the live target and why.
+    assert.equal(b.targetLabel(), 'STRIKES HERE · locked on YOU');
+    assert.equal(b.getUiState().huntLabel, 'hunting YOU (no noise yet)');
 });
 
 check('parcel pickup gives feedback (ring + PARCEL PICKED UP tag for 45 ticks)', () => {

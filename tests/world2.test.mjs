@@ -83,7 +83,7 @@ for (const { level, index } of w2) {
             assert.equal(loaded.burrowers[0].maxStunsPerLoop, 1);
             assert.equal(json.meta.isBoss, true);
             assert.equal(json.meta.hintLine, level.hintLine);
-            assert.match(json.meta.hintLine, /crack touching a pressed core plate/);
+            assert.match(json.meta.hintLine, /hold the CORE plate beside the marked crack AND an echo steps onto that crack/);
             assert.match(json.meta.hintLine, /once per loop/);
             assert.match(json.meta.hintLine, /becomes an echo/);
             assert.equal(json.meta.pitKillFraction, undefined);
@@ -158,13 +158,30 @@ function fastBoss(x, y, opts = {}) {
 
 function runUntil(boss, actors, pred, max = 40) {
     for (let i = 0; i < max; i++) {
-        boss.update(actors);
+        boss.update(typeof actors === 'function' ? actors() : actors);
         if (pred()) return i + 1;
     }
     throw new Error(`burrower did not reach expected state (phase ${boss.phase})`);
 }
 
-check('burrower targets the nearest actor, including an echo', () => {
+// 'Loudest wins': a stun needs the live courier on the core plate AND an echo that
+// stamps the struck crack just before the strike. This echo parks off the floor and
+// steps onto the locked tile in the last 2 ticks of each telegraph.
+function withStamper(boss, player) {
+    const echo = { x: 300, y: 300, w: 30, h: 30, isActive: true, id: 0, runData: [] };
+    return () => {
+        const t = boss.lockedTile;
+        if (boss.phase === 'telegraph' && t && boss.telegraphTicks() - boss.phaseTicks <= 2) {
+            echo.x = t.x + 5; echo.y = t.y + 5;
+        } else { echo.x = 300; echo.y = 300; }
+        return [player, echo];
+    };
+}
+
+// Was 'targets the nearest actor'. Both bodies arrive on a crack on the first tick
+// (a step = noise); the echo is listed later, so it wins the same-tick tie and the
+// boss locks the echo's crack. Same expected tile as before, new reason.
+check('burrower targets the noisiest actor, including an echo', () => {
     resetWorld();
     state.cracks = [
         new CrackedFloor(0, 0, 40, 40, 'fast'),
@@ -222,7 +239,7 @@ check('surfacing beside a pressed core plate stuns for 1 HP', () => {
     state.doors = [new Door('boss_door', 0, 0, 40, 80)];
     const actor = { x: 85, y: 85, w: 30, h: 30 };
     const boss = fastBoss(10, 10, { corePlateIds: ['c1'], stunTime: 2 });
-    runUntil(boss, [actor], () => boss.phase === 'stun' || boss.hp < 3);
+    runUntil(boss, withStamper(boss, actor), () => boss.phase === 'stun' || boss.hp < 3);
     assert.equal(boss.hp, 2);
     assert.equal(boss.phase, 'stun');
     assert.equal(state.cracks[0].collapsing, true);
@@ -234,14 +251,16 @@ check('after stunTime the burrower goes home and surfaces again', () => {
     const plate = new PressurePlate('c1', 80, 80, []);
     plate.isPressed = true;
     state.plates = [plate];
-    // Two cracks. The actor stands on the south one, which collapses on the first
-    // stun, so the next cycle has to pick the east crack instead of the spent tile.
+    // Two cracks. The first stun collapses the struck one, so the next cycle has to
+    // pick the other crack instead of the spent tile. (The courier used to stand on
+    // the south crack with the plate faked pressed; now the courier holds the plate
+    // and an echo stamps.)
     state.cracks = [
         new CrackedFloor(80, 120, 40, 40, 'fast'),
         new CrackedFloor(120, 80, 40, 40, 'fast')
     ];
     state.doors = [new Door('boss_door', 0, 0, 40, 80)];
-    const actor = { x: 85, y: 125, w: 30, h: 30 };
+    const actor = { x: 85, y: 85, w: 30, h: 30 };
     const boss = fastBoss(10, 10, {
         corePlateIds: ['c1'],
         stunTime: 0.05,
@@ -249,7 +268,8 @@ check('after stunTime the burrower goes home and surfaces again', () => {
         telegraphTime: 0.05
     });
     assert.equal(boss.maxStunsPerLoop, null);
-    runUntil(boss, [actor], () => boss.phase === 'stun');
+    const actors = withStamper(boss, actor);
+    runUntil(boss, actors, () => boss.phase === 'stun');
     assert.equal(boss.hp, 2);
     const stunLen = boss.stunTicks();
     for (let i = 0; i < stunLen - 1; i++) boss.update([actor]);
@@ -259,7 +279,7 @@ check('after stunTime the burrower goes home and surfaces again', () => {
     assert.equal(boss.x, boss.startX);
     assert.equal(boss.y, boss.startY);
     assert.equal(boss.stunsThisLoop, 1);
-    runUntil(boss, [actor], () => boss.phase === 'stun' || boss.hp < 2, 80);
+    runUntil(boss, actors, () => boss.phase === 'stun' || boss.hp < 2, 80);
     assert.equal(boss.hp, 1);
     assert.equal(boss.phase, 'stun');
     assert.notEqual(boss.phase, 'dormant');
@@ -272,7 +292,7 @@ check('maxStunsPerLoop 1 stays dormant after the stun until a new instance', () 
     state.plates = [plate];
     state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast')];
     state.doors = [new Door('boss_door', 0, 0, 40, 80)];
-    const actor = { x: 85, y: 125, w: 30, h: 30 };
+    const actor = { x: 85, y: 85, w: 30, h: 30 };
     const boss = fastBoss(10, 10, {
         corePlateIds: ['c1'],
         stunTime: 0.05,
@@ -280,7 +300,7 @@ check('maxStunsPerLoop 1 stays dormant after the stun until a new instance', () 
         telegraphTime: 0.05,
         maxStunsPerLoop: 1
     });
-    runUntil(boss, [actor], () => boss.phase === 'stun');
+    runUntil(boss, withStamper(boss, actor), () => boss.phase === 'stun');
     assert.equal(boss.hp, 2);
     for (let i = 0; i < boss.stunTicks(); i++) boss.update([actor]);
     assert.equal(boss.phase, 'dormant');
@@ -488,10 +508,9 @@ check('getUiState reports dormant, stun countdown, and player vs echo', () => {
     assert.ok(ui.surfaceInTicks > 0);
 
     const nearPlayer = { x: 0, y: 0, w: 30, h: 30 };
-    const farEcho = { x: 400, y: 0, w: 30, h: 30, isActive: true, id: 1 };
+    // A parked (silent) echo off the floor is ignored; the courier stepped on a crack.
+    const farEcho = { x: 400, y: 100, w: 30, h: 30, isActive: true, id: 1 };
     const hunter2 = fastBoss(20, 0, { telegraphTime: 1, surfaceInterval: 1 });
-    // After the first lock of a loop (which an echo always wins), the nearest body is the lure.
-    hunter2.firstLockPending = false;
     hunter2.update([nearPlayer, farEcho]);
     ui = hunter2.getUiState();
     assert.equal(ui.targetKind, 'player');
@@ -503,7 +522,7 @@ check('getUiState reports dormant, stun countdown, and player vs echo', () => {
     state.plates = [plate];
     state.doors = [new Door('boss_door', 0, 0, 40, 80)];
     state.cracks = [new CrackedFloor(0, 40, 40, 40, 'fast')];
-    const actor = { x: 5, y: 45, w: 30, h: 30 };
+    const actor = { x: 5, y: 5, w: 30, h: 30 };
     const boss = fastBoss(10, 10, {
         corePlateIds: ['c1'],
         stunTime: 2,
@@ -511,7 +530,7 @@ check('getUiState reports dormant, stun countdown, and player vs echo', () => {
         telegraphTime: 0.05,
         maxStunsPerLoop: 1
     });
-    runUntil(boss, [actor], () => boss.phase === 'stun');
+    runUntil(boss, withStamper(boss, actor), () => boss.phase === 'stun');
     ui = boss.getUiState();
     assert.equal(ui.phase, 'stun');
     assert.equal(ui.dormant, false);
@@ -561,7 +580,8 @@ check('a locked target counts down to a surface on that tile', () => {
         new CrackedFloor(400, 0, 40, 40, 'fast')
     ];
     const player = { x: 0, y: 0, w: 30, h: 30 };
-    const echo = { x: 400, y: 0, w: 30, h: 30, isActive: true, id: 1, runData: [] };
+    // Echo parked off the floor (silent), so the courier on a crack is the hunt.
+    const echo = { x: 400, y: 60, w: 30, h: 30, isActive: true, id: 1, runData: [] };
     const boss = fastBoss(10, 0, { surfaceInterval: 0.5, telegraphTime: 0.25 });
     boss.update([]);
     assert.equal(boss.phase, 'burrow');

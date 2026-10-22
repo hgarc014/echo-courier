@@ -145,7 +145,8 @@ check('w2-mb one-loop attempt does not clear', () => {
 });
 
 // Camp one core plate for the whole loop. Several burrower cycles fit in that
-// loop; with no echoes the boss may stun once and then stays dormant.
+// loop. 'Loudest wins': a stun needs an echo stamping the struck crack, so with no
+// echoes holding a plate never stuns (it used to stun once, then go dormant).
 check('w2-mb idle on one core plate does not solo loop 1', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'w2-mb.json'), 'utf8'));
     loadLevel(sol);
@@ -182,9 +183,9 @@ check('w2-mb idle on one core plate does not solo loop 1', () => {
     assert.equal(state.activeGhosts.length, 0);
     assert.equal(state.currentTick, cap);
     assert.ok(cap >= boss.intervalTicks() * 3, 'loop did not cover several surface cycles');
-    assert.equal(boss.hp, boss.maxHp - 1);
-    assert.equal(boss.stunsThisLoop, 1);
-    assert.equal(boss.phase, 'dormant');
+    assert.equal(boss.hp, boss.maxHp);
+    assert.equal(boss.stunsThisLoop, 0);
+    assert.notEqual(boss.phase, 'dormant');
     assert.equal(boss.defeated, false);
     assert.equal(boss.maxStunsPerLoop, 1);
     const door = state.doors.find(d => d.id === boss.defeatDoorId);

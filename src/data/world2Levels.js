@@ -157,8 +157,9 @@ const W2_MB_LAYOUT = base({
     cracks: [
         ...ring(80, 80, ['l', 'r', 'u', 'd']),
         ...ring(480, 60, ['l', 'r', 'u', 'd']),
-        // Plate 3 has no south crack: the courier leaves toward the exit on solid ground.
-        ...ring(480, 280, ['l', 'r', 'u'])
+        // Every core plate sits in a full crack ring: a body reaches a plate only by
+        // stepping on a crack, which is noise ('Loudest wins').
+        ...ring(480, 280, ['l', 'r', 'u', 'd'])
     ],
     burrowers: [{
         x: 470, y: 200, w: 36, h: 36, id: 'burrower',
@@ -220,17 +221,17 @@ export const W2_LEVELS = [
     ),
     level(
         'W2-MB: Sinkhole',
-        'Stun the Burrower 3 times: stand on the gold CORE plate touching the dusted crack. One stun per loop — the loop clock rewinds to wake it. An echo can hold a plate. Then carry the package through the door.',
-        'Something under the subfloor surfaces on the crack nearest to you or your echo, and that tile falls. Stand on the gold core plate that touches the dusted crack to stun it. One stun per loop, then it sleeps until the loop clock rewinds. Three stuns open the door. An echo is another body: it can hold a plate while you move.',
-        3, 2, 30, W2_MB_LAYOUT,
+        'Loudest wins: the Burrower hunts whoever last stepped on a crack or plate. Stun it 3 times: hold the gold CORE plate beside the marked crack while an ECHO stamps that crack as it strikes. One stun per loop. Then carry the package through the door.',
+        'Something under the subfloor hunts by sound. Whoever last stepped onto a crack or a plate is the one it hunts; standing still is silent. It locks a crack and surfaces there. Hold the gold core plate beside that crack while an echo stamps the crack right as it surfaces, and it is stunned. One stun per loop, then it sleeps until the loop clock rewinds. Three stuns open the door.',
+        4, 3, 30, W2_MB_LAYOUT,
         {
             unlocks: ['dash'],
             flags: {
                 isBoss: true,
-                hintLine: 'NOW: dust marks the crack it will break. A surfacing on a crack touching a pressed core plate stuns it once per loop. Hold the gold CORE plate — do not stand on the crack. When the loop clock hits zero it wakes, and that run becomes an echo that can hold a plate.',
+                hintLine: 'NOW: it hunts the last body to step on a crack or plate (no noise yet = you). Stun = you hold the CORE plate beside the marked crack AND an echo steps onto that crack in the last half-second before it surfaces. Step off fast — the crack falls. Stuns once per loop; rewind and that run becomes an echo.',
                 bossIntro: {
                     speaker: 'BURROWER',
-                    text: 'Dust marks the crack where I surface. I stun only when the crack touches the plate you are holding. One stun, then I sleep until your loop clock rewinds. Your echoes are bodies too.'
+                    text: 'I hear every step on cracks and plates, and I hunt the loudest. Stillness is silence. Hold the plate beside my crack and have your echo stamp it as I rise. One stun, then I sleep until your loop clock rewinds.'
                 }
             }
         }

@@ -117,7 +117,7 @@ check('one Enter starts Sinkhole after story and boss intro share a panel', () =
     const text = document.getElementById('dialog-text').innerText;
     assert.match(text, /subfloor/i);
     assert.match(text, /BURROWER/i);
-    assert.match(text, /touches the plate/i);
+    assert.match(text, /hold the gold core plate beside that crack while an echo stamps/i);
     tap('enter');
     assert.equal(state.gameState, 'PLAYING');
     assert.equal(state.pendingBossIntro, null);
@@ -131,7 +131,7 @@ check('controls list shows dash once the level unlocks it', () => {
     assert.match(hud, /<kbd>SHIFT<\/kbd> Dash/);
     assert.equal(document.getElementById('touch-btn-dash').classList.contains('hidden'), false);
     const hint = document.getElementById('level-hint');
-    assert.match(hint.innerText, /crack touching a pressed core plate/);
+    assert.match(hint.innerText, /hold the CORE plate beside the marked crack AND an echo steps onto that crack/);
     assert.match(hint.innerText, /once per loop/);
     assert.match(hint.innerText, /becomes an echo/);
     assert.equal(hint.classList.contains('hidden'), false);
