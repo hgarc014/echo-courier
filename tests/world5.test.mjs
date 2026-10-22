@@ -127,5 +127,34 @@ check('W5-L2 exit plate stays pressed until the courier clears the door', () => 
     assert.ok(frac(door.x + door.w) >= 0.25, 'still pressed once fully through');
 });
 
+const ring = await import('../src/ui/loopRing.js');
+const { readFileSync } = await import('node:fs');
+check('B3: the loop timer ring covers no spawn, plate, robot, package, door or drop zone on any W5 level', () => {
+    const w5 = LEVELS.filter(l => l.world === 5 && !l.hidden && l.layout);
+    assert.ok(w5.length >= 5, `only ${w5.length} W5 levels checked`);
+    for (const lv of w5) {
+        const rects = ring.loopRingKeyRects(lv.layout);
+        const c = ring.pickLoopRingCenter(rects, lv.mapWidth || 800, lv.mapHeight || 600);
+        assert.deepEqual(ring.ringOverlaps(c, rects), [], `${lv.name}: ring at ${c.x},${c.y} covers a key entity`);
+    }
+});
+check('B3: plates draw after lasers, so the W5-L4 plate is not hidden under the beam column', () => {
+    const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+    const lasers = src.indexOf('state.lasers.forEach(l => l.render(ctx))');
+    const plates = src.indexOf('state.plates.forEach(p => p.render(ctx))');
+    assert.ok(lasers > 0 && plates > lasers, 'plates must render after lasers');
+});
+
+const { TimerDoor } = await import('../src/entities/interactables.js');
+check('B4: an open W5-L3 timed gate draws a solid frame and label, distinct from floor and static', () => {
+    const calls = [];
+    const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => calls.push([k, ...a])), set: (t, k, v) => { t[k] = v; return true; } });
+    const d = new TimerDoor('gate', 400, 240, 120, 120, 240, 600);
+    d.isOpen = true;
+    d.render(ctx);
+    assert.ok(calls.some(c => c[0] === 'strokeRect'), 'open gate has no frame');
+    assert.ok(calls.some(c => c[0] === 'fillText' && /GATE/.test(c[1])), 'open gate has no label');
+});
+
 if (failures) { console.log(`${failures} world5 check(s) failed`); process.exit(1); }
 console.log('all world5 checks passed');

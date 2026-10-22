@@ -1,6 +1,7 @@
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
+import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
@@ -779,10 +780,10 @@ function drawMiniDemo() {
     (world.winds || []).forEach(paint);
     (world.cracks || []).forEach(paint);
     paint(world.deliveryZone);
-    (world.plates || []).forEach(paint);
     (world.hints || []).forEach(paint);
     (world.walls || []).forEach(paint);
     (world.lasers || []).forEach(paint);
+    (world.plates || []).forEach(paint);
     (world.doors || []).forEach(d => {
         if (d && typeof d.render === 'function' && d.render.length > 1) d.render(mctx, tick);
         else paint(d);
@@ -1705,6 +1706,16 @@ function drawAbilityCooldowns(target) {
     target.restore();
 }
 
+const loopRingCache = new WeakMap();
+function loopRingCenter() {
+    const meta = state.currentLevelMeta;
+    if (meta && loopRingCache.has(meta)) return loopRingCache.get(meta);
+    const src = meta?.layout || state;
+    const c = pickLoopRingCenter(loopRingKeyRects(src), state.mapWidth || 800, state.mapHeight || 600);
+    if (meta) loopRingCache.set(meta, c);
+    return c;
+}
+
 function drawLoopCountdown(target) {
     if (state.gameState !== 'PLAYING') return;
     const cap = loopRecordCap();
@@ -1714,9 +1725,8 @@ function drawLoopCountdown(target) {
     const frac = left / cap;
     const secondsLeft = left / ticksPerSecond;
     const label = String(Math.ceil(secondsLeft - 1e-6));
-    const cx = 58;
-    const cy = 58;
-    const r = 26;
+    const { x: cx, y: cy } = loopRingCenter();
+    const r = LOOP_RING_R;
     const color = secondsLeft <= 2 ? '#ff3355' : (secondsLeft <= 5 ? '#ffdd00' : '#00f3ff');
     target.save();
     target.globalAlpha = 1;
@@ -2008,8 +2018,9 @@ function draw() {
     }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
-    state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); state.plates.forEach(p => p.render(ctx)); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
-    state.lasers.forEach(l => l.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
+    state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
+    // Plates draw over beams so a plate under a laser column (W5-L4) stays readable.
+    state.lasers.forEach(l => l.render(ctx)); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
     state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
 
