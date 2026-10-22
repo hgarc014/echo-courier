@@ -151,3 +151,16 @@ export function segmentHitsBox(x1, y1, x2, y2, box, step = 4) {
     }
     return false;
 }
+
+/** The lit "safe shadow" a shield casts in each beam it cuts (empty if it faces across the beam). */
+export function shieldShadowRects(lasers, slab) {
+    const out = [];
+    for (const laser of lasers || []) {
+        if (!laser || laser.isOpen) continue;
+        const span = safeSpan(laser, slab);
+        if (!span || !(span[1] - span[0] > 0.01)) continue;
+        if (laserAxis(laser) === 'y') out.push({ x: laser.x, y: span[0], w: laser.w, h: span[1] - span[0], laserId: laser.id });
+        else out.push({ x: span[0], y: laser.y, w: span[1] - span[0], h: laser.h, laserId: laser.id });
+    }
+    return out;
+}

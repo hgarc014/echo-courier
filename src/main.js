@@ -18,7 +18,7 @@ import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
-import { collectShieldSlabs, laserThreatens } from './systems/laserShield.js';
+import { collectShieldSlabs, laserThreatens, shieldSlab, shieldShadowRects } from './systems/laserShield.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { installLayoutFit } from './ui/fitLayout.js';
@@ -1040,7 +1040,7 @@ export function startGame(levelIndex) {
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(lv, levelIndex);
-    state.pastRuns = []; state.lastRunFailed = false; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    state.pastRuns = []; state.lastRunFailed = false; state.loopFails = 0; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
     uiAppLayout.classList.remove('hidden'); syncLoopCountUI(); Object.assign(prevKeys, keys);
@@ -1161,6 +1161,7 @@ export function restartLevel() {
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
     state.lastRunFailed = true;
+    state.loopFails = (state.loopFails || 0) + 1;
     SFX.fail();
     state.failMessage = reason;
     state.failTimer = FAIL_HOLD_FRAMES;
@@ -1712,6 +1713,27 @@ function drawAbilityCooldowns(target) {
     target.restore();
 }
 
+// Lit "safe shadow" strip in each beam a shielded actor is cutting (W5-L4 clarity).
+function drawShieldShadows(target) {
+    if (!getUnlockedAbilities().includes('ghostShield') || !state.lasers.length) return;
+    const actors = [state.player, ...(state.activeGhosts || []).filter(g => g.isActive)];
+    const pulse = 0.5 + 0.5 * Math.abs(Math.sin((state.currentTick || 0) * 0.1));
+    target.save();
+    for (const a of actors) {
+        const slab = shieldSlab(a);
+        if (!slab) continue;
+        for (const r of shieldShadowRects(state.lasers, slab)) {
+            target.fillStyle = `rgba(0, 243, 255, ${0.16 + 0.12 * pulse})`;
+            target.fillRect(r.x, r.y, r.w, r.h);
+            target.strokeStyle = 'rgba(0, 243, 255, 0.85)';
+            target.lineWidth = 2; target.setLineDash([5, 4]);
+            target.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+            target.setLineDash([]);
+        }
+    }
+    target.restore();
+}
+
 const loopRingCache = new WeakMap();
 function loopRingCenter() {
     const meta = state.currentLevelMeta;
@@ -2026,7 +2048,7 @@ function draw() {
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
     // Plates draw over beams so a plate under a laser column (W5-L4) stays readable.
-    state.lasers.forEach(l => l.render(ctx)); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
+    state.lasers.forEach(l => l.render(ctx)); drawShieldShadows(ctx); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
     state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
 
@@ -2129,6 +2151,7 @@ function draw() {
             ctx.fillStyle = '#fff'; ctx.font = 'bold 36px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText("LOOP FAILED", 400, 250);
             ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
             ctx.font = '16px "Space Grotesk"'; ctx.fillStyle = '#ffd0d0'; ctx.fillText('Rewinding — this run will NOT become an echo.', 400, 335);
+            ctx.fillText(`Failed loops this level: ${state.loopFails || 1}`, 400, 360);
             ctx.textAlign = 'left';
         }
     }

@@ -166,6 +166,7 @@ check('clarity: W5-L4 shows a shield hint next to the beam column', () => {
     const lv = byName('W5-L4');
     const ls = labels.worldLabelsFor(lv.layout, { shield: true }).filter(l => l.kind === 'shield');
     assert.ok(ls.length >= 1);
+    assert.equal(ls[0].text, 'SHIELD ECHO \u2192 FACE THE BEAM, WALK IN ITS SHADOW');
     const beam = lv.layout.lasers[0];
     assert.ok(Math.abs(ls[0].x - (beam.x + beam.w / 2)) < 30 && ls[0].y - (beam.y + beam.h) < 30, 'hint is not by the beam');
 });
@@ -193,6 +194,18 @@ check('cosmetic: W5 level buttons use world-relative names, not "Level 27-31"', 
         const label = levelButtonLabel({ ...level, isPendingCampaign: false }, index);
         assert.ok(label.startsWith('W5-'), `${level.name} shows "${label}"`);
     }
+});
+
+const shield = await import('../src/systems/laserShield.js');
+check('r2 L4: a shield cuts the beam only when facing along it, and the safe shadow is the strip behind it', () => {
+    const beam = byName('W5-L4').layout.lasers[0];
+    const echo = { x: beam.x - 1, y: 300, w: 30, h: 30 };
+    const up = shield.shieldSlab(echo, { x: 0, y: -1 });
+    const sh = shield.shieldShadowRects([beam], up);
+    assert.equal(sh.length, 1);
+    assert.equal(sh[0].y, up.y, 'shadow starts at the shield face');
+    assert.equal(sh[0].y + sh[0].h, beam.y + beam.h, 'and runs away from the emitter');
+    assert.deepEqual(shield.shieldShadowRects([beam], shield.shieldSlab(echo, { x: 1, y: 0 })), [], 'facing across the beam cuts nothing');
 });
 
 if (failures) { console.log(`${failures} world5 check(s) failed`); process.exit(1); }

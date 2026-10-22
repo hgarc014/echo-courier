@@ -81,6 +81,26 @@ for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct
     });
 }
 
+// QA B r2 (N1): carrying the parcel into the L4 beam is a visible, counted loop fail.
+check('W5 N1: walking the parcel into the L4 beam fails the loop with a message', () => {
+    loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W5-L4')) });
+    const step = (k = []) => { for (const x of ['w', 'a', 's', 'd', 'space', 'r', 'shift']) keys[x] = false; for (const x of k) keys[x] = true; main.stepSimulation(); };
+    const pkg = state.packages[0];
+    for (let i = 0; i < 400 && (Math.abs(pkg.x - state.player.x) > 3 || Math.abs(pkg.y - state.player.y) > 3); i++) {
+        const dx = pkg.x - state.player.x, dy = pkg.y - state.player.y;
+        step([Math.abs(dy) > 3 ? (dy > 0 ? 's' : 'w') : (dx > 0 ? 'd' : 'a')]);
+    }
+    step(['space']); step();
+    assert.equal(pkg.carriedBy, 'player');
+    let msg = '';
+    for (let i = 0; i < 200 && !msg; i++) { step(['d']); msg = state.failMessage; }
+    assert.match(msg, /Laser|Package/, 'no fail message when the parcel hit the beam');
+    assert.equal(state.loopFails, 1, 'loop fail not counted');
+    const runs = state.pastRuns.length;
+    for (let i = 0; i < 200 && state.failTimer > 0; i++) step();
+    assert.equal(state.pastRuns.length, runs, 'the burned run must not become an echo');
+});
+
 // QA B r2 (B6): a west dash at the closed back door used last tick's (south) facing.
 check('W5 B6: dashing west into XR-9\'s closed back door never jumps the courier south', () => {
     loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W5-BOSS')) });

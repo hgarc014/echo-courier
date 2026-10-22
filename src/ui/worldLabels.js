@@ -1,6 +1,6 @@
 // In-world teaching labels (W5 clarity): plate rules and the shield-through-beam hint.
 export const PLATE_CAPTIONS = { last: 'NEWEST ECHO', first: 'OLDEST ECHO' };
-export const SHIELD_BEAM_LABEL = 'SHIELDED ECHO PASSES';
+export const SHIELD_BEAM_LABEL = 'SHIELD ECHO \u2192 FACE THE BEAM, WALK IN ITS SHADOW';
 
 const isBeamColumn = (l) => Math.max(l.w || 0, l.h || 0) >= 200;
 
