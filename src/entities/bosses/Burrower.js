@@ -755,7 +755,7 @@ export class Burrower extends Entity {
         // Courier on the lit plate + an echo stamping its ring in the window stuns,
         // wherever the strike was locked: the cue (HOLD / STAMP NOW) promises exactly this.
         const ringStamp = this.playerModeStampCrack(actors);
-        if (ringStamp && !(crack && this.crackIsTargetable(crack))) {
+        if (ringStamp && !(crack && this.crackIsTargetable(crack) && this.liveRingCracks().includes(crack))) {
             this.say('STAMP OK', ringStamp, '#9dffb0');
             this.applyStun();
             return;
