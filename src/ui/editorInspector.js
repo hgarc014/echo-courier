@@ -249,6 +249,10 @@ export function applyWardenConfig(ent, cfg = {}) {
     applyPositive(ent, 'coneAngle', cfg.coneAngle, 1);
     applyPositive(ent, 'turnSpeed', cfg.turnSpeed, 0);
     applyPositive(ent, 'hearRange', cfg.hearRange, 0);
+    if (cfg.relaysPerLoop != null && cfg.relaysPerLoop !== '') {
+        const n = Number(cfg.relaysPerLoop);
+        if (Number.isFinite(n)) ent.relaysPerLoop = Math.max(0, Math.floor(n));
+    }
     if (cfg.homeAngle != null && cfg.homeAngle !== '') {
         const n = Number(cfg.homeAngle);
         if (Number.isFinite(n)) {

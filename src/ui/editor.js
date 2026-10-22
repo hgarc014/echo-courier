@@ -888,6 +888,7 @@ function updatePropertiesPanel() {
         html += `<label>Cone angle°: <input type="number" min="1" step="1" id="prop-warden-angle" value="${selectedEntity.coneAngle ?? 80}" style="width:70px"></label><br>`;
         html += `<label>Turn speed °/s: <input type="number" min="0" step="1" id="prop-warden-turn" value="${selectedEntity.turnSpeed ?? 160}" style="width:70px"></label><br>`;
         html += `<label>Hear range: <input type="number" min="0" id="prop-warden-hear" value="${selectedEntity.hearRange ?? 1000}" style="width:70px"></label><br>`;
+        html += `<label>Relays per loop (0 = no cap): <input type="number" min="0" step="1" id="prop-warden-cap" value="${selectedEntity.relaysPerLoop ?? 1}" style="width:70px"></label><br>`;
         html += `<label>Home facing°: <input type="number" step="1" id="prop-warden-home" value="${selectedEntity.homeAngle ?? -90}" style="width:70px"></label><br>`;
         html += `<label>Relay ids: <input type="text" id="prop-warden-relays" value="${escapeAttr((selectedEntity.relayIds || []).join(', '))}" style="width:100%"></label><br>`;
         html += `<label>Defeat door id: <input type="text" id="prop-warden-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
@@ -1108,6 +1109,7 @@ function updatePropertiesPanel() {
                 turnSpeed: document.getElementById('prop-warden-turn').value,
                 hearRange: document.getElementById('prop-warden-hear').value,
                 homeAngle: document.getElementById('prop-warden-home').value,
+                relaysPerLoop: document.getElementById('prop-warden-cap').value,
                 relayIds: document.getElementById('prop-warden-relays').value,
                 defeatDoorId: document.getElementById('prop-warden-door').value
             });

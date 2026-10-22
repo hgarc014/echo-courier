@@ -95,6 +95,7 @@ check('inspector params survive serialize → deserialize', () => {
         coneAngle: 100,
         turnSpeed: 90,
         hearRange: 800,
+        relaysPerLoop: 2,
         homeAngle: 45,
         relayIds: 'east, center, west',
         defeatDoorId: 'gate'
@@ -110,6 +111,7 @@ check('inspector params survive serialize → deserialize', () => {
     assert.equal(boss.coneAngle, 100);
     assert.equal(boss.turnSpeed, 90);
     assert.equal(boss.hearRange, 800);
+    assert.equal(boss.relaysPerLoop, 2);
     assert.equal(boss.homeAngle, 45);
     assert.deepStrictEqual(boss.relayIds, ['east', 'center', 'west']);
     assert.equal(boss.defeatDoorId, 'gate');
@@ -197,7 +199,8 @@ check('checkpoint restores each relay and the door opens only when all three are
     state.bossCheckpointLive = true;
     const restored = new Warden(385, 305, {
         id: 'warden', coneLength: 340, coneAngle: 80, turnSpeed: 160,
-        hearRange: 1000, homeAngle: -90, relayIds: ['r1', 'r2', 'r3'], defeatDoorId: 'boss_door'
+        hearRange: 1000, homeAngle: -90, relayIds: ['r1', 'r2', 'r3'], defeatDoorId: 'boss_door',
+        relaysPerLoop: 0
     });
     state.bossCheckpointLive = false;
     assert.equal(restored.solved.has('r1'), true);
@@ -222,6 +225,33 @@ check('checkpoint restores each relay and the door opens only when all three are
     door.isOpen = false;
     restored.update();
     assert.equal(door.isOpen, true);
+});
+
+check('relaysPerLoop caps latches per loop; a new loop (checkpoint) allows the next', () => {
+    const w = freshWarden();
+    assert.equal(w.relaysPerLoop, 1, 'W3-MB default cap is one relay per loop');
+    const plates = [
+        new PressurePlate('r1', 460, 128, []),
+        new PressurePlate('r3', 380, 100, [])
+    ];
+    state.plates = plates;
+    state.currentTick = 1;
+    pushNoiseEvent(186, 204, 'decoy');
+    for (let i = 0; i < 60; i++) w.update();
+    assert.equal(w.pointInCone(480, 148), false);
+    assert.equal(w.pointInCone(400, 120), false);
+    plates[0].isPressed = true;
+    plates[1].isPressed = true;
+    for (let i = 0; i < 10; i++) w.update();
+    assert.equal(w.solved.size, 1, 'only one relay latches in the loop');
+    state.bossCheckpointLive = true;
+    const next = new Warden(385, 305, { id: 'warden', relayIds: ['r1', 'r2', 'r3'] });
+    state.bossCheckpointLive = false;
+    assert.equal(next.solved.size, 1);
+    state.currentTick = 2;
+    pushNoiseEvent(186, 204, 'decoy');
+    for (let i = 0; i < 60; i++) next.update();
+    assert.equal(next.solved.size, 2, 'the next loop latches the second relay');
 });
 
 check('an empty relay list does not open the defeat door', () => {

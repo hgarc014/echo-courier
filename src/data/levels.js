@@ -806,12 +806,12 @@ export function levelSelectEntries() {
             entries.push({ type: 'level', idx, lvl });
         }
     }
-    let pending = false;
+    let pendingWorld = null;
     LEVELS.forEach((lvl, idx) => {
         if (!lvl || lvl.isTutorial || lvl.isSandbox || lvl.hideFromSelect || placed.has(idx)) return;
-        if (lvl.isPendingCampaign && !pending) {
-            pending = true;
-            entries.push({ type: 'pending-header' });
+        if (lvl.isPendingCampaign && lvl.world !== pendingWorld) {
+            pendingWorld = lvl.world;
+            entries.push({ type: 'pending-header', world: lvl.world });
         }
         entries.push({ type: 'level', idx, lvl });
     });
@@ -1034,6 +1034,7 @@ function serializeWarden(w) {
         turnSpeed: w.turnSpeed,
         hearRange: w.hearRange,
         homeAngle: w.homeAngle,
+        relaysPerLoop: w.relaysPerLoop,
         relayIds: [...(w.relayIds || [])],
         defeatDoorId: w.defeatDoorId || 'boss_door'
     };
@@ -1046,6 +1047,7 @@ function deserializeWarden(w) {
         turnSpeed: w.turnSpeed,
         hearRange: w.hearRange,
         homeAngle: w.homeAngle,
+        relaysPerLoop: w.relaysPerLoop,
         relayIds: w.relayIds,
         defeatDoorId: w.defeatDoorId
     });

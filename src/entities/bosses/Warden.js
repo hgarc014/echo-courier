@@ -15,6 +15,9 @@ export const WARDEN_DEFAULTS = {
     turnSpeed: 160,
     hearRange: 1000,
     homeAngle: -90,
+    // Relays that may latch in one loop (0 = no cap). Stops a solo courier
+    // from clearing every relay in a single loop with no echoes.
+    relaysPerLoop: 1,
     defeatDoorId: 'boss_door'
 };
 
@@ -50,6 +53,8 @@ export class Warden extends Guard {
         this.homeAngle = num(opts.homeAngle, WARDEN_DEFAULTS.homeAngle);
         this.relayIds = Array.isArray(opts.relayIds) ? opts.relayIds.map(id => String(id)) : ['r1', 'r2', 'r3'];
         this.defeatDoorId = opts.defeatDoorId || WARDEN_DEFAULTS.defeatDoorId;
+        this.relaysPerLoop = Math.max(0, Math.floor(num(opts.relaysPerLoop, WARDEN_DEFAULTS.relaysPerLoop)));
+        this.latchedThisLoop = 0;
         this.setPost(x, y);
         this.facingAngle = this.homeAngle * Math.PI / 180;
         this.targetAngle = this.facingAngle;
@@ -118,12 +123,14 @@ export class Warden extends Guard {
         let added = false;
         for (const id of this.relayIds) {
             if (this.solved.has(id)) continue;
+            if (this.relaysPerLoop > 0 && this.latchedThisLoop >= this.relaysPerLoop) break;
             const plate = (state.plates || []).find(p => p && p.id === id);
             if (!plate || !plate.isPressed) continue;
             const px = plate.x + (plate.w || 40) / 2;
             const py = plate.y + (plate.h || 40) / 2;
             if (this.pointInCone(px, py)) continue;
             this.solved.add(id);
+            this.latchedThisLoop++;
             added = true;
         }
         if (added) {
