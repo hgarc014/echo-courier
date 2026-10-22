@@ -276,6 +276,10 @@ function tossFacing(dx, dy) {
 }
 
 function solveMB() {
+    // The Warden latches one relay per loop (relaysPerLoop 1), and latched relays
+    // stay latched across rewinds. Loop 1: toss the centre decoy west, take r1.
+    // Loop 2: the echo repeats the toss; take r3 while the cone looks west.
+    // Loop 3: both echoes replay; toss the west decoy east, take r2, and the door opens.
     return search('W3-MB', (d) => {
         moveTo(390, 205, 2, 600);
         grab();
@@ -283,21 +287,27 @@ function solveMB() {
         wait(30 + d);
         standOn('r1', 465, 133);
         waitUntil(() => relaySolved('r1'), 120, 'MB r1');
+        pressR();
+        wait(40);
+        moveTo(390, 240, 2, 600);
+        wait(d);
         standOn('r3', 385, 105);
-        waitUntil(() => relaySolved('r3'), 120, 'MB r3');
+        waitUntil(() => relaySolved('r3'), 200, 'MB r3');
+        pressR();
+        wait(40);
+        moveTo(337, 160, 2, 600);
         moveTo(337, 85, 2, 200);
         grab();
         tossFacing(1, 0);
         wait(30);
         standOn('r2', 305, 133);
-        if (process.env.W3DEBUG) console.error('r2 facing', state.wardens[0].facingAngle * 180 / Math.PI, JSON.stringify(state.noiseEvents.slice(-3)));
         waitUntil(() => relaySolved('r2'), 120, 'MB r2');
         waitUntil(() => doorOpen('boss_door'), 60, 'MB door');
         moveTo(460, 480, 2, 600);
         moveTo(645, 485, 2, 400);
         grab();
         dropInZone();
-    }, range(0, 60, 10));
+    }, range(0, 120, 10));
 }
 
 const SOLVERS = { 'W3-L1': solveL1, 'W3-L2': solveL2, 'W3-L3': solveL3, 'W3-L4': solveL4, 'W3-MB': solveMB };
