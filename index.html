@@ -92,13 +92,17 @@
                 <label style="font-size: 1.1rem;"><input type="checkbox" id="unlock-all-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Unlock All Levels (Dev/Testing)</label>
                 <br><br>
                 <button id="reset-save-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0; border-color: red; color: red;">WIPE PROGRESS</button>
-                <div id="dev-mode-controls" hidden>
-                    <br><br><br>
-                    <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-mode-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Developer Mode (Unlock All)</label>
-                    <br><br><br>
+                <br><br>
+                <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-tools-toggle" style="transform: scale(1.5); margin-right: 10px;"> Developer Mode (show Level Editor &amp; Dev Sandbox)</label>
+                <div id="dev-tools-buttons" hidden>
+                    <br><br>
                     <button id="open-editor-btn" class="primary-btn" style="padding: 10px 20px; border-color: #39ff14; color: #39ff14;">LAUNCH LEVEL EDITOR</button>
                     <br><br>
                     <button id="open-sandbox-btn" class="secondary-btn" style="padding: 10px 20px; margin-top: 0; border-color: #ffdd00; color: #ffdd00;">OPEN DEV SANDBOX</button>
+                </div>
+                <div id="dev-mode-controls" hidden>
+                    <br><br><br>
+                    <label style="font-size: 1.1rem;"><input type="checkbox" id="dev-mode-checkbox" style="transform: scale(1.5); margin-right: 10px;"> Enable Developer Mode (Unlock All)</label>
                 </div>
             </div>
             <button class="secondary-btn" style="margin-top: 40px;" onclick="showSubMenu('main')">BACK</button>

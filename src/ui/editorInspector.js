@@ -233,3 +233,9 @@ export function applyPrismConfig(ent, cfg = {}) {
     if (cfg.id != null && String(cfg.id).trim()) ent.id = String(cfg.id).trim();
     return ent;
 }
+
+/** XR-9 robot params from the inspector. Blank backArc / telegraph = legacy (null). */
+export function applyRobotConfig(ent, cfg = {}) {
+    if (!ent || typeof ent.configure !== 'function') return ent;
+    return ent.configure(cfg);
+}

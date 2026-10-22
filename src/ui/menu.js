@@ -4,6 +4,11 @@ import { DEV_PROGRESS_NOTE } from '../core/loopDisplay.js';
 import { startGame } from '../main.js';
 import { playMenuMusic, setGlobalMute, setDialogVoiceEnabled, setDialogVolume, setMusicVolume, applyAudioSettings, getDialogVoiceStatus, playDialogVoicePreview, preloadDialogVoice } from '../core/audio.js';
 
+/** World-relative button label: W4/W5 levels show their "W5-L1: ..." name, not a global "Level 27". */
+export function levelButtonLabel(lvl, idx) {
+    return (lvl.isPendingCampaign || /^W\d+-/.test(String(lvl.name || ''))) ? lvl.name : `Level ${idx + 1}`;
+}
+
 export function showSubMenu(menuId) {
     document.getElementById('tutorial-prompt')?.classList.add('hidden');
     document.getElementById('main-menu-nav').classList.add('hidden');
@@ -55,7 +60,7 @@ export function refreshLevelSelectGrid() {
 
         let hasGold = state.challengesCompleted[idx] === true;
         if (hasGold) btn.classList.add('gold-star');
-        const label = (lvl.isPendingCampaign || String(lvl.name || '').startsWith('W4-')) ? lvl.name : `Level ${idx + 1}`;
+        const label = levelButtonLabel(lvl, idx);
         btn.innerHTML = `${levelSelectIconHtml(unlocked, hasGold)}<span class="level-num">${label}</span>`;
         btn.setAttribute('aria-label', hasGold
             ? `${label}, gold star challenge complete`

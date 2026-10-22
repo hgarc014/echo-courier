@@ -634,7 +634,21 @@ export class TimerDoor extends Entity {
             else super.render(ctx);
             ctx.fillStyle='rgba(255,100,0,0.28)'; ctx.fillRect(this.x,this.y,this.w,this.h);
         }
-        else { ctx.fillStyle='rgba(255,100,0,0.1)'; ctx.fillRect(this.x,this.y,this.w,this.h); }
+        else {
+            // Open gate: a hazard-striped frame so it never reads as floor (or static) under it.
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,140,0,0.22)'; ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.strokeStyle = 'rgba(255,170,0,0.95)'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]);
+            ctx.strokeRect(this.x + 1.5, this.y + 1.5, this.w - 3, this.h - 3);
+            ctx.restore();
+        }
+        if (this.w >= 30 && this.h >= 18) {
+            ctx.save();
+            ctx.fillStyle = '#ffb000'; ctx.font = 'bold 11px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(this.isOpen ? 'GATE OPEN' : 'GATE', this.x + this.w / 2, this.y + this.h / 2);
+            ctx.restore();
+        }
     }
 }
 

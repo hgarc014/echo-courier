@@ -10,7 +10,7 @@ import { Prism } from '../entities/bosses/Prism.js';
 import { DeliveryZone } from '../entities/zones.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { normalizeTimeline } from '../systems/temporalPlate.js';
-import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, applyPrismConfig, applyLaserConfig, applyPackageConfig, applyAbilityList, ABILITY_IDS, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
+import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, applyPrismConfig, applyRobotConfig, applyLaserConfig, applyPackageConfig, applyAbilityList, ABILITY_IDS, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
 
@@ -848,6 +848,14 @@ function updatePropertiesPanel() {
         html += `<label>Emerge until path idx: <input type="number" min="0" id="prop-robot-emerge-idx" value="${selectedEntity.emergeUntilPathIndex||0}" style="width:60px"></label><br>`;
         html += `<label>HP: <input type="number" min="1" id="prop-robot-hp" value="${selectedEntity.hp??3}" style="width:60px"></label> `;
         html += `<label>Fire cooldown: <input type="number" min="0" id="prop-robot-cooldown" value="${selectedEntity.fireCooldown||0}" style="width:60px"></label><br>`;
+        html += `<label>Id: <input type="text" id="prop-robot-id" value="${escapeAttr(selectedEntity.id || 'robot')}" style="width:100px"></label><br>`;
+        html += `<label>Label: <input type="text" id="prop-robot-label" value="${escapeAttr(selectedEntity.label || '')}" style="width:100%"></label><br>`;
+        html += `<label><input type="checkbox" id="prop-robot-target-echoes" ${selectedEntity.targetEchoes?'checked':''}> Targets echoes first</label><br>`;
+        html += `<label title="Blank = hits from any side">Back arc (rad): <input type="number" step="0.01" min="0.05" id="prop-robot-back-arc" placeholder="any side" value="${selectedEntity.backArc ?? ''}" style="width:80px"></label><br>`;
+        html += `<label><input type="checkbox" id="prop-robot-back-touch" ${selectedEntity.backTouch?'checked':''}> Back panel touch hits</label><br>`;
+        html += `<label title="Blank = legacy short wind-up">Telegraph (sec): <input type="number" step="0.05" min="0.1" id="prop-robot-telegraph" placeholder="legacy" value="${selectedEntity.telegraphTime ?? ''}" style="width:70px"></label><br>`;
+        html += `<label><input type="checkbox" id="prop-robot-checkpoint" ${selectedEntity.checkpoint?'checked':''}> Phase checkpoints (hp survives rewind)</label><br>`;
+        html += `<label>Defeat door id: <input type="text" id="prop-robot-door" value="${escapeAttr(selectedEntity.defeatDoorId || 'boss_door')}" style="width:100%"></label><br>`;
     }
 
     if (selectedEntity instanceof Prism) {
@@ -1053,6 +1061,19 @@ function updatePropertiesPanel() {
             selectedEntity.emergeUntilPathIndex = Math.max(0, parseInt(document.getElementById('prop-robot-emerge-idx').value, 10) || 0);
             selectedEntity.hp = Math.max(1, parseInt(document.getElementById('prop-robot-hp').value, 10) || 3);
             selectedEntity.fireCooldown = Math.max(0, parseInt(document.getElementById('prop-robot-cooldown').value, 10) || 0);
+            selectedEntity.maxHp = selectedEntity.hp;
+            const val = (id) => document.getElementById(id)?.value ?? '';
+            const on = (id) => !!document.getElementById(id)?.checked;
+            applyRobotConfig(selectedEntity, {
+                id: val('prop-robot-id').trim(),
+                label: val('prop-robot-label'),
+                targetEchoes: on('prop-robot-target-echoes'),
+                backArc: val('prop-robot-back-arc'),
+                backTouch: on('prop-robot-back-touch'),
+                telegraphTime: val('prop-robot-telegraph'),
+                checkpoint: on('prop-robot-checkpoint'),
+                defeatDoorId: val('prop-robot-door').trim()
+            });
         }
         if (document.getElementById('prop-prism-hp')) {
             applyPrismConfig(selectedEntity, {

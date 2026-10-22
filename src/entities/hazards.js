@@ -37,7 +37,9 @@ export class Laser extends Entity {
         for (const r of rects) {
             if (img) {
                 ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
-                ctx.globalAlpha = pulse;
+                // Long beam columns draw translucent with a bright core so they read as a beam, not a wall.
+                const column = Math.max(r.w, r.h) >= 200;
+                ctx.globalAlpha = column ? 0.42 * pulse : pulse;
                 const tile = 40;
                 for (let i = 0; i < r.h; i += tile) ctx.drawImage(img, r.x + (r.w / 2 - 20), r.y + i, tile, tile);
                 for (let i = 0; i < r.w; i += tile) ctx.drawImage(img, r.x + i, r.y + (r.h / 2 - 20), tile, tile);
@@ -45,6 +47,13 @@ export class Laser extends Entity {
             } else {
                 ctx.fillStyle = `rgba(255,0,0,${0.35 * pulse})`;
                 ctx.fillRect(r.x, r.y, r.w, r.h);
+            }
+            if (Math.max(r.w, r.h) >= 200) {
+                ctx.save();
+                ctx.fillStyle = `rgba(255,80,80,${0.9 * pulse})`;
+                if (r.h >= r.w) ctx.fillRect(r.x + r.w / 2 - 1.5, r.y, 3, r.h);
+                else ctx.fillRect(r.x, r.y + r.h / 2 - 1.5, r.w, 3);
+                ctx.restore();
             }
         }
     }
@@ -177,7 +186,8 @@ export class LaserProjectile {
         }
         for (let g of activeGhosts) {
             if (g.isActive && AABB(this.x, this.y, this.w, this.h, g.x, g.y, g.w, g.h)) {
-                g.isActive = false; this.active = false; break;
+                // Vaporized echoes stay down for the rest of the loop.
+                g.isActive = false; g.vaporized = true; this.active = false; break;
             }
         }
         return null;
@@ -199,6 +209,51 @@ const BOSS_LOCK_TICKS = 90;
 const BOSS_COOLDOWN = { 3: 96, 2: 48, 1: 36 };
 const BOSS_TELEGRAPH = { 3: 18, 2: 15, 1: 12 };
 const BOSS_TEMPO = 0.75;
+
+// XR-9 rework params (W5 boss). Defaults keep the legacy robot unchanged.
+export const ROBOT_XR9_DEFAULTS = {
+    id: 'robot',
+    targetEchoes: false,     // prefer the nearest active echo over the courier
+    backArc: null,           // radians either side of the back; null = hit from any side
+    backTouch: false,        // touching the back panel counts as a hit
+    telegraphTime: null,     // seconds of locked aim before a shot; null = legacy ticks
+    checkpoint: false,       // remember hp across rewinds (phase checkpoints)
+    label: '',               // in-world name drawn above the robot
+    defeatDoorId: 'boss_door'
+};
+
+export function normalizeRobotParams(o = {}) {
+    const d = ROBOT_XR9_DEFAULTS;
+    const num = (v) => (v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
+    const backArc = num(o.backArc);
+    const tele = num(o.telegraphTime);
+    return {
+        id: typeof o.id === 'string' && o.id ? o.id : d.id,
+        targetEchoes: o.targetEchoes === true,
+        backArc: backArc == null ? null : Math.max(0.05, Math.min(Math.PI, backArc)),
+        backTouch: o.backTouch === true,
+        telegraphTime: tele == null ? null : Math.max(0.1, Math.min(5, tele)),
+        checkpoint: o.checkpoint === true,
+        label: typeof o.label === 'string' ? o.label.slice(0, 32) : '',
+        defeatDoorId: typeof o.defeatDoorId === 'string' && o.defeatDoorId ? o.defeatDoorId : d.defeatDoorId
+    };
+}
+
+function angleDelta(a, b) {
+    let d = (a - b) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    return d;
+}
+
+/** Distance from (x, y) along angle until a wall or closed door, capped at maxDist. */
+export function wallRayDistance(x, y, angle, maxDist, step = 4) {
+    const dx = Math.cos(angle); const dy = Math.sin(angle);
+    for (let d = 0; d <= maxDist; d += step) {
+        if (checkWallCollision(x + dx * d - 0.5, y + dy * d - 0.5, 1, 1)) return Math.max(0, d);
+    }
+    return maxDist;
+}
 
 function bossTelegraphTicks(hp) {
     return BOSS_TELEGRAPH[hp] || BOSS_TELEGRAPH[3];
@@ -237,8 +292,9 @@ function bossPhaseStyle(hp) {
     };
 }
 
-function drawBossShotLanes(ctx, cx, cy, angle, charge, multi) {
-    const len = 36 + charge * (BOSS_LANE_LEN - 36);
+function drawBossShotLanes(ctx, cx, cy, angle, charge, multi, maxLen = BOSS_LANE_LEN) {
+    // Lane grows with the charge but never draws past the first wall.
+    const len = Math.min(maxLen, 36 + charge * (BOSS_LANE_LEN - 36));
     const spread = BOSS_SPREAD;
     ctx.save();
     ctx.lineCap = 'round';
@@ -296,7 +352,64 @@ export class ShooterRobot extends Entity {
         this.phaseChangeTimer = 0;
         this.muzzleFlash = 0;
         this.lockTarget = null;
+        this.hitThisLoop = false;
         this.lockTimer = 0;
+        this.maxHp = 3;
+        this.aimLocked = false;
+        Object.assign(this, normalizeRobotParams({}));
+    }
+    /** Apply XR-9 params (deserialize / editor). */
+    configure(opts = {}) {
+        Object.assign(this, normalizeRobotParams({ ...this, ...opts }));
+        return this;
+    }
+    /** Restore hp from the phase checkpoint after a rewind. */
+    applyCheckpoint() {
+        if (!this.checkpoint) return;
+        const saved = state.bossCheckpointLive && state.bossCheckpoint ? state.bossCheckpoint[this.id] : null;
+        if (saved && Number.isFinite(saved.hp)) this.hp = saved.hp;
+    }
+    rememberCheckpoint() {
+        if (!this.checkpoint) return;
+        if (!state.bossCheckpoint || typeof state.bossCheckpoint !== 'object') state.bossCheckpoint = {};
+        state.bossCheckpoint[this.id] = { hp: this.hp };
+    }
+    /** What XR-9's readout shows this frame (pure; used by render and tests). */
+    renderState(player, ghosts = []) {
+        const live = ghosts.filter(g => g && g.isActive && !g.vaporized);
+        const visible = live.filter(g => !g.cloakActive && this._targetVisible(g));
+        let t = this.lockTarget && (this.lockTarget === player || visible.includes(this.lockTarget)) ? this.lockTarget : null;
+        if (!t && player && player.cloakTimer <= 0 && this._targetVisible(player) && !visible.length) t = player;
+        const back = this.facingAngle + Math.PI;
+        const arc = this.backArc ?? Math.PI / 3;
+        return {
+            facing: this.facingAngle,
+            backFrom: back - arc,
+            backTo: back + arc,
+            panelOpen: this.backTouch ? this.backPanelOpen(player) : false,
+            sightTarget: t ? { x: t.x + (t.w || 30) / 2, y: t.y + (t.h || 30) / 2, isPlayer: t === player } : null,
+            echoOutOfSight: live.length > 0 && visible.length === 0,
+        };
+    }
+    /** XR-9's back panel is exposed only while its attention is on an echo, once per loop. */
+    backPanelOpen(player) {
+        if (this.hitThisLoop) return false;
+        const t = this.lockTarget;
+        return !!(t && t !== player && !t.vaporized);
+    }
+    center() { return { x: this.x + this.w / 2, y: this.y + this.h / 2 }; }
+    /** True when (px, py) sits inside the back arc (always true without a backArc). */
+    isBehind(px, py) {
+        if (this.backArc == null) return true;
+        const c = this.center();
+        if (Math.hypot(px - c.x, py - c.y) < 1e-6) return false;
+        const toPoint = Math.atan2(py - c.y, px - c.x);
+        return Math.abs(angleDelta(toPoint, this.facingAngle + Math.PI)) <= this.backArc + 1e-9;
+    }
+    /** Ticks of wind-up before a shot. */
+    telegraphTicks() {
+        if (this.telegraphTime != null) return Math.max(1, Math.round(this.telegraphTime * 60));
+        return bossTelegraphTicks(this.hp);
     }
     _targetVisible(t) {
         if (!t) return false;
@@ -308,6 +421,18 @@ export class ShooterRobot extends Entity {
         const playerVisible = player.cloakTimer <= 0 && this._targetVisible(player);
         const ghosts = activeGhosts.filter(g => g.isActive && !g.cloakActive && this._targetVisible(g));
         if (this.lockTimer > 0) this.lockTimer--;
+
+        if (this.targetEchoes) {
+            // XR-9: nearest visible active echo first; the courier only when no echo is in sight.
+            let best = null; let bestDist = Infinity;
+            for (const g of ghosts) {
+                const dist = Math.hypot(g.x - this.x, g.y - this.y);
+                if (dist < bestDist) { bestDist = dist; best = g; }
+            }
+            if (!best && playerVisible) best = player;
+            this.lockTarget = best;
+            return best;
+        }
 
         // Prefer the uncloaked player whenever they are in range with LOS.
         if (playerVisible) {
@@ -335,12 +460,15 @@ export class ShooterRobot extends Entity {
     takeHit() {
         if (this.hp <= 0) return;
         this.hp--;
+        this.hitThisLoop = true;
         this.hitFlicker = BOSS_HIT_STUN;
         this.windingUp = false;
         this.telegraphArmed = false;
+        this.aimLocked = false;
+        this.rememberCheckpoint();
         if (this.hp === 2 || this.hp === 1) {
             this.phaseChangeTimer = BOSS_PHASE_FLASH;
-            this.fireCooldown = Math.max(this.fireCooldown, bossTelegraphTicks(this.hp));
+            this.fireCooldown = Math.max(this.fireCooldown, this.telegraphTicks());
             SFX.bossPhase();
         } else {
             SFX.laserHit();
@@ -371,7 +499,9 @@ export class ShooterRobot extends Entity {
             } else {
                 this.x += (dx / dist) * curSpeed;
                 this.y += (dy / dist) * curSpeed;
-                this.facingAngle = Math.atan2(dy, dx);
+                // XR-9 bobs on a 2-point path; its facing only follows targets, so it
+                // holds a stable idle heading instead of flipping every 2 ticks.
+                if (!this.targetEchoes || this.isEmerging) this.facingAngle = Math.atan2(dy, dx);
             }
         };
 
@@ -386,8 +516,25 @@ export class ShooterRobot extends Entity {
         }
         
         let bestTarget = this._pickTarget(player, activeGhosts);
-        
-        if (this.hp === 1 && bestTarget) {
+
+        // Back-panel touch (XR-9): the courier pressing the back plate is a hit.
+        if (this.backTouch && player && AABB(player.x, player.y, player.w, player.h, this.x - 4, this.y - 4, this.w + 8, this.h + 8)) {
+            const pc = { x: player.x + player.w / 2, y: player.y + player.h / 2 };
+            // The panel only opens while XR-9 is locked on an echo (the decoy route),
+            // and it can only be cracked once per loop (instances are rebuilt on rewind).
+            if (this.isBehind(pc.x, pc.y) && this.backPanelOpen(player)) {
+                this.takeHit();
+                if (this.hp <= 0) {
+                    const door = (state.doors || []).find(d => d.id === this.defeatDoorId);
+                    if (door) door.isOpen = true;
+                }
+                return;
+            }
+        }
+
+        if (this.aimLocked && this.windingUp) {
+            // Custom telegraph: hold position and aim so the warning lane is the real shot.
+        } else if (this.hp === 1 && bestTarget && !this.targetEchoes) {
             // Unhinged Chase Mode
             let dx = bestTarget.x - this.x; let dy = bestTarget.y - this.y; let dist = Math.hypot(dx, dy);
             if (dist > 50) { this.x += (dx/dist)*(2.0 * BOSS_TEMPO); this.y += (dy/dist)*(2.0 * BOSS_TEMPO); }
@@ -400,15 +547,17 @@ export class ShooterRobot extends Entity {
 
         if (this.fireCooldown > 0) this.fireCooldown--;
 
-        const tele = bossTelegraphTicks(this.hp);
+        const tele = this.telegraphTicks();
         if (bestTarget && this.fireCooldown > 0 && this.fireCooldown <= tele) {
             this.windingUp = true;
             this.telegraphArmed = true;
-        } else {
+            if (this.telegraphTime != null) this.aimLocked = true;
+        } else if (!(this.aimLocked && this.telegraphArmed)) {
             this.windingUp = false;
         }
         
-        if (bestTarget && this.fireCooldown <= 0) {
+        // A locked telegraph always fires down its lane, even after the target slips out of sight.
+        if ((bestTarget || (this.aimLocked && this.telegraphArmed)) && this.fireCooldown <= 0) {
             if (!this.telegraphArmed) {
                 // Instant-fire path (cooldown already 0): insert a readable wind-up.
                 this.fireCooldown = tele;
@@ -419,11 +568,12 @@ export class ShooterRobot extends Entity {
                 SFX.robotShoot();
                 this.muzzleFlash = 6;
                 state.projectiles.push(new LaserProjectile(this.x+17, this.y+17, Math.cos(a)*BOSS_SHOT_SPEED, Math.sin(a)*BOSS_SHOT_SPEED));
-                this.fireCooldown = bossFireCooldown(this.hp);
+                this.fireCooldown = Math.max(bossFireCooldown(this.hp), tele + 1);
                 this.telegraphArmed = false;
                 this.windingUp = false;
+                this.aimLocked = false;
             }
-        } else if (!bestTarget) {
+        } else if (!bestTarget && !this.aimLocked) {
             this.telegraphArmed = false;
             this.windingUp = false;
         }
@@ -433,12 +583,38 @@ export class ShooterRobot extends Entity {
         const cx = this.x + this.w / 2;
         const cy = this.y + this.h / 2;
         const style = bossPhaseStyle(this.hp);
-        const tele = bossTelegraphTicks(this.hp);
+        const tele = this.telegraphTicks();
         const charge = this.windingUp
             ? Math.max(0, Math.min(1, 1 - (this.fireCooldown - 1) / tele))
             : 0;
         const stunned = this.hitFlicker > 0;
         const phasing = this.phaseChangeTimer > 0;
+
+        // XR-9: glow and label the back panel while it is actually open (locked on an echo).
+        if (this.backTouch && !stunned && this.backPanelOpen(state.player)) {
+            const back = this.facingAngle + Math.PI;
+            const arc = this.backArc ?? Math.PI / 3;
+            const glow = 0.6 + 0.4 * Math.abs(Math.sin((state.currentTick || 0) * 0.2));
+            ctx.save();
+            ctx.strokeStyle = `rgba(57,255,140,${glow})`;
+            ctx.shadowColor = 'rgba(57,255,140,0.9)';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 24, back - arc, back + arc);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#39ff8c';
+            ctx.font = 'bold 10px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Below the cage's south wall so door/wall tiles never clip it (B7).
+            const ly = this.y + this.h + 74;
+            ctx.fillStyle = 'rgba(5,7,10,0.85)'; ctx.fillRect(cx - 50, ly - 7, 100, 14);
+            ctx.fillStyle = '#39ff8c';
+            ctx.fillText('BACK PANEL OPEN', cx, ly + 0.5);
+            ctx.restore();
+        }
 
         if (this.hp <= 2) {
             const pulseSpeed = this.hp === 1 ? 0.28 : 0.15;
@@ -461,7 +637,7 @@ export class ShooterRobot extends Entity {
         }
 
         if (this.windingUp) {
-            drawBossShotLanes(ctx, cx, cy, this.facingAngle, charge, false);
+            drawBossShotLanes(ctx, cx, cy, this.facingAngle, charge, false, wallRayDistance(cx, cy, this.facingAngle, BOSS_LANE_LEN));
         }
 
         if (stunned) {
@@ -552,11 +728,53 @@ export class ShooterRobot extends Entity {
         ctx.fillRect(barX, barY, barW, 6);
         ctx.globalAlpha = phasing ? 0.7 + 0.3 * Math.abs(Math.sin(this.phaseChangeTimer * 0.55)) : barPulse;
         ctx.fillStyle = style.bar;
-        ctx.fillRect(barX, barY, (this.hp / 3) * barW, 6);
+        ctx.fillRect(barX, barY, (this.hp / Math.max(1, this.maxHp || 3)) * barW, 6);
         ctx.globalAlpha = 1;
         ctx.strokeStyle = phasing ? '#fff' : style.stroke;
         ctx.lineWidth = phasing ? 2 : 1;
         ctx.strokeRect(barX, barY, barW, 6);
+
+        // XR-9 live readout: facing arrow, back arc, sight line to its target.
+        if (this.backArc != null) {
+            const rs = this.renderState(state.player, state.activeGhosts || []);
+            ctx.save();
+            if (rs.sightTarget) {
+                ctx.strokeStyle = rs.sightTarget.isPlayer ? 'rgba(255,60,60,0.75)' : 'rgba(255,221,0,0.7)';
+                ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]);
+                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(rs.sightTarget.x, rs.sightTarget.y); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            const f = rs.facing;
+            ctx.fillStyle = 'rgba(255,90,40,0.9)';
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(f) * 32, cy + Math.sin(f) * 32);
+            ctx.lineTo(cx + Math.cos(f + 0.35) * 22, cy + Math.sin(f + 0.35) * 22);
+            ctx.lineTo(cx + Math.cos(f - 0.35) * 22, cy + Math.sin(f - 0.35) * 22);
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = rs.panelOpen ? 'rgba(57,255,20,0.95)' : 'rgba(57,255,20,0.35)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 24, rs.backFrom, rs.backTo);
+            ctx.stroke();
+            if (rs.echoOutOfSight) {
+                const text = 'ECHO OUT OF SIGHT';
+                ctx.font = 'bold 10px "Space Grotesk", sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                const ty = this.y - 34;
+                ctx.fillStyle = 'rgba(5,7,10,0.85)'; ctx.fillRect(cx - 56, ty - 7, 112, 14);
+                ctx.fillStyle = '#ffdd00'; ctx.fillText(text, cx, ty + 0.5);
+            }
+            ctx.restore();
+        }
+        if (this.label) {
+            ctx.save();
+            ctx.fillStyle = '#ffdddd';
+            ctx.font = 'bold 11px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(this.label, cx, barY - (phasing ? 18 : 3));
+            ctx.restore();
+        }
 
         if (phasing) {
             const fade = this.phaseChangeTimer / BOSS_PHASE_FLASH;

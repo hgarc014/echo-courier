@@ -89,14 +89,17 @@ check('next level follows WORLDS order and skips hidden placeholders', () => {
     const lastPanopticon = panopticon.levels[panopticon.levels.length - 1];
     assert.equal(nextCampaignLevelIndex(lastPanopticon), beam.levels[0]);
     const lastBeam = beam.levels[beam.levels.length - 1];
-    assert.equal(nextCampaignLevelIndex(lastBeam), overclock.levels[0]);
-    assert.equal(nextCampaignLevelIndex(overclock.levels[overclock.levels.length - 1]), null);
+    // Overclock only holds hidden placeholders until W5 lands, so Beamworks is the end.
+    const firstOverclock = overclock.levels.find(idx => !LEVELS[idx].hideFromSelect) ?? null;
+    assert.equal(nextCampaignLevelIndex(lastBeam), firstOverclock);
 
     const names = levelSelectEntries().filter(entry => entry.type === 'level').map(entry => entry.lvl.name);
     assert.equal(names.includes('Level 9: Fragile Grid'), false);
     assert.equal(names.includes('Level 10: Fast Shipping'), false);
     assert.ok(names.includes('W4-L1: Glass'));
-    assert.ok(names.includes('Level 11: Time Dilation'));
+    assert.equal(names.includes('Level 11: Time Dilation'), false, 'old Overclock placeholder hidden');
+    assert.equal(names.includes('Level 12: Danger Courier'), false, 'old Overclock placeholder hidden');
+    assert.ok(names.includes('W5-L1: First Light'));
     const grid = LEVELS.find(level => level.name === 'Level 9: Fragile Grid');
     const fast = LEVELS.find(level => level.name === 'Level 10: Fast Shipping');
     assert.equal(grid.hideFromSelect, true);
