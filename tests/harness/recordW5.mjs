@@ -12,7 +12,8 @@ const solDir = join(here, '..', 'solutions');
 
 const FILES = [
     ['W5-L1', join(solDir, 'w5-l1.json')],
-    ['W5-L2', join(solDir, 'w5-l2.json')]
+    ['W5-L2', join(solDir, 'w5-l2.json')],
+    ['W5-L3', join(solDir, 'w5-l3.json')]
 ];
 
 function levelIndex(prefix) {
@@ -21,6 +22,8 @@ function levelIndex(prefix) {
     return idx;
 }
 
+let dashSpam = false;
+
 function tick(dir = {}, extra = [], soft = false) {
     for (const k of ['w', 'a', 's', 'd', 'space', 'r']) keys[k] = false;
     if (dir.x > 0) keys.d = true;
@@ -28,6 +31,7 @@ function tick(dir = {}, extra = [], soft = false) {
     if (dir.y > 0) keys.s = true;
     if (dir.y < 0) keys.w = true;
     for (const k of extra) keys[k] = true;
+    keys.shift = dashSpam && state.currentTick % 2 === 0;
     main.stepSimulation();
     if (!soft && state.failMessage) {
         throw new Error(`failed: ${state.failMessage} at ${Math.round(state.player.x)},${Math.round(state.player.y)} tick ${state.currentTick} loops ${state.pastRuns.length} hp ${state.prisms?.[0]?.hp ?? '-'}`);
@@ -155,9 +159,49 @@ function solveL2() {
     deliverThroughAirlock(['d_first', 'd_last']);
 }
 
+function gateHeld() {
+    const gate = state.doors.find(d => d.id === 'gate');
+    return state.activeGhosts.some(g => g.isActive && overlaps(g, gate));
+}
+
+// Through the static band to G: about 3.5 s for me, about 6 s for the echo.
+function slowRoad() {
+    moveTo(40, 40, 2, 300);
+    moveTo(360, 40, 2, 300);
+    moveTo(360, 285, 2, 300);
+}
+
+// Closet route: in at the right end, under the fin, up to the parcel, and back.
+const CLOSET = [[370, 285], [370, 495], [60, 495], [60, 372]];
+function fetchL3(soft = false) {
+    for (const [x, y] of CLOSET) moveTo(x, y, 2, 400, soft);
+    if (soft) { tick({}, ['space'], true); tick({}, [], true); }
+    else grab();
+    for (const [x, y] of [...CLOSET].reverse().slice(1)) moveTo(x, y, 2, 400, soft);
+}
+
+function solveL3() {
+    slowRoad();
+    moveTo(555, 285, 2, 300);
+    standOn('p_top', 555, 60);
+    wait(4);
+    pressR();
+    moveTo(555, 285, 2, 600);
+    standOn('p_bottom', 555, 500);
+    wait(4);
+    pressR();
+    fetchL3();
+    moveTo(368, 285, 2, 300);
+    waitUntil(gateHeld, 300, 'echo in the gate');
+    moveTo(585, 285, 2, 300);
+    waitUntil(() => doorOpen('d_top') && doorOpen('d_bottom'), 300, 'airlock');
+    dropInZone();
+}
+
 const SOLVERS = {
     'W5-L1': solveL1,
-    'W5-L2': solveL2
+    'W5-L2': solveL2,
+    'W5-L3': solveL3
 };
 
 function formatSolution(sol) {
@@ -183,6 +227,20 @@ export function recordLevel(prefix, outPath) {
     return sol;
 }
 
+// Fastest possible haul: dash on every cooldown, no echoes. Returns the tick the
+// courier reaches the gate mouth and whether the gate was still open then.
+export function dashRushL3() {
+    loadLevel({ level: levelIndex('W5-L3') });
+    dashSpam = true;
+    try {
+        fetchL3(true);
+        moveTo(368, 285, 2, 400, true);
+    } finally {
+        dashSpam = false;
+    }
+    return { tick: state.currentTick, gateOpen: doorOpen('gate'), dashes: state.runStats?.dashes ?? 0 };
+}
+
 export function runNaive(which) {
     const softMove = (x, y) => moveTo(x, y, 4, 700, true);
     const plateLoop = ([x, y]) => {
@@ -202,7 +260,23 @@ export function runNaive(which) {
         tick({}, ['space'], true);
         wait(30, true);
     };
+    const haul3 = () => {
+        fetchL3(true);
+        softMove(368, 285);
+        for (let i = 0; i < 500 && state.gameState !== 'LEVEL_COMPLETE' && !state.failMessage; i++) {
+            tick({ x: 1 }, [], true);
+        }
+        tick({}, ['space'], true);
+        wait(30, true);
+    };
     const table = {
+        'l3-control': () => {
+            loadLevel({ level: levelIndex('W5-L3') });
+            slowRoad();
+            softMove(555, 285); softMove(555, 60); wait(4, true); pressR();
+            softMove(555, 285); softMove(555, 500); wait(4, true); pressR();
+            haul3();
+        },
         // Plain plate first, magenta second: echo 2 is not the first echo.
         'l1-plain-first': () => {
             loadLevel({ level: levelIndex('W5-L1') });
@@ -215,6 +289,20 @@ export function runNaive(which) {
             loadLevel({ level: levelIndex('W5-L1') });
             plateLoop(NW);
             haul();
+        },
+        // Both echoes take the direct road: each crosses G long before the parcel can.
+        'l3-direct': () => {
+            loadLevel({ level: levelIndex('W5-L3') });
+            softMove(555, 285); softMove(555, 60); wait(4, true); if (!state.failMessage) pressR();
+            softMove(555, 285); softMove(555, 500); wait(4, true); if (!state.failMessage) pressR();
+            haul3();
+        },
+        // Park an echo in G. G stays open, but one echo cannot hold both airlock plates.
+        'l3-park': () => {
+            loadLevel({ level: levelIndex('W5-L3') });
+            softMove(460, 285); wait(4, true); if (!state.failMessage) pressR();
+            softMove(555, 285); softMove(555, 60); wait(4, true); if (!state.failMessage) pressR();
+            haul3();
         },
         // Control: the same haul with the loops in the right order does complete.
         'l2-control': () => {
@@ -247,6 +335,7 @@ export function runNaive(which) {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
     const arg = process.argv[2] || 'all';
+    if (arg === 'dash') { console.log(JSON.stringify(dashRushL3())); process.exit(0); }
     if (arg === 'naive') {
         const r = runNaive(process.argv[3]);
         console.log(JSON.stringify(r));

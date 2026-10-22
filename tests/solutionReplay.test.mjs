@@ -9,7 +9,7 @@ import { runNaive as runNaiveW1 } from './harness/recordW1.mjs';
 import { LEVELS, getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 import { runNaive as runNaiveW4 } from './harness/recordW4.mjs';
-import { runNaive as runNaiveW5 } from './harness/recordW5.mjs';
+import { runNaive as runNaiveW5, dashRushL3 } from './harness/recordW5.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'solutions');
 const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort();
@@ -66,7 +66,7 @@ for (const plan of ['l1-grab-first', 'l2-one-plate', 'l3-no-shield', 'l4-crack-p
     });
 }
 
-for (const f of ['w5-l1.json', 'w5-l2.json']) {
+for (const f of ['w5-l1.json', 'w5-l2.json', 'w5-l3.json']) {
     check(`truncated ${f} fails`, () => {
         const sol = JSON.parse(readFileSync(join(dir, f), 'utf8'));
         const r = replaySolution({ ...sol, loops: sol.loops.slice(0, -1) }, { extraTicks: 90 });
@@ -74,16 +74,24 @@ for (const f of ['w5-l1.json', 'w5-l2.json']) {
     });
 }
 
-for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first']) {
+for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park']) {
     check(`naive W5 ${plan} fails`, () => {
         const r = runNaiveW5(plan);
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
     });
 }
 
-check('W5 naive haul completes when the loops are in the right order', () => {
-    const r = runNaiveW5('l2-control');
-    assert.equal(r.completed, true, 'control haul failed, so the naive checks prove nothing');
+for (const plan of ['l2-control', 'l3-control']) {
+    check(`W5 ${plan}: the naive haul completes when the echoes are right`, () => {
+        const r = runNaiveW5(plan);
+        assert.equal(r.completed, true, 'control haul failed, so the naive checks prove nothing');
+    });
+}
+
+check('W5-L3 gate is shut before even a dashing courier gets the parcel there', () => {
+    const r = dashRushL3();
+    assert.ok(r.dashes > 0, 'dash never fired');
+    assert.equal(r.gateOpen, false, `gate still open at tick ${r.tick}`);
 });
 
 check('truncated w2-l1 solution fails', () => {

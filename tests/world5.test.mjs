@@ -18,7 +18,8 @@ function check(name, fn) {
 const w5 = LEVELS.map((level, index) => ({ level, index })).filter(({ level }) => String(level.name).startsWith('W5-'));
 const SPEC = {
     'W5-L1: First Light': { par: 3, loopTime: 25, maxGhosts: 2, grants: [] },
-    'W5-L2: Last Word': { par: 3, loopTime: 28, maxGhosts: 2, grants: [] }
+    'W5-L2: Last Word': { par: 3, loopTime: 28, maxGhosts: 2, grants: [] },
+    'W5-L3: Slow Motion': { par: 3, loopTime: 30, maxGhosts: 2, grants: [] }
 };
 
 check('world 5 is the contiguous W5 block after W4', () => {
@@ -68,12 +69,19 @@ for (const { level, index } of w5) {
         const modes = json.plates.filter(p => p.type === 'temporal').map(p => p.requiredTimeline).sort();
         if (level.name.startsWith('W5-L1')) assert.deepEqual(modes, ['first']);
         if (level.name.startsWith('W5-L2')) assert.deepEqual(modes, ['first', 'last', 'present']);
+        if (level.name.startsWith('W5-L3')) {
+            assert.equal(json.statics.length, 2);
+            const gate = json.doors.find(d => d.id === 'gate');
+            assert.equal(gate.type, 'timer');
+            assert.equal(gate.openT, 240);
+            assert.equal(gate.openT + gate.closedT, level.loopTime * 60, 'gate opens once per loop');
+        }
     });
 }
 
 check('airlock doors leave no room to stand between them', () => {
-    for (const { index } of w5.filter(({ level }) => /W5-L[12]/.test(level.name))) {
-        const doors = getLevelSetup(index).doors.filter(d => d.y === 240).sort((a, b) => a.x - b.x);
+    for (const { index } of w5.filter(({ level }) => /W5-L[123]/.test(level.name))) {
+        const doors = getLevelSetup(index).doors.filter(d => d.y === 240 && d.w === 20 && d.id !== 'd_exit').sort((a, b) => a.x - b.x);
         assert.ok(doors.length >= 2);
         assert.equal(doors[0].x + doors[0].w, doors[1].x, 'outer and inner doors touch');
     }
