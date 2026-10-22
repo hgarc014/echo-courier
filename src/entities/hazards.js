@@ -177,7 +177,8 @@ export class LaserProjectile {
         }
         for (let g of activeGhosts) {
             if (g.isActive && AABB(this.x, this.y, this.w, this.h, g.x, g.y, g.w, g.h)) {
-                g.isActive = false; this.active = false; break;
+                // Vaporized echoes stay down for the rest of the loop.
+                g.isActive = false; g.vaporized = true; this.active = false; break;
             }
         }
         return null;
@@ -517,7 +518,8 @@ export class ShooterRobot extends Entity {
             this.windingUp = false;
         }
         
-        if (bestTarget && this.fireCooldown <= 0) {
+        // A locked telegraph always fires down its lane, even after the target slips out of sight.
+        if ((bestTarget || (this.aimLocked && this.telegraphArmed)) && this.fireCooldown <= 0) {
             if (!this.telegraphArmed) {
                 // Instant-fire path (cooldown already 0): insert a readable wind-up.
                 this.fireCooldown = tele;

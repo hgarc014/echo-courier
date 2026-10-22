@@ -154,6 +154,56 @@ const W5_L4_LAYOUT = base({
     statics: [{ x: 20, y: 380, w: 180, h: 100 }]
 });
 
+// XR-9 arena. The robot sits in a sealed ring with two openings: a slit to the
+// west bait booth (too narrow to walk through) and the east back door. Only the
+// newest echo can open the door, from the blue plate straight down the robot's
+// east line. Whoever stands on blue is therefore in XR-9's sight, so a camper
+// gets shot and the door shuts again.
+const W5_BOSS_LAYOUT = base({
+    player: { x: 40, y: 40 },
+    deliveryZone: { x: 700, y: 500, w: 70, h: 70 },
+    walls: [
+        ...borders(),
+        // Ring around XR-9.
+        { x: 340, y: 240, w: 120, h: 20 },
+        { x: 340, y: 340, w: 120, h: 20 },
+        { x: 340, y: 260, w: 20, h: 28 },
+        { x: 340, y: 312, w: 20, h: 28 },
+        { x: 440, y: 260, w: 20, h: 10 },
+        { x: 440, y: 330, w: 20, h: 10 },
+        // Bait booth west of the slit, entered from the top.
+        { x: 220, y: 260, w: 20, h: 20 },
+        { x: 280, y: 260, w: 60, h: 20 },
+        { x: 220, y: 320, w: 120, h: 20 },
+        { x: 220, y: 280, w: 20, h: 40 },
+        // Vault for the cargo, behind the boss door.
+        { x: 600, y: 460, w: 180, h: 20 },
+        { x: 600, y: 480, w: 20, h: 40 }
+    ],
+    doors: [
+        { x: 440, y: 270, w: 20, h: 60, id: 'd_back', type: 'standard' },
+        { x: 600, y: 520, w: 20, h: 60, id: 'boss_door', type: 'standard' }
+    ],
+    plates: [
+        { x: 700, y: 280, linkedIds: ['d_back'], id: 'p_last', type: 'temporal', requiredTimeline: 'last' }
+    ],
+    packages: [{ x: 640, y: 500, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+    // The slit half of the booth floor gives way under anyone who lingers.
+    cracks: [{ x: 300, y: 280, w: 40, h: 40 }],
+    robots: [{
+        path: [{ x: 382, y: 282 }, { x: 382, y: 284 }],
+        hp: 3,
+        id: 'xr9',
+        label: 'XR-9',
+        targetEchoes: true,
+        backArc: Math.PI / 3,
+        backTouch: true,
+        telegraphTime: 1.5,
+        checkpoint: true,
+        defeatDoorId: 'boss_door'
+    }]
+});
+
 function level(name, obj, text, loops, ghosts, loopTime, layout, extra = {}) {
     return {
         name,
@@ -200,5 +250,22 @@ export const W5_LEVELS = [
         'Every job here belongs to a loop number. Work out which job only the oldest echo can do, which only the newest can, and what is left for the one in between. Then record them in that order.',
         4, 3, 45, W5_L4_LAYOUT,
         { unlocks: ['ghostShield'], grants: ['ghostShield'] }
+    ),
+    level(
+        'W5-BOSS: XR-9',
+        'XR-9 fires at the nearest echo it can see, and only its back panel is soft. Its back door answers to the blue plate.',
+        'It always turns toward an echo before it turns toward you. Blue only listens to the newest recording, and each hit is checkpointed. Each loop has one job: stand guard for the next loop, or be the decoy for a later one.',
+        5, 4, 40, W5_BOSS_LAYOUT,
+        {
+            speaker: 'Overclock Dispatch',
+            flags: {
+                isBoss: true,
+                crackSpeed: 'fast',
+                bossIntro: {
+                    speaker: 'EXTERMINATOR UNIT XR-9',
+                    text: 'Echo signatures detected. Targeting the nearest copy. My armor faces whatever I am aiming at.'
+                }
+            }
+        }
     )
 ];

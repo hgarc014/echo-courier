@@ -14,7 +14,8 @@ const FILES = [
     ['W5-L1', join(solDir, 'w5-l1.json')],
     ['W5-L2', join(solDir, 'w5-l2.json')],
     ['W5-L3', join(solDir, 'w5-l3.json')],
-    ['W5-L4', join(solDir, 'w5-l4.json')]
+    ['W5-L4', join(solDir, 'w5-l4.json')],
+    ['W5-BOSS', join(solDir, 'w5-boss.json')]
 ];
 
 function levelIndex(prefix) {
@@ -34,6 +35,7 @@ function tick(dir = {}, extra = [], soft = false) {
     for (const k of extra) keys[k] = true;
     keys.shift = dashSpam && state.currentTick % 2 === 0;
     main.stepSimulation();
+    if (process.env.XR9DBG && state.robots?.[0]) xr9Debug();
     if (!soft && state.failMessage) {
         throw new Error(`failed: ${state.failMessage} at ${Math.round(state.player.x)},${Math.round(state.player.y)} tick ${state.currentTick} loops ${state.pastRuns.length} hp ${state.prisms?.[0]?.hp ?? '-'}`);
     }
@@ -251,7 +253,94 @@ function solveL4() {
     dropInZone();
 }
 
+// XR-9: bait slots (tick the decoy shows in the booth) and arena waypoints.
+export const XR9 = { Ta: 300, Tb: 650, Tc: 1000 };
+const XR9_WAIT = [480, 200];
+function xr9Debug() {
+    const r = state.robots[0];
+    const [lo, hi] = process.env.XR9DBG.split(',').map(Number);
+    if (state.currentTick < lo || state.currentTick > hi) return;
+    const t = r.lockTarget === state.player ? 'P' : r.lockTarget ? 'G' + r.lockTarget.id : '-';
+    if (process.env.XR9PROJ) { for (const p of state.projectiles) console.log('  proj', Math.round(p.x), Math.round(p.y), p.active); const g = state.activeGhosts.map(g => g.id + ':' + Math.round(g.x) + ',' + Math.round(g.y) + (g.isActive ? '' : 'x')).join(' '); console.log('  ghosts', g); }
+    console.log(state.pastRuns.length, state.currentTick, 'hp', r.hp, 'cd', r.fireCooldown, r.windingUp ? 'W' : '', r.aimLocked ? 'L' : '', r.hitFlicker, 'face', r.facingAngle.toFixed(2), 'tgt', t, 'p', Math.round(state.player.x), Math.round(state.player.y), 'back', doorOpen('d_back'));
+}
+function xr9Robot() { return state.robots?.[0]; }
+function waitTick(t, soft = false) {
+    while (state.currentTick < t && state.gameState !== 'LEVEL_COMPLETE') {
+        if (soft && state.failMessage) return;
+        tick({}, [], soft);
+    }
+}
+function goNorth(x, soft = false) {
+    moveTo(state.player.x, 40, 2, 300, soft);
+    moveTo(x, 40, 2, 400, soft);
+}
+// Decoy: wait above the booth, show in it at t for a moment, step back out.
+function xr9Bait(t, soft = false, linger = 18) {
+    goNorth(245, soft);
+    moveTo(245, 225, 2, 300, soft);
+    waitTick(t, soft);
+    moveTo(245, 285, 2, 60, soft);
+    wait(linger, soft);
+    moveTo(245, 225, 2, 60, soft);
+}
+// Blue holder: hidden north of the plate, on it just after the decoy turns XR-9,
+// off again once the courier is clear, before the robot's sights come round.
+function xr9Plate(t, soft = false, hold = 85) {
+    goNorth(705, soft);
+    moveTo(705, 230, 2, 300, soft);
+    waitTick(t + 15, soft);
+    moveTo(705, 285, 2, 40, soft);
+    wait(hold, soft);
+    moveTo(705, 230, 2, 40, soft);
+}
+// Courier: hidden north of the back door, in once the decoy has turned XR-9.
+function xr9Hit(t, soft = false) {
+    goNorth(XR9_WAIT[0], soft);
+    moveTo(...XR9_WAIT, 2, 200, soft);
+    waitTick(t + 15, soft);
+    moveTo(480, 285, 2, 80, soft);
+    moveTo(416, 285, 2, 40, soft);
+}
+function xr9Retreat(soft = false) {
+    moveTo(480, 285, 2, 40, soft);
+    moveTo(...XR9_WAIT, 2, 80, soft);
+}
+function solveBoss() {
+    const { Ta, Tb, Tc } = XR9;
+    const hp = () => xr9Robot().hp;
+    // Loop 1: decoy for the first hit.
+    xr9Bait(Ta);
+    pressR();
+    // Loop 2: blue for loop 3's hit, then decoy for the second hit.
+    xr9Plate(Ta);
+    xr9Bait(Tb);
+    pressR();
+    // Loop 3: first hit, blue plate for loop 4, decoy for the third hit.
+    xr9Hit(Ta);
+    waitUntil(() => hp() === 2, 40, 'XR-9 hit 1');
+    xr9Retreat();
+    xr9Plate(Tb);
+    xr9Bait(Tc);
+    pressR();
+    // Loop 4: second hit, then blue plate for loop 5.
+    xr9Hit(Tb);
+    waitUntil(() => hp() === 1, 40, 'XR-9 hit 2');
+    xr9Retreat();
+    xr9Plate(Tc);
+    pressR();
+    // Loop 5: last hit opens the vault.
+    xr9Hit(Tc);
+    waitUntil(() => hp() === 0, 40, 'XR-9 hit 3');
+    moveTo(480, 285, 2, 40);
+    moveTo(480, 530, 2, 120);
+    moveTo(630, 530, 2, 80);
+    grab();
+    dropInZone();
+}
+
 const SOLVERS = {
+    'W5-BOSS': solveBoss,
     'W5-L4': solveL4,
     'W5-L1': solveL1,
     'W5-L2': solveL2,
@@ -356,6 +445,67 @@ export function runNaive(which, arg) {
             loadLevel({ level: levelIndex('W5-L4') });
             shieldLoop(); blueLoop(); haul4(false);
         },
+
+        // XR-9 with no decoy: blue rotates like the par route, but the courier
+        // only ever meets the robot's front.
+        'x9-frontal': () => {
+            loadLevel({ level: levelIndex('W5-BOSS') });
+            const slots = [XR9.Ta, XR9.Tb, XR9.Tc, XR9.Ta];
+            xr9Plate(slots[0], true); tick({}, ['r'], true);
+            for (let k = 0; k < 3 && state.gameState !== 'LEVEL_COMPLETE'; k++) {
+                xr9Hit(slots[k], true); wait(10, true); xr9Retreat(true);
+                xr9Plate(slots[k + 1], true); tick({}, ['r'], true);
+            }
+        },
+        // Blue pressed before the decoy shows: XR-9 sights the plate holder first
+        // and its aim is locked when the decoy appears.
+        'x9-early-blue': () => {
+            const { Ta, Tb, Tc } = XR9;
+            loadLevel({ level: levelIndex('W5-BOSS') });
+            xr9Bait(Ta, true); tick({}, ['r'], true);
+            xr9Plate(Ta - 40, true); xr9Bait(Tb, true); tick({}, ['r'], true);
+            xr9Hit(Ta, true); wait(10, true); xr9Retreat(true);
+            xr9Plate(Tb - 40, true); xr9Bait(Tc, true); tick({}, ['r'], true);
+            xr9Hit(Tb, true); wait(10, true); xr9Retreat(true);
+            xr9Plate(Tc - 40, true); tick({}, ['r'], true);
+            xr9Hit(Tc, true); wait(60, true);
+        },
+        // Blue recorded before the decoy: in loop 3 the newest echo is the decoy,
+        // so nobody valid is on blue and the back door stays shut.
+        'x9-wrong-order': () => {
+            const { Ta, Tb } = XR9;
+            loadLevel({ level: levelIndex('W5-BOSS') });
+            xr9Plate(Ta, true); tick({}, ['r'], true);
+            xr9Bait(Ta, true); xr9Bait(Tb, true); tick({}, ['r'], true);
+            for (const t of [Ta, Tb, Ta]) {
+                if (state.gameState === 'LEVEL_COMPLETE') break;
+                xr9Hit(t, true); wait(10, true); xr9Retreat(true);
+                xr9Plate(t === Ta ? Tb : Ta, true); tick({}, ['r'], true);
+            }
+        },
+        // Compressed route: one decoy and one blue holder each work all three slots,
+        // so a single courier loop tries all three hits.
+        'x9-triple': () => {
+            const { Ta, Tb, Tc } = XR9;
+            loadLevel({ level: levelIndex('W5-BOSS') });
+            xr9Bait(Ta, true); xr9Bait(Tb, true); xr9Bait(Tc, true); tick({}, ['r'], true);
+            xr9Plate(Ta, true); xr9Plate(Tb, true); xr9Plate(Tc, true); tick({}, ['r'], true);
+            for (const t of [Ta, Tb, Tc]) {
+                if (state.gameState === 'LEVEL_COMPLETE') break;
+                xr9Hit(t, true); wait(10, true); xr9Retreat(true);
+            }
+        },
+        // One echo camps on blue all loop while another decoys all three slots.
+        'x9-camp': () => {
+            const { Ta, Tb, Tc } = XR9;
+            loadLevel({ level: levelIndex('W5-BOSS') });
+            xr9Bait(Ta, true); xr9Bait(Tb, true); xr9Bait(Tc, true); tick({}, ['r'], true);
+            goNorth(705, true); moveTo(705, 285, 2, 300, true); wait(6, true); tick({}, ['r'], true);
+            for (const t of [Ta, Tb, Tc]) {
+                if (state.gameState === 'LEVEL_COMPLETE') break;
+                xr9Hit(t, true); wait(10, true); xr9Retreat(true);
+            }
+        },
         // Skip the decoy and time the patrol: cross behind the guard while it walks north.
         'l4-sneak': (when = (gd) => gd.facingY < 0 && gd.y < 240) => {
             loadLevel({ level: levelIndex('W5-L4') });
@@ -433,12 +583,18 @@ export function runNaive(which, arg) {
     };
     const fn = table[which];
     if (!fn) throw new Error(`unknown naive plan ${which}`);
-    fn(arg);
+    try { fn(arg); }
+    catch (err) {
+        // A naive route that walks into a shut door simply cannot go on.
+        if (!/blocked|timed out/.test(err.message)) throw err;
+        return { completed: false, state: state.gameState, tick: state.currentTick, loops: state.pastRuns.length, hp: state.robots?.[0]?.hp, fail: 'stuck: ' + err.message.split(' at ')[0] };
+    }
     return {
         completed: state.gameState === 'LEVEL_COMPLETE',
         state: state.gameState,
         tick: state.currentTick,
         loops: state.pastRuns.length,
+        hp: state.robots?.[0]?.hp,
         fail: state.failMessage || ''
     };
 }

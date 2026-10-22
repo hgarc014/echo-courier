@@ -126,6 +126,7 @@ export class Ghost extends Entity {
         this.dashCooldown = 0;
     }
     update(pkgs, staticZones, winds) {
+        if (this.vaporized) { this.isActive = false; this.moving = false; return; }
         this.isActive = true;
         if (this.spawnTtl > 0) this.spawnTtl--;
         this.intendedDx = 0;

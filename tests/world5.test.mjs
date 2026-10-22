@@ -20,7 +20,8 @@ const SPEC = {
     'W5-L1: First Light': { par: 3, loopTime: 25, maxGhosts: 2, grants: [] },
     'W5-L2: Last Word': { par: 3, loopTime: 28, maxGhosts: 2, grants: [] },
     'W5-L3: Slow Motion': { par: 3, loopTime: 30, maxGhosts: 2, grants: [] },
-    'W5-L4: Courier Overclock': { par: 4, loopTime: 45, maxGhosts: 3, grants: ['ghostShield'] }
+    'W5-L4: Courier Overclock': { par: 4, loopTime: 45, maxGhosts: 3, grants: ['ghostShield'] },
+    'W5-BOSS: XR-9': { par: 5, loopTime: 40, maxGhosts: 4, grants: [] }
 };
 
 check('world 5 is the contiguous W5 block after W4', () => {
@@ -78,6 +79,19 @@ for (const { level, index } of w5) {
             assert.ok(json.cracks.length >= 1);
             assert.ok(json.statics.length >= 1);
             assert.ok(json.doors.some(d => d.type === 'timer'));
+        }
+        if (level.name.startsWith('W5-BOSS')) {
+            assert.deepEqual(modes, ['last']);
+            assert.equal(json.robots.length, 1);
+            const r = json.robots[0];
+            assert.equal(r.targetEchoes, true);
+            assert.equal(r.backTouch, true);
+            assert.equal(r.checkpoint, true);
+            assert.equal(r.hp ?? 3, 3);
+            assert.equal(r.defeatDoorId ?? 'boss_door', 'boss_door');
+            assert.ok(r.telegraphTime >= 1.5 && r.telegraphTime <= 2, 'telegraph is 1.5-2s');
+            assert.ok(Math.abs(r.backArc - Math.PI / 3) < 1e-9);
+            assert.equal(json.meta.isBoss, true);
         }
         if (level.name.startsWith('W5-L3')) {
             assert.equal(json.statics.length, 2);
