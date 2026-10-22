@@ -175,17 +175,19 @@ function stampRun(lead, { courierOnPlate = true } = {}) {
     return { boss, k, log };
 }
 
-check('STAMP NOW cue is 0.75 s (45 ticks); a stamp up to 15 ticks before the cue still stuns (60 ok, 61 TOO EARLY)', () => {
+// stampRun's lead counts the strike tick as 1, so lead L enters with L-1 ticks left on
+// the clock (the QA 'entry' reading). Readings 45..1 (and the strike tick) stun; 46 does not.
+check('the stun window is exactly the advertised 0.75 s (45 ticks): entry at 45 left ok, 46 TOO EARLY', () => {
     assert.equal(STAMP_WINDOW_TICKS, 45);
-    assert.equal(STAMP_ACCEPT_TICKS, 60);
+    assert.equal(STAMP_ACCEPT_TICKS, 45);
     const cue = stampRun(45);
     assert.equal(cue.boss.hp, 2);
-    const ok = stampRun(60);
+    const ok = stampRun(46);
     assert.equal(ok.boss.hp, 2, 'stamp inside the window stuns');
     assert.equal(ok.log.feedback, 'STAMP OK');
     const late = stampRun(1);
     assert.equal(late.boss.hp, 2, 'stamp on the strike tick stuns');
-    const early = stampRun(61);
+    const early = stampRun(47);
     assert.equal(early.boss.hp, 3, 'stamp outside the window does not stun');
     assert.equal(early.log.feedback, 'TOO EARLY');
 });
@@ -236,10 +238,11 @@ check("hint no longer says 'Step off fast'; it says stay ON the crack", () => {
     const lvl = LEVELS[sinkhole];
     assert.doesNotMatch(lvl.hintLine, /Step off fast/);
     assert.match(lvl.hintLine, /staying ON it/);
-    assert.ok(lvl.hintLine.length < 200, 'short hint');
+    assert.match(lvl.hintLine, /any crack beside that plate in the last 0\.75 s/);
+    assert.ok(lvl.hintLine.length < 240, 'short hint');
 });
 
-check('loop 1 shows the REC stamp cue on each core plate; later loops do not', () => {
+check('loop 1 shows the REC stamp cue on the lit core plate only; later loops do not', () => {
     start();
     const b = state.burrowers[0];
     const draw = () => {
@@ -248,7 +251,7 @@ check('loop 1 shows the REC stamp cue on each core plate; later loops do not', (
         b.drawRecordCue(ctx);
         return calls.filter(t => t === 'REC stamp').length;
     };
-    assert.equal(draw(), 3);
+    assert.equal(draw(), 1);
     state.pastRuns = [[]];
     assert.equal(draw(), 0);
     state.pastRuns = [];
@@ -304,8 +307,8 @@ check("STAMP NOW pulses in the last 0.75 s of a strike on the live courier, and 
         b.drawStampCue(ctx);
         const cue = calls.includes('STAMP NOW');
         const left = b.ticksToStrike();
-        if (cue) { sawCue = true; assert.ok(left < STAMP_WINDOW_TICKS, `cue with ${left} ticks left`); }
-        if (!cue && b.phase === 'telegraph' && left != null && left < STAMP_WINDOW_TICKS && b.playerMode) sawEarly = true;
+        if (cue) { sawCue = true; assert.ok(left >= 1 && left <= STAMP_WINDOW_TICKS, `cue with ${left} ticks left`); }
+        if (!cue && b.phase === 'telegraph' && left != null && left >= 1 && left <= STAMP_WINDOW_TICKS && b.playerMode) sawEarly = true;
     }
     assert.equal(sawCue, true, 'cue appeared');
     assert.equal(sawEarly, false, 'cue on for the whole window');
@@ -341,21 +344,25 @@ function playerModeRun(lead, { ghost = false } = {}) {
     const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1, corePlateIds: ['c1'], maxStunsPerLoop: 1 });
     state.burrowers = [boss];
     const player = { x: 85, y: 85, w: 30, h: 30 };
+    state.player = player;
     const strikeAt = boss.intervalTicks() + boss.telegraphTicks();
     const runData = [];
     for (let t = 0; t <= strikeAt + 5; t++) runData.push(t >= strikeAt - lead + 1 ? { x: 85, y: 125 } : { x: 200, y: 125 });
     const echo = { id: 0, runData, x: 200, y: 125, w: 30, h: 30, isActive: true };
     state.activeGhosts = ghost ? [echo] : [];
-    const log = { labels: [], pred: null, modes: [] };
+    const log = { labels: [], pred: null, modes: [], feedback: null, crackBeforeStrike: null, after: null };
     for (let t = 1; t <= strikeAt + 2; t++) {
         state.currentTick = t;
         const s = runData[t]; echo.x = s.x; echo.y = s.y;
+        if (t === strikeAt) log.crackBeforeStrike = { collapsing: k.collapsing, broken: k.broken };
         boss.update([player, echo]);
         k.update([player, echo]);
         log.modes.push(boss.playerMode);
+        if (boss.phase === 'telegraph') log.labels.push(boss.targetLabel());
+        if (boss.feedback && !log.feedback) log.feedback = boss.feedback.text;
         if (ghost && boss.phase === 'telegraph' && !log.pred) log.pred = boss.predictedStamp();
     }
-    return { boss, log, failed: !!boss.strikeFail };
+    return { boss, k, log, failed: !!boss.strikeFail };
 }
 
 check('player-mode strike: courier on the CORE plate + echo stamping a crack beside it stuns (no death)', () => {
@@ -393,6 +400,96 @@ check('only one target label at a time: hunt label hidden while a strike label s
         boss.drawHunt(ctx);
         assert.ok(!calls.some(c => /^hunting /.test(c)), calls.join(' | '));
     }
+});
+
+
+// ---- QA C (round 3) on PR #57 ----
+
+check('player-hunt path: an early stamp shows TOO EARLY, keeps the crack intact, no silent death', () => {
+    const r = playerModeRun(80);
+    assert.equal(r.boss.hp, 3);
+    assert.equal(r.log.feedback, 'TOO EARLY');
+    assert.deepEqual(r.log.crackBeforeStrike, { collapsing: false, broken: false });
+    assert.equal(r.k.broken || r.k.collapsing, false, 'the stamp crack survives the player strike');
+    assert.equal(r.failed, false, 'courier on the core plate is not killed');
+});
+
+check('player-hunt path: window is 45 ticks there too (entry at 45 left stuns, 46 TOO EARLY)', () => {
+    assert.equal(playerModeRun(46).boss.hp, 2);
+    const e = playerModeRun(47);
+    assert.equal(e.boss.hp, 3);
+    assert.equal(e.log.feedback, 'TOO EARLY');
+});
+
+check("while the courier must hold, the plate label says 'HOLD — echo stamps now', never 'MOVE!'", () => {
+    const r = playerModeRun(20);
+    const labels = r.log.labels.filter(Boolean);
+    assert.ok(labels.some(l => /^HOLD/.test(l)), labels.join(' | '));
+    assert.ok(!labels.some(l => /MOVE/.test(l)), labels.join(' | '));
+});
+
+check('STAMP NOW pulses only on the lit ring, not on spent or unlit plates', () => {
+    resetWorld();
+    state.plates = [new PressurePlate('c1', 80, 80, []), new PressurePlate('c2', 400, 80, [])];
+    const k1 = new CrackedFloor(80, 120, 40, 40, 'fast'); const k2 = new CrackedFloor(400, 120, 40, 40, 'fast');
+    state.cracks = [k1, k2];
+    const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1, corePlateIds: ['c2', 'c1'] });
+    state.burrowers = [boss];
+    const player = { x: 405, y: 85, w: 30, h: 30 };
+    let seen = false;
+    for (let t = 1; t < boss.intervalTicks() + boss.telegraphTicks(); t++) {
+        state.currentTick = t;
+        boss.update([player]);
+        if (!boss.stampNowActive()) continue;
+        seen = true;
+        const rects = [];
+        const ctx = new Proxy({}, { get: (_, key) => (key === 'measureText' ? () => ({ width: 10 }) : (key === 'strokeRect' ? (x, y) => rects.push([x, y]) : () => {})), set: () => true });
+        boss.drawStampCue(ctx);
+        assert.ok(rects.some(([x]) => x === 402), 'lit ring pulses');
+        assert.ok(!rects.some(([x]) => x === 82), 'unlit ring does not');
+    }
+    assert.ok(seen, 'cue shown');
+});
+
+check('the countdown never sits on the echo marker text', () => {
+    const boss = new Burrower(300, 300, {});
+    boss._predLabel = { x: 100, y: 92 };
+    boss._countdown = { text: '0.5s', x: 100, y: 96 };
+    const at = [];
+    const ctx = new Proxy({}, { get: (_, key) => (key === 'measureText' ? () => ({ width: 10 }) : (key === 'fillText' ? (t, x, y) => at.push(y) : () => {})), set: () => true });
+    boss.drawCountdown(ctx);
+    assert.ok(at.length && at.every(y => Math.abs(y - 92) >= 16), `countdown y ${at}`);
+});
+
+check('after a stun the label drops the player-hunt HOLD target and tracks the true target', () => {
+    const r = playerModeRun(20);
+    assert.equal(r.boss.hp, 2);
+    for (let i = 0; i < 200 && r.boss.phase === 'stun'; i++) { state.currentTick++; r.boss.update([]); }
+    assert.equal(r.boss.playerMode, false);
+    assert.doesNotMatch(String(r.boss.targetLabel() || ''), /HOLD|STRIKES YOUR TILE/);
+});
+
+check('each stun spends the lit plate: one loop-1 echo cannot stun twice', () => {
+    resetWorld();
+    state.plates = [new PressurePlate('c1', 80, 80, []), new PressurePlate('c2', 400, 80, [])];
+    state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast'), new CrackedFloor(400, 120, 40, 40, 'fast')];
+    const boss = new Burrower(300, 300, { corePlateIds: ['c1', 'c2'] });
+    assert.deepEqual(boss.liveCoreIds(), ['c1']);
+    boss.stunPlateId = 'c1';
+    boss.applyStun();
+    assert.deepEqual(boss.liveCoreIds(), ['c2'], 'next plate lit after a stun');
+    boss.rememberCheckpoint();
+    state.bossCheckpointLive = true;
+    const again = new Burrower(300, 300, { corePlateIds: ['c1', 'c2'] });
+    assert.deepEqual(again.liveCoreIds(), ['c2'], 'spent plate survives the rewind');
+    state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
+check('the recorded route stuns from a different core plate each loop', () => {
+    const r = replaySolution(sol);
+    assert.equal(r.completed, true);
+    const b = state.burrowers[0];
+    assert.deepEqual([...(b.spentPlateIds || [])].sort(), ['c1', 'c2', 'c3']);
 });
 
 if (failures) { console.log(`${failures} failed`); process.exit(1); }

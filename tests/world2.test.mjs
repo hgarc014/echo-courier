@@ -75,7 +75,7 @@ for (const { level, index } of w2) {
             assert.equal(boss.surfaceInterval, 3);
             assert.equal(boss.telegraphTime, 1);
             assert.equal(boss.stunTime, 2);
-            assert.deepStrictEqual(boss.corePlateIds, ['c1', 'c2', 'c3']);
+            assert.deepStrictEqual(boss.corePlateIds, ['c3', 'c2', 'c1']);
             assert.equal(boss.defeatDoorId, 'boss_door');
             assert.equal(boss.maxStunsPerLoop, 1);
             assert.equal(loaded.burrowers[0].maxHp, 3);

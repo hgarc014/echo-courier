@@ -147,7 +147,8 @@ check('a collapsing or broken crack is never the telegraphed tile', () => {
 
 check('200s on a core plate: presses, surfaces, then the stun cap is a loop clock', () => {
     const { boss } = sinkhole();
-    const plate = state.plates.find(p => p.id === 'c1');
+    // The lit core plate (each stun spends it and lights the next).
+    const plate = state.plates.find(p => p.id === boss.liveCoreIds()[0]);
     const player = body(plate.x + (plate.w - 30) / 2, plate.y + (plate.h - 30) / 2);
     // 'Loudest wins': a stun needs an echo stamping the struck crack while the courier
     // holds the plate. This echo waits off the floor and steps onto the locked crack in
@@ -166,7 +167,7 @@ check('200s on a core plate: presses, surfaces, then the stun cap is a loop cloc
     let windowStart = 0;
     for (let t = 0; t < SIM_TICKS; t++) {
         const prev = step(boss, actorsAt(), `plate t=${t}`);
-        assert.equal(plate.isPressed, true, `c1 not pressed at ${t}`);
+        assert.equal(plate.isPressed, true, `${plate.id} not pressed at ${t}`);
         assert.equal(plate.pressVisual().pressed, true);
         presses++;
         if (boss.phase === 'telegraph') assertTelegraph(boss, `plate t=${t}`);

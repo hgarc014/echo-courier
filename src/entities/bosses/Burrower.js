@@ -21,16 +21,15 @@ const TICKS_PER_SECOND = 60;
 // plate. Standing still is silent, and noise fades, so a parked echo is ignored and
 // the hunt falls back to the live courier.
 export const NOISE_TTL_TICKS = 90;      // 1.5 s: older noise no longer counts
-// A stun needs an echo to stamp the struck crack (step onto it in the last
-// STAMP_WINDOW_TICKS before the strike: 0..44 ticks = exactly 0.75 s) and still be
-// on it, while the live courier holds the core plate beside it. The locked crack
-// is held intact until the strike, so an early stamp only reads TOO EARLY.
+// A stun needs an echo to stamp a crack beside the lit core plate: its centre
+// arrives on the crack with 1..STAMP_WINDOW_TICKS ticks left before the strike
+// (exactly 0.75 s, the window the hint and the STAMP NOW cue advertise) and it is
+// still on it at the strike, while the live courier holds that plate. No hidden
+// grace: the accepted window and the advertised one are the same number.
 export const STAMP_WINDOW_TICKS = 45;
-// The STAMP NOW cue shows for the last STAMP_WINDOW_TICKS; a stamp up to this many
-// ticks before the cue starts still counts, so a replay that runs a few ticks off
-// the live step keeps its margin.
-export const STAMP_GRACE_TICKS = 15;
+export const STAMP_GRACE_TICKS = 0;
 export const STAMP_ACCEPT_TICKS = STAMP_WINDOW_TICKS + STAMP_GRACE_TICKS;
+export const STAMP_WINDOW_SECONDS = STAMP_WINDOW_TICKS / TICKS_PER_SECOND;
 export const FEEDBACK_TICKS = 75;
 export const STRIKE_FAIL = 'Struck by the Burrower!';
 const GRID = 40;
@@ -191,8 +190,12 @@ export class Burrower extends Entity {
         this.lockClock = 0;
         this.strikeFail = null;
         this.feedback = null;
+        // Core plates already used for a stun. The lit (live) plate is the first
+        // unspent id, so each stun moves to a new plate and a new stamp.
+        this.spentPlateIds = [];
         const saved = state.bossCheckpointLive && state.bossCheckpoint ? state.bossCheckpoint[this.id] : null;
         if (saved && Number.isFinite(saved.hp)) this.hp = saved.hp;
+        if (saved && Array.isArray(saved.spent)) this.spentPlateIds = [...saved.spent];
         if (this.hp <= 0) {
             this.hp = 0;
             this.defeated = true;
@@ -270,9 +273,19 @@ export class Burrower extends Entity {
         };
     }
 
+    // The one lit core plate: the first core id not yet spent on a stun. With
+    // more stuns than plates the order wraps (oldest spent plate comes back).
+    liveCoreIds() {
+        const ids = this.corePlateIds || [];
+        if (!ids.length) return [];
+        const open = ids.filter(id => !this.spentPlateIds.includes(id));
+        if (open.length) return [open[0]];
+        return [ids[this.spentPlateIds.length % ids.length]];
+    }
+
     corePlateBeside(tile) {
         if (!tile) return null;
-        const ids = this.corePlateIds || [];
+        const ids = this.liveCoreIds();
         for (const plate of state.plates || []) {
             if (ids.includes(plate.id) && orthoAdjacent(tile, plate)) return plate.id;
         }
@@ -319,7 +332,7 @@ export class Burrower extends Entity {
 
     rememberCheckpoint() {
         if (!state.bossCheckpoint || typeof state.bossCheckpoint !== 'object') state.bossCheckpoint = {};
-        state.bossCheckpoint[this.id] = { hp: this.hp };
+        state.bossCheckpoint[this.id] = { hp: this.hp, spent: [...this.spentPlateIds] };
     }
 
     // Loudest wins: the live actor whose last step onto a crack or plate is the most
@@ -395,11 +408,18 @@ export class Burrower extends Entity {
             const prev = this.footing.get(key) || null;
             if (surf && surf.key !== prev) {
                 const info = actorTargetInfo(actor);
-                this.noise.set(key, { tick: this.clock, surface: surf.key, surfaceKind: surf.kind, kind: info.kind, id: info.id });
+                this.noise.set(key, { tick: this.clock, centerTick: null, surface: surf.key, surfaceKind: surf.kind, kind: info.kind, id: info.id });
                 const c = center(actor);
                 this.ripples.push({ x: c.x, y: c.y, age: 0, kind: info.kind });
             }
             this.footing.set(key, surf ? surf.key : null);
+            // The stamp time is when the centre lands on the noisy surface.
+            const n = this.noise.get(key);
+            if (n && n.centerTick == null && surf && surf.key === n.surface) {
+                const c = center(actor);
+                const t = surf.tile;
+                if (c.x >= t.x && c.x < t.x + t.w && c.y >= t.y && c.y < t.y + t.h) n.centerTick = this.clock;
+            }
         }
         for (const key of [...this.footing.keys()]) if (!seen.has(key)) this.footing.delete(key);
         for (const r of this.ripples) r.age++;
@@ -547,13 +567,13 @@ export class Burrower extends Entity {
     tileStuns(tile, actors) {
         if (!tile) return false;
         if (!this.echoStamped(tile, actors)) return false;
-        const ids = this.corePlateIds || [];
+        const ids = this.liveCoreIds();
         const player = (actors || []).find(a => a && a.isActive !== false && actorTargetInfo(a).kind === 'player');
         if (!player) return false;
         for (const plate of state.plates || []) {
             if (!ids.includes(plate.id)) continue;
             if (!orthoAdjacent(tile, plate)) continue;
-            if (actorPressesPlate(player, plate)) return true;
+            if (actorPressesPlate(player, plate)) { this.stunPlateId = plate.id; return true; }
         }
         return false;
     }
@@ -565,7 +585,8 @@ export class Burrower extends Entity {
             const n = this.noise.get(actorKey(actor));
             if (!n || n.surface !== key) continue;
             if (this.footing.get(actorKey(actor)) !== key) continue;
-            if (this.clock - n.tick < STAMP_ACCEPT_TICKS) return true;
+            // Strike tick minus centre-entry tick: 1..STAMP_ACCEPT_TICKS (45 ticks).
+            if (n.centerTick != null && this.clock - n.centerTick <= STAMP_ACCEPT_TICKS) return true;
         }
         return false;
     }
@@ -577,7 +598,8 @@ export class Burrower extends Entity {
             if (!actor || actorTargetInfo(actor).kind !== 'echo') continue;
             const n = this.noise.get(actorKey(actor));
             if (!n || n.surface !== key) continue;
-            if (n.tick >= this.lockClock && this.clock - n.tick >= STAMP_ACCEPT_TICKS) return true;
+            const t = n.centerTick ?? n.tick;
+            if (t >= this.lockClock - NOISE_TTL_TICKS && this.clock - t > STAMP_ACCEPT_TICKS) return true;
         }
         return false;
     }
@@ -594,10 +616,21 @@ export class Burrower extends Entity {
     // Keep the locked crack intact (no weight crumble) until the strike lands.
     holdLockedCrack() {
         for (const c of state.cracks || []) if (c) c.burrowerHold = false;
-        if (this.playerMode || this.homeFallback) return;
+        if (this.homeFallback) return;
         if (this.phase !== 'burrow' && this.phase !== 'telegraph') return;
+        if (this.playerMode) {
+            // The courier is the target: every crack beside the lit plate holds until
+            // the strike, so an early stamp reads TOO EARLY instead of a silent fall.
+            for (const crack of this.liveRingCracks()) if (!crack.collapsing) crack.burrowerHold = true;
+            return;
+        }
         const crack = this.findCrack(this.lockedTile);
         if (crack && !crack.broken && !crack.collapsing) crack.burrowerHold = true;
+    }
+
+    liveRingCracks() {
+        const plates = (state.plates || []).filter(p => this.liveCoreIds().includes(p.id));
+        return (state.cracks || []).filter(c => c && !c.broken && plates.some(p => orthoAdjacent(c, p)));
     }
 
     openDefeatDoor() {
@@ -670,6 +703,10 @@ export class Burrower extends Entity {
                 this.applyStun();
                 return;
             }
+            const early = this.liveRingCracks().find(c => this.echoEarly(c, actors) || this.echoLate(c, actors));
+            if (early) {
+                this.say(this.echoEarly(early, actors) ? 'TOO EARLY' : 'STAMP OK · hold the lit CORE plate', early, '#ff9a6a');
+            }
             if (crack && this.crackIsTargetable(crack) && typeof crack.startCollapse === 'function') {
                 crack.showWarningRing?.();
                 crack.startCollapse();
@@ -697,15 +734,20 @@ export class Burrower extends Entity {
 
     // Player-mode stun: the live courier holds a core plate and an echo stamped a
     // crack beside that plate in the accept window. Returns that crack or null.
+    // An echo stamped in the window but the courier is not on the lit plate.
+    echoLate(crack, actors) {
+        return this.echoStamped(crack, actors);
+    }
+
     playerModeStampCrack(actors) {
-        const ids = this.corePlateIds || [];
+        const ids = this.liveCoreIds();
         const player = (actors || []).find(a => a && a.isActive !== false && actorTargetInfo(a).kind === 'player');
         if (!player) return null;
         for (const plate of state.plates || []) {
             if (!ids.includes(plate.id) || !actorPressesPlate(player, plate)) continue;
             for (const crack of state.cracks || []) {
                 if (!crack || crack.broken || !orthoAdjacent(crack, plate)) continue;
-                if (this.echoStamped(crack, actors)) return crack;
+                if (this.echoStamped(crack, actors)) { this.stunPlateId = plate.id; return crack; }
             }
         }
         return null;
@@ -714,6 +756,9 @@ export class Burrower extends Entity {
     applyStun() {
         {
             this.hp -= 1;
+            const used = this.stunPlateId || this.liveCoreIds()[0];
+            if (used) this.spentPlateIds.push(used);
+            this.stunPlateId = null;
             this.rememberCheckpoint();
             this.stunFlash = 20;
             if (this.hp <= 0) {
@@ -748,6 +793,11 @@ export class Burrower extends Entity {
     // A positive maxStunsPerLoop leaves the boss dormant until rewind instead.
     recoverFromStun() {
         this.stunsThisLoop += 1;
+        // Nothing from the stunned cycle carries over: the next label names the
+        // real next target, not the stale 'your tile' lock.
+        this.playerMode = false;
+        this.homeFallback = false;
+        this.clearAim();
         this.phaseTicks = 0;
         this.cycleTicks = 0;
         this.cycleLocked = false;
@@ -879,9 +929,17 @@ export class Burrower extends Entity {
             // Player mode: below the tile, so it clears the '!' over the courier.
             const above = ptr.targetTile.y - 10;
             const below = ptr.targetTile.y + ptr.targetTile.h + 10;
-            const y = this.playerMode || above < 24 ? below : above;
+            // Player mode: above the courier and the '!' (the sprite covers the tile).
+            const y = this.playerMode ? Math.max(12, ptr.targetTile.y - 40) : (above < 24 ? below : above);
             paintLabel(ctx, text, ptr.arrowTo.x, y, { color, h: 15 });
         }
+    }
+
+    playerHoldsLivePlate() {
+        const player = state.player;
+        if (!player) return false;
+        const ids = this.liveCoreIds();
+        return (state.plates || []).some(p => ids.includes(p.id) && actorPressesPlate(player, p));
     }
 
     // The locked strike tile, and whose noise it was locked on. The live hunt (who
@@ -889,7 +947,10 @@ export class Burrower extends Entity {
     targetLabel() {
         const ptr = this.targetPointers();
         if (!ptr.targetTile) return null;
-        if (this.playerMode) return this.phase === 'telegraph' ? 'STRIKES HERE · MOVE!' : 'STRIKES YOUR TILE';
+        if (this.playerMode) {
+            if (this.playerHoldsLivePlate()) return this.phase === 'telegraph' ? 'HOLD — echo stamps now' : 'HOLD the lit plate';
+            return this.phase === 'telegraph' ? 'STRIKES HERE · MOVE!' : 'STRIKES YOUR TILE';
+        }
         const who = whoName(this.aimKind, this.aimId);
         return who ? `STRIKES HERE · locked on ${who}` : 'STRIKES HERE';
     }
@@ -945,7 +1006,7 @@ export class Burrower extends Entity {
     // plate says what to record, instead of a paragraph of text.
     drawRecordCue(ctx) {
         if ((state.pastRuns || []).length > 0 || this.defeated) return;
-        const ids = this.corePlateIds || [];
+        const ids = this.liveCoreIds();
         for (const plate of state.plates || []) {
             if (!plate || !ids.includes(plate.id)) continue;
             const cx = plate.x + (plate.w || 40) / 2;
@@ -1013,6 +1074,9 @@ export class Burrower extends Entity {
         const c = this._countdown;
         this._countdown = null;
         if (!c) return;
+        // Never over the echo stamp marker text: drop below it when they meet.
+        const m = this._predLabel;
+        if (m && Math.abs(c.x - m.x) < 90 && Math.abs(c.y - m.y) < 20) c.y = m.y + 20;
         paintLabel(ctx, c.text, c.x, c.y, { color: '#fff6d8', h: 16, font: 'bold 12px "Space Grotesk", sans-serif', bg: 'rgba(4, 8, 12, 0.92)' });
     }
 
@@ -1030,7 +1094,7 @@ export class Burrower extends Entity {
         if (left == null) return null;
         let tiles;
         if (this.playerMode) {
-            const ids = this.corePlateIds || [];
+            const ids = this.liveCoreIds();
             const plates = (state.plates || []).filter(p => ids.includes(p.id));
             tiles = (state.cracks || []).filter(c => c && !c.broken && plates.some(p => orthoAdjacent(c, p)));
         } else tiles = this.lockedTile ? [this.lockedTile] : [];
@@ -1050,11 +1114,13 @@ export class Burrower extends Entity {
             for (let t = now; t <= now + left; t++) {
                 const s = g.runData[Math.min(g.runData.length - 1, t)];
                 if (!s) break;
-                const on = s.x < tile.x + tile.w && s.x + (g.w || 30) > tile.x && s.y < tile.y + tile.h && s.y + (g.h || 30) > tile.y;
+                const cx = s.x + (g.w || 30) / 2;
+                const cy = s.y + (g.h || 30) / 2;
+                const on = cx >= tile.x && cx < tile.x + tile.w && cy >= tile.y && cy < tile.y + tile.h;
                 if (wasOn === null) wasOn = on;
                 else if (on && !wasOn) {
                     const ticksBefore = now + left - t;
-                    return { ghostId: g.id, ticksBefore, inWindow: ticksBefore < STAMP_ACCEPT_TICKS, tile: { x: tile.x, y: tile.y, w: tile.w, h: tile.h } };
+                    return { ghostId: g.id, ticksBefore, inWindow: ticksBefore >= 1 && ticksBefore <= STAMP_ACCEPT_TICKS, tile: { x: tile.x, y: tile.y, w: tile.w, h: tile.h } };
                 }
                 wasOn = on;
             }
@@ -1067,13 +1133,13 @@ export class Burrower extends Entity {
     // and replays inside the window of the same strike next loop (cycles are fixed).
     stampNowActive() {
         const left = this.ticksToStrike();
-        return this.playerMode && this.phase === 'telegraph' && left != null && left < STAMP_WINDOW_TICKS;
+        return this.playerMode && this.phase === 'telegraph' && left != null && left >= 1 && left <= STAMP_WINDOW_TICKS;
     }
 
     drawStampCue(ctx) {
         const tick = state.currentTick || 0;
         if (this.stampNowActive()) {
-            const ids = this.corePlateIds || [];
+            const ids = this.liveCoreIds();
             const plates = (state.plates || []).filter(p => ids.includes(p.id));
             const pulse = 0.5 + 0.5 * Math.abs(Math.sin(tick * 0.5));
             for (const crack of state.cracks || []) {
@@ -1091,6 +1157,7 @@ export class Burrower extends Entity {
         }
         const pred = this.predictedStamp();
         this._lastPrediction = pred;
+        this._predLabel = null;
         if (pred && pred.tile) {
             const t = pred.tile;
             const secs = (pred.ticksBefore / ticksPerSecond()).toFixed(2);
@@ -1104,6 +1171,7 @@ export class Burrower extends Entity {
             ctx.arc(t.x + t.w / 2, t.y + t.h / 2, 13, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
+            this._predLabel = { x: t.x + t.w / 2, y: t.y - 28 };
             paintLabel(ctx, text, t.x + t.w / 2, t.y - 28, { color: pred.inWindow ? '#9dffb0' : '#ffb08a', h: 14, font: 'bold 10px "Space Grotesk", sans-serif' });
         }
     }
