@@ -693,3 +693,17 @@ if (isMain) {
         recordLevel(prefix, dest);
     }
 }
+
+/** QA key-script runner: loops of [keys ('d', 'shift+d', 'space', 'r', ''), ticks]. */
+export function runKeyLoops(loops, tail = 300, onTick) {
+    const dead = () => state.gameState !== 'PLAYING';
+    for (const loop of loops) for (const [k, n] of loop) {
+        const ks = k ? k.split('+') : [];
+        for (let i = 0; i < n && !dead(); i++) {
+            const dir = { x: ks.includes('d') ? 1 : ks.includes('a') ? -1 : 0, y: ks.includes('s') ? 1 : ks.includes('w') ? -1 : 0 };
+            tick(dir, ks.filter(x => !'wasd'.includes(x)), true);
+            if (onTick) onTick();
+        }
+    }
+    for (let i = 0; i < tail && !dead(); i++) { tick({}, [], true); if (onTick) onTick(); }
+}

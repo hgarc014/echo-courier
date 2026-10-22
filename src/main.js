@@ -1411,6 +1411,12 @@ function update() {
         if (dest.x !== state.player.x || dest.y !== state.player.y) { 
             SFX.dash(); 
             state.dashTrails.push({ sx: state.player.x, sy: state.player.y, ex: dest.x, ey: dest.y, life: 1.0 });
+            // B8: remember the swept box so the laser check below burns a dash that crosses
+            // a live beam, exactly as walking into it would. Dashes are axis-aligned, so the
+            // union of start and end boxes is the full swept path; no thin beam can be skipped.
+            const p0 = state.player;
+            state.dashSweep = { x: Math.min(p0.x, dest.x), y: Math.min(p0.y, dest.y),
+                w: Math.abs(dest.x - p0.x) + p0.w, h: Math.abs(dest.y - p0.y) + p0.h };
             state.player.x = dest.x; 
             state.player.y = dest.y; 
             state.player.dashCooldown = 60; 
@@ -1518,8 +1524,9 @@ function update() {
 
     const shieldOn = getUnlockedAbilities().includes('ghostShield');
     const slabs = collectShieldSlabs(state.player, state.activeGhosts, shieldOn);
+    const dashSweep = state.dashSweep; state.dashSweep = null;
     for (const l of state.lasers) {
-        if (state.player.cloakTimer <= 0 && laserThreatens(l, state.player, slabs)) { levelFailed("Burned by Laser Grid!"); return; }
+        if (state.player.cloakTimer <= 0 && (laserThreatens(l, state.player, slabs) || (dashSweep && laserThreatens(l, dashSweep, slabs)))) { levelFailed("Burned by Laser Grid!"); return; }
         for (const p of state.packages) {
             if (!p.isDestroyed && p.type === 'fragile' && laserThreatens(l, p, slabs)) {
                 p.breakApart('vapor'); SFX.break(); SFX.laserHit(); levelFailed("Fragile Package Destroyed!"); return;

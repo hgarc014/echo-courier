@@ -101,6 +101,26 @@ check('W5 N1: walking the parcel into the L4 beam fails the loop with a message'
     assert.equal(state.pastRuns.length, runs, 'the burned run must not become an echo');
 });
 
+// QA B r3 (B8): a dash's swept path must burn on a live beam, like walking in.
+function dashAcrossW4L1(beamOpen) {
+    loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W4-L1')) });
+    const L = state.lasers[0];
+    if (beamOpen) Object.defineProperty(L, 'isOpen', { get: () => true, set: () => {}, configurable: true });
+    state.player.x = L.x - 38; state.player.y = 460; state.player.dashCooldown = 0;
+    for (const k of Object.keys(keys)) keys[k] = false;
+    keys.d = true; keys.shift = true; main.stepSimulation(); keys.shift = false; keys.d = false; main.stepSimulation();
+    return { x: state.player.x, beamX: L.x + L.w, fail: state.failMessage };
+}
+check('W4-L1 B8: a dash across the thin live beam burns the courier', () => {
+    const r = dashAcrossW4L1(false);
+    assert.ok(r.x > r.beamX, `dash should land past the beam (x ${r.x})`);
+    assert.equal(r.fail, 'Burned by Laser Grid!');
+});
+check('W4-L1 B8: a dash across an open (inactive) beam is safe', () => {
+    const r = dashAcrossW4L1(true);
+    assert.ok(r.x > r.beamX); assert.ok(!r.fail, `unexpected fail ${r.fail}`);
+});
+
 // QA B r2 (B6): a west dash at the closed back door used last tick's (south) facing.
 check('W5 B6: dashing west into XR-9\'s closed back door never jumps the courier south', () => {
     loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W5-BOSS')) });
