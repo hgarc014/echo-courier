@@ -12,12 +12,17 @@ const { RECORDED_KEYS } = await import('../../src/systems/inputRecorder.js');
 
 export { main, state, keys, LEVELS };
 
-/** Prefer the recorded level name so a world inserted earlier does not stale the index. */
+/**
+ * Resolve by levelName: a world inserted earlier shifts every index after it, so the
+ * recorded index is only a hint. A name that matches no level is an error, never a
+ * silent fallback to whatever now sits at that index.
+ */
 export function levelIndexForSolution(solution) {
     const name = solution && solution.levelName;
     if (typeof name === 'string' && name) {
         const idx = LEVELS.findIndex(level => level.name === name);
-        if (idx >= 0) return idx;
+        if (idx < 0) throw new Error(`solution levelName "${name}" matches no level`);
+        return idx;
     }
     return solution ? solution.level : undefined;
 }

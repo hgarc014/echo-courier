@@ -1,4 +1,4 @@
-import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
+import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
@@ -2323,6 +2323,13 @@ window.onload = () => {
         refreshLevelSelectGrid();
         refreshShopButtons();
     };
+    const devToolsToggle = document.getElementById('dev-tools-toggle');
+    if (devToolsToggle) {
+        devToolsToggle.onchange = () => {
+            if (!isDevUrlEnabled()) setDevToolsEnabled(devToolsToggle.checked);
+            applyDevModeUi();
+        };
+    }
     const unlockAllBox = document.getElementById('unlock-all-checkbox');
     if (unlockAllBox) {
         unlockAllBox.onchange = () => {
