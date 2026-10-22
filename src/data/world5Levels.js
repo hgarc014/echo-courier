@@ -248,8 +248,8 @@ export const W5_LEVELS = [
     ),
     level(
         'W5-L4: Courier Overclock',
-        'Glass, a plateless beam, a guard who sees through walls, two colored plates, cracked floor, static, and a door that opens once. Three echoes.',
-        'Every job here belongs to a loop number. Work out which job only the oldest echo can do, which only the newest can, and what is left for the one in between. Then record them in that order. Static replays an echo at half speed, even one standing still, so the guard sweep your decoy catches is later than it looks. The timed door opens once a loop, about 27 seconds in, for two seconds.',
+        'Glass, a plateless beam, a guard who sees through walls, a magenta plate and a blue plate, cracked floor, static, and a door that opens once a loop.',
+        'The airlock only stays open while both of its plates are held at once: magenta answers to your oldest echo, blue to your newest. No plate turns the beam off, but a shield turned to face along a beam casts a safe shadow behind it. Static replays an echo at half speed, even one standing still, so anything an echo does in static happens later than it looks. The timed door opens once a loop, about 27 seconds in, for two seconds.',
         3, 3, 45, W5_L4_LAYOUT,
         { unlocks: ['ghostShield'], grants: ['ghostShield'] }
     ),

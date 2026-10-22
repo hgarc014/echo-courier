@@ -221,5 +221,12 @@ await checkAsync('W5-L4 cold: emitter sits at the beam source; plate 1 inside th
     assert.equal(edges[0].x1, beam.x); assert.equal(edges[0].x2, beam.x + beam.w);
 });
 
+check('par 3: W5-L4 text hints at the simultaneous airlock plates and the shield shadow, with no 3-echo wording', () => {
+    const lv = byName('W5-L4');
+    const text = JSON.stringify(lv).toLowerCase();
+    for (const stale of ['three echoes', 'in between', 'every job here belongs']) assert.ok(!text.includes(stale), `stale: ${stale}`);
+    assert.ok(text.includes('held at once') && text.includes('safe shadow'), 'hints present');
+});
+
 if (failures) { console.log(`${failures} world5 check(s) failed`); process.exit(1); }
 console.log('all world5 checks passed');
