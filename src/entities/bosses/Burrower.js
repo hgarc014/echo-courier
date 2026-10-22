@@ -652,13 +652,11 @@ export class Burrower extends Entity {
     holdLockedCrack() {
         for (const c of state.cracks || []) if (c) c.burrowerHold = false;
         if (this.homeFallback) return;
+        // Cracks beside the lit plate never crumble under weight: an echo stamping
+        // there (now or "for next loop" while dormant) must still be standing at the strike.
+        for (const crack of this.liveRingCracks()) if (!crack.collapsing) crack.burrowerHold = true;
         if (this.phase !== 'burrow' && this.phase !== 'telegraph') return;
-        if (this.playerMode) {
-            // The courier is the target: every crack beside the lit plate holds until
-            // the strike, so an early stamp reads TOO EARLY instead of a silent fall.
-            for (const crack of this.liveRingCracks()) if (!crack.collapsing) crack.burrowerHold = true;
-            return;
-        }
+        if (this.playerMode) return;
         const crack = this.findCrack(this.lockedTile);
         if (crack && !crack.broken && !crack.collapsing) crack.burrowerHold = true;
     }
