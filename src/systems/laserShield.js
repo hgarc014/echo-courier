@@ -151,3 +151,35 @@ export function segmentHitsBox(x1, y1, x2, y2, box, step = 4) {
     }
     return false;
 }
+
+/** The lit "safe shadow" a shield casts in each beam it cuts (empty if it faces across the beam). */
+export function shieldShadowRects(lasers, slab) {
+    const out = [];
+    for (const laser of lasers || []) {
+        if (!laser || laser.isOpen) continue;
+        const span = safeSpan(laser, slab);
+        if (!span || !(span[1] - span[0] > 0.01)) continue;
+        if (laserAxis(laser) === 'y') out.push({ x: laser.x, y: span[0], w: laser.w, h: span[1] - span[0], laserId: laser.id });
+        else out.push({ x: span[0], y: laser.y, w: span[1] - span[0], h: laser.h, laserId: laser.id });
+    }
+    return out;
+}
+
+/** Emitter housing at a beam's source end (top for vertical beams, left for horizontal). */
+export function laserEmitterRect(laser) {
+    if (!laser) return null;
+    const s = 10;
+    if (laserAxis(laser) === 'y') return { x: laser.x - 6, y: laser.y, w: laser.w + 12, h: s };
+    return { x: laser.x, y: laser.y - 6, w: s, h: laser.h + 12 };
+}
+
+/** Plates a live beam runs through: the beam-side edges a courier cannot step across. */
+export function plateBeamEdges(plates, lasers) {
+    const out = [];
+    for (const p of plates || []) for (const l of lasers || []) {
+        if (!aabb(p, l)) continue;
+        if (laserAxis(l) === 'y') out.push({ plate: p, x1: l.x, x2: l.x + l.w, y: p.y, h: p.h, axis: 'y' });
+        else out.push({ plate: p, y1: l.y, y2: l.y + l.h, x: p.x, w: p.w, axis: 'x' });
+    }
+    return out;
+}

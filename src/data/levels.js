@@ -1,7 +1,7 @@
 import { state, registerDashProgression, setWorldUnlockProbe, setLevelClearHandler } from '../core/state.js';
 import { PlayerEntity } from '../entities/actors.js';
 import { Package, PressurePlate, TemporalPlate, Door, AlarmDoor, TimerDoor, Wall, HintPlate } from '../entities/interactables.js';
-import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit } from '../entities/hazards.js';
+import { Laser, SweepCamera, Drone, Guard, WindTunnel, StaticZone, CrackedFloor, ShooterRobot, LaserProjectile, Pit, normalizeRobotParams, ROBOT_XR9_DEFAULTS } from '../entities/hazards.js';
 import { Burrower, normalizeMaxStunsPerLoop } from '../entities/bosses/Burrower.js';
 import { Prism, serializePrism, normalizePrismParams } from '../entities/bosses/Prism.js';
 import { finishedWithinLoops } from '../core/loopDisplay.js';
@@ -10,6 +10,7 @@ import { DeliveryZone } from '../entities/zones.js';
 import { DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT } from '../core/camera.js';
 import { W2_LEVELS } from './world2Levels.js';
 import { W4_LEVELS } from './world4Levels.js';
+import { W5_LEVELS } from './world5Levels.js';
 import { PIT_KILL_FRACTION, clampKillFraction } from '../core/hitZones.js';
 
 // W1 Dispatch is 0–4. W2 Subfloor (#47) is 5–9. Older campaign levels follow, shifted
@@ -694,7 +695,8 @@ export const LEVELS = [
 
     { name: "Level 12: Danger Courier", voiceKey: "level-11-story", hideFromSelect: true, bossVoiceKey: "level-11-boss-intro", isBoss: true, grants: ['toss'], bossIntro: { speaker: "EXTERMINATOR UNIT XR-9", text: "Unauthorized courier detected. Temporal theft in progress. Arena lockdown lifted. Commencing extermination sweep." }, bossIntroDoorId: 'boss_intro_door', story: { speaker: "Unknown Hacker [Encrypted]", text: "ChronoHaul deployed an Exterminator robot to stop you. It has kill authorization. Throw Heavy Packages to breach its armor (3 hits). Then deliver the final Fragile Artifact!" }, obj: "Defeat the Security Robot! Toss packages to damage it (3 Hits).", challenge: { desc: "Finish in 1 loop (No Ghosts!)", check: () => finishedWithinLoops(state.loopNumber, 1) }, maxGhosts: 2, setup: () => { player=new PlayerEntity(50,300,30,30,'player'); deliveryZone=new DeliveryZone(650,300,100,100); walls=[new Wall(0,0,800,20),new Wall(0,580,800,20),new Wall(0,0,20,600),new Wall(780,0,20,600),new Wall(550,0,40,250),new Wall(550,350,40,250),new Wall(320,20,40,120),new Wall(440,20,40,120),new Wall(320,20,160,40)]; doors=[new Door('boss_door',550,250,40,100),new Door('boss_intro_door',360,100,80,40)]; robots=[new ShooterRobot([{x:390,y:60},{x:390,y:220},{x:250,y:220},{x:250,y:450},{x:450,y:450},{x:450,y:220}])]; robots[0].engaged = false; robots[0].isEmerging = false; robots[0].emergeUntilPathIndex = 2; lasers=[]; plates=[]; guards=[]; cameras=[]; drones=[]; winds=[]; statics=[]; cracks=[]; packages=[new Package('ammo1',150,100,'heavy',false),new Package('ammo2',150,500,'heavy',false),new Package('ammo3',350,500,'heavy',false),new Package('pkg1',50,100,'fragile')]; projectiles=[]; gatekeepers=[]; prisms=[]; } },
     { name: "Dev Sandbox", voiceKey: "level-12-story", isSandbox: true, crackSpeed: 'fast', mapWidth: 1600, mapHeight: 1200, grants: ['dash', 'toss', 'cloak', 'ghostShield'], story: { speaker: "CHRONOHAUL LAB", text: "Sandbox range online. Map is oversized — the camera follows you. Every tool is granted. Walk the hall to exercise doors, plates, packages, lasers, cameras, guards, drones, winds, static, cracks, and the robot." }, obj: "Dev sandbox: oversized map with a sample of every entity. Camera follows the courier.", challenge: { desc: "Sandbox", check: () => false }, maxGhosts: 3, loopTime: 20, setup: setupDevSandbox },
-    ...W4_LEVELS
+    ...W4_LEVELS,
+    ...W5_LEVELS
 ];
 
 // #47 shipped these after the sandbox as pending. They are World 2 now, so they
@@ -713,6 +715,13 @@ W4_LEVELS.forEach((level, i) => {
     if (level.isBoss && !level.bossVoiceKey) level.bossVoiceKey = `w4-${i}-boss-intro`;
 });
 
+// Overclock ships after Beamworks, same rules as W4.
+W5_LEVELS.forEach((level, i) => {
+    level.isPendingCampaign = false;
+    if (!level.voiceKey) level.voiceKey = `w5-${i}-story`;
+    if (level.isBoss && !level.bossVoiceKey) level.bossVoiceKey = `w5-${i}-boss-intro`;
+});
+
 for (const level of LEVELS) installParChallenge(level);
 
 // World 4 points at the contiguous W4- block appended after the campaign.
@@ -725,6 +734,27 @@ for (const level of LEVELS) installParChallenge(level);
         for (let i = start; i < LEVELS.length && String(LEVELS[i].name || '').startsWith('W4-'); i++) indices.push(i);
     }
     if (beam) beam.levels = indices;
+}
+
+// World 5 is the contiguous W5- block. The old Overclock placeholders stay in
+// LEVELS for the editor but are hidden from Level Select.
+{
+    const over = WORLDS.find(w => w.id === 5);
+    const start = LEVELS.findIndex(l => typeof l.name === 'string' && l.name.startsWith('W5-'));
+    const indices = [];
+    if (start >= 0) {
+        for (let i = start; i < LEVELS.length && String(LEVELS[i].name || '').startsWith('W5-'); i++) indices.push(i);
+    }
+    if (over) {
+        // Placeholders keep their old world tag so ability gating does not change.
+        for (const lvl of LEVELS) {
+            if (lvl.hideFromSelect && (lvl.name === 'Level 11: Time Dilation' || lvl.name === 'Level 12: Danger Courier')) {
+                if (lvl.world == null) lvl.world = over.id;
+                if (!Array.isArray(lvl.unlocks)) lvl.unlocks = [...over.unlocks];
+            }
+        }
+        over.levels = indices;
+    }
 }
 
 for (const world of WORLDS) {
@@ -948,6 +978,12 @@ function serializeRobot(r) {
     for (const [k, def] of Object.entries(ROBOT_DEFAULTS)) {
         if (r[k] !== undefined && r[k] !== def) out[k] = r[k];
     }
+    if (Number.isFinite(r.maxHp) && r.maxHp !== (out.hp ?? 3)) out.maxHp = r.maxHp;
+    // XR-9 params: only written when they differ from the legacy defaults.
+    const xr = normalizeRobotParams(r);
+    for (const [k, def] of Object.entries(ROBOT_XR9_DEFAULTS)) {
+        if (xr[k] !== def) out[k] = xr[k];
+    }
     return out;
 }
 function deserializeRobot(r) {
@@ -956,6 +992,9 @@ function deserializeRobot(r) {
     for (const k of Object.keys(ROBOT_DEFAULTS)) {
         if (r[k] !== undefined) robot[k] = r[k];
     }
+    robot.maxHp = Number.isFinite(r.maxHp) ? r.maxHp : robot.hp;
+    robot.configure(r);
+    robot.applyCheckpoint();
     return robot;
 }
 

@@ -99,6 +99,7 @@ check('next level follows WORLDS order and skips hidden placeholders', () => {
     assert.ok(names.includes('W4-L1: Glass'));
     assert.equal(names.includes('Level 11: Time Dilation'), false, 'old Overclock placeholder hidden');
     assert.equal(names.includes('Level 12: Danger Courier'), false, 'old Overclock placeholder hidden');
+    assert.ok(names.includes('W5-L1: First Light'));
     const grid = LEVELS.find(level => level.name === 'Level 9: Fragile Grid');
     const fast = LEVELS.find(level => level.name === 'Level 10: Fast Shipping');
     assert.equal(grid.hideFromSelect, true);

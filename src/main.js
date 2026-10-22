@@ -1,7 +1,9 @@
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
-import { AABB, checkWallCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
+import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing.js';
+import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
+import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -16,7 +18,7 @@ import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
 import { glyphsForGhost } from './systems/temporalPlate.js';
 import { sampleRun, predictEchoHazards } from './systems/preview.js';
-import { collectShieldSlabs, laserThreatens } from './systems/laserShield.js';
+import { collectShieldSlabs, laserThreatens, shieldSlab, shieldShadowRects, laserEmitterRect, plateBeamEdges } from './systems/laserShield.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { installLayoutFit } from './ui/fitLayout.js';
@@ -779,10 +781,10 @@ function drawMiniDemo() {
     (world.winds || []).forEach(paint);
     (world.cracks || []).forEach(paint);
     paint(world.deliveryZone);
-    (world.plates || []).forEach(paint);
     (world.hints || []).forEach(paint);
     (world.walls || []).forEach(paint);
     (world.lasers || []).forEach(paint);
+    (world.plates || []).forEach(paint);
     (world.doors || []).forEach(d => {
         if (d && typeof d.render === 'function' && d.render.length > 1) d.render(mctx, tick);
         else paint(d);
@@ -1038,7 +1040,7 @@ export function startGame(levelIndex) {
     updateHUD(); state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     updateDeliveryProgressUI();
     applyChallengeHud(lv, levelIndex);
-    state.pastRuns = []; state.lastRunFailed = false; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    state.pastRuns = []; state.lastRunFailed = false; state.loopFails = 0; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = []; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
     uiTitleScreen.classList.add('hidden'); uiLevelComplete.classList.add('hidden'); uiGameOver.classList.add('hidden');
     uiAppLayout.classList.remove('hidden'); syncLoopCountUI(); Object.assign(prevKeys, keys);
@@ -1136,7 +1138,7 @@ export function restartLevel() {
     state.bossCheckpointLive = false;
     clearGatekeeperCheckpoint();
     applyLoadedLevel(loadCurrentEntities());
-    state.pastRuns = []; state.lastRunFailed = false; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.pastRuns = []; state.lastRunFailed = false; state.loopFails = 0; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
     state.failTimer = 0; state.failMessage = ""; state.alarmState = false; state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
     clearLoopFx();
     syncLoopCountUI();
@@ -1159,6 +1161,7 @@ export function restartLevel() {
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
     state.lastRunFailed = true;
+    state.loopFails = (state.loopFails || 0) + 1;
     SFX.fail();
     state.failMessage = reason;
     state.failTimer = FAIL_HOLD_FRAMES;
@@ -1399,10 +1402,21 @@ function update() {
     if (state.player.cloakTimer > 0) state.player.cloakTimer--;
     if (cloakJustPressed && state.player.cloakTimer <= 0) { SFX.cloak(); state.player.cloakTimer = 120; state.runStats.cloaks++; }
     if (dashJustPressed && state.player.dashCooldown <= 0) {
-        let dest = getDashDestination(state.player.x, state.player.y, state.player.facingX, state.player.facingY, 120, state.player.w, state.player.h);
+        // Dash along this tick's held direction; facing is only updated later in the tick,
+        // so using it alone dashed along last tick's heading (B6: west press -> 120px south).
+        const held = getMoveVector();
+        const dfx = held.x ? Math.sign(held.x) : (held.y ? 0 : state.player.facingX);
+        const dfy = held.y ? Math.sign(held.y) : (held.x ? 0 : state.player.facingY);
+        let dest = getDashDestination(state.player.x, state.player.y, dfx, dfy, 120, state.player.w, state.player.h);
         if (dest.x !== state.player.x || dest.y !== state.player.y) { 
             SFX.dash(); 
             state.dashTrails.push({ sx: state.player.x, sy: state.player.y, ex: dest.x, ey: dest.y, life: 1.0 });
+            // B8: remember the swept box so the laser check below burns a dash that crosses
+            // a live beam, exactly as walking into it would. Dashes are axis-aligned, so the
+            // union of start and end boxes is the full swept path; no thin beam can be skipped.
+            const p0 = state.player;
+            state.dashSweep = { x: Math.min(p0.x, dest.x), y: Math.min(p0.y, dest.y),
+                w: Math.abs(dest.x - p0.x) + p0.w, h: Math.abs(dest.y - p0.y) + p0.h };
             state.player.x = dest.x; 
             state.player.y = dest.y; 
             state.player.dashCooldown = 60; 
@@ -1485,8 +1499,8 @@ function update() {
 
     let nextPlayerX = { x: state.player.x + dx, y: state.player.y, w: state.player.w, h: state.player.h };
     let nextPlayerY = { x: state.player.x, y: state.player.y + dy, w: state.player.w, h: state.player.h };
-    let pCanMoveX = !checkWallCollision(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h);
-    let pCanMoveY = !checkWallCollision(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h);
+    let pCanMoveX = !checkCourierCollision(nextPlayerX.x, nextPlayerX.y, nextPlayerX.w, nextPlayerX.h);
+    let pCanMoveY = !checkCourierCollision(nextPlayerY.x, nextPlayerY.y, nextPlayerY.w, nextPlayerY.h);
     if (pCanMoveX) state.player.x += dx;
     if (pCanMoveY) state.player.y += dy;
 
@@ -1496,8 +1510,8 @@ function update() {
         if (gDx === 0 && gDy === 0) return;
         let nextGhostX = { x: g.x + gDx, y: g.y, w: g.w, h: g.h };
         let nextGhostY = { x: g.x, y: g.y + gDy, w: g.w, h: g.h };
-        let gCanMoveX = !checkWallCollision(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h);
-        let gCanMoveY = !checkWallCollision(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h);
+        let gCanMoveX = !checkCourierCollision(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h);
+        let gCanMoveY = !checkCourierCollision(nextGhostY.x, nextGhostY.y, nextGhostY.w, nextGhostY.h);
         state.activeGhosts.forEach(otherG => {
             if (otherG !== g && otherG.isActive) {
                 if (AABB(nextGhostX.x, nextGhostX.y, nextGhostX.w, nextGhostX.h, otherG.x, otherG.y, otherG.w, otherG.h) && ghostShieldBlocks(otherG, nextGhostX)) gCanMoveX = false;
@@ -1510,8 +1524,9 @@ function update() {
 
     const shieldOn = getUnlockedAbilities().includes('ghostShield');
     const slabs = collectShieldSlabs(state.player, state.activeGhosts, shieldOn);
+    const dashSweep = state.dashSweep; state.dashSweep = null;
     for (const l of state.lasers) {
-        if (state.player.cloakTimer <= 0 && laserThreatens(l, state.player, slabs)) { levelFailed("Burned by Laser Grid!"); return; }
+        if (state.player.cloakTimer <= 0 && (laserThreatens(l, state.player, slabs) || (dashSweep && laserThreatens(l, dashSweep, slabs)))) { levelFailed("Burned by Laser Grid!"); return; }
         for (const p of state.packages) {
             if (!p.isDestroyed && p.type === 'fragile' && laserThreatens(l, p, slabs)) {
                 p.breakApart('vapor'); SFX.break(); SFX.laserHit(); levelFailed("Fragile Package Destroyed!"); return;
@@ -1574,11 +1589,18 @@ function update() {
         if (!p.carriedBy && p.tossTicks > 0) {
             for (let r of state.robots) {
                 if (r.hp > 0 && AABB(p.x, p.y, p.w, p.h, r.x, r.y, r.w, r.h)) {
+                    // XR-9 armour: a crate from the front stops dead where it hit.
+                    const pcx = p.x + p.w / 2 - (p.vx || 0) * 2;
+                    const pcy = p.y + p.h / 2 - (p.vy || 0) * 2;
+                    if (typeof r.isBehind === 'function' && !r.isBehind(pcx, pcy)) {
+                        p.tossTicks = 0; p.vx = 0; p.vy = 0;
+                        break;
+                    }
                     r.takeHit();
                     if (p.requiredForDelivery !== false) p.reset();
                     else p.breakApart('shatter');
                     if (r.hp <= 0) {
-                        let bossDoor = state.doors.find(d => d.id === 'boss_door');
+                        let bossDoor = state.doors.find(d => d.id === (r.defeatDoorId || 'boss_door'));
                         if (bossDoor) bossDoor.isOpen = true;
                     }
                     break;
@@ -1698,6 +1720,65 @@ function drawAbilityCooldowns(target) {
     target.restore();
 }
 
+// Lit "safe shadow" strip in each beam a shielded actor is cutting (W5-L4 clarity).
+function drawShieldShadows(target) {
+    if (!getUnlockedAbilities().includes('ghostShield') || !state.lasers.length) return;
+    const actors = [state.player, ...(state.activeGhosts || []).filter(g => g.isActive)];
+    const pulse = 0.5 + 0.5 * Math.abs(Math.sin((state.currentTick || 0) * 0.1));
+    target.save();
+    for (const a of actors) {
+        const slab = shieldSlab(a);
+        if (!slab) continue;
+        for (const r of shieldShadowRects(state.lasers, slab)) {
+            target.fillStyle = `rgba(0, 243, 255, ${0.16 + 0.12 * pulse})`;
+            target.fillRect(r.x, r.y, r.w, r.h);
+            target.strokeStyle = 'rgba(0, 243, 255, 0.85)';
+            target.lineWidth = 2; target.setLineDash([5, 4]);
+            target.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+            target.setLineDash([]);
+        }
+    }
+    target.restore();
+}
+
+// W5-L4 cold clarity: emitter housing at each beam's source, and beam-side edges on plates
+// that sit inside a beam, so it reads that the plate cannot be reached from the side.
+function drawBeamFixtures(target) {
+    target.save();
+    for (const l of state.lasers) {
+        const e = laserEmitterRect(l);
+        if (!e) continue;
+        target.fillStyle = '#2a1416'; target.fillRect(e.x, e.y, e.w, e.h);
+        target.fillStyle = l.isOpen ? '#553333' : '#ff5050';
+        if (e.w > e.h) target.fillRect(e.x + e.w / 2 - 5, e.y + e.h - 4, 10, 4);
+        else target.fillRect(e.x + e.w - 4, e.y + e.h / 2 - 5, 4, 10);
+        target.strokeStyle = '#ff8080'; target.lineWidth = 1; target.strokeRect(e.x + 0.5, e.y + 0.5, e.w - 1, e.h - 1);
+    }
+    for (const b of plateBeamEdges(state.plates, state.lasers.filter(l => !l.isOpen))) {
+        target.fillStyle = 'rgba(255, 70, 70, 0.95)';
+        if (b.axis === 'y') {
+            target.fillRect(b.x1 - 3, b.y, 3, b.h); target.fillRect(b.x2, b.y, 3, b.h);
+            target.font = 'bold 9px monospace'; target.textAlign = 'right'; target.textBaseline = 'middle';
+            target.fillText('IN BEAM: NO SIDE ENTRY', b.x1 - 8, b.y + b.h / 2);
+        } else {
+            target.fillRect(b.x, b.y1 - 3, b.w, 3); target.fillRect(b.x, b.y2, b.w, 3);
+            target.font = 'bold 9px monospace'; target.textAlign = 'center'; target.textBaseline = 'bottom';
+            target.fillText('IN BEAM: NO SIDE ENTRY', b.x + b.w / 2, b.y1 - 6);
+        }
+    }
+    target.restore();
+}
+
+const loopRingCache = new WeakMap();
+function loopRingCenter() {
+    const meta = state.currentLevelMeta;
+    if (meta && loopRingCache.has(meta)) return loopRingCache.get(meta);
+    const src = meta?.layout || state;
+    const c = pickLoopRingCenter(loopRingKeyRects(src), state.mapWidth || 800, state.mapHeight || 600);
+    if (meta) loopRingCache.set(meta, c);
+    return c;
+}
+
 function drawLoopCountdown(target) {
     if (state.gameState !== 'PLAYING') return;
     const cap = loopRecordCap();
@@ -1707,9 +1788,8 @@ function drawLoopCountdown(target) {
     const frac = left / cap;
     const secondsLeft = left / ticksPerSecond;
     const label = String(Math.ceil(secondsLeft - 1e-6));
-    const cx = 58;
-    const cy = 58;
-    const r = 26;
+    const { x: cx, y: cy } = loopRingCenter();
+    const r = LOOP_RING_R;
     const color = secondsLeft <= 2 ? '#ff3355' : (secondsLeft <= 5 ? '#ffdd00' : '#00f3ff');
     target.save();
     target.globalAlpha = 1;
@@ -2001,8 +2081,9 @@ function draw() {
     }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
-    state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); state.plates.forEach(p => p.render(ctx)); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
-    state.lasers.forEach(l => l.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
+    state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
+    // Plates draw over beams so a plate under a laser column (W5-L4) stays readable.
+    state.lasers.forEach(l => l.render(ctx)); drawShieldShadows(ctx); drawBeamFixtures(ctx); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
     state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
 
@@ -2070,6 +2151,7 @@ function draw() {
     state.guards.forEach(g => g.render(ctx)); state.robots.forEach(r => r.render(ctx)); (state.burrowers || []).forEach(b => b.render(ctx)); drawCrackEdgeWarning(ctx); drawPickupFeedback(ctx); (state.gatekeepers || []).forEach(g => g.render(ctx)); (state.prisms || []).forEach(p => p.render(ctx)); state.projectiles.forEach(p => p.render(ctx));
     state.cameras.forEach(c => c.render(ctx)); state.drones.forEach(d => { if (d.alive !== false) d.render(ctx); });
     drawTemporalHeadLegends(ctx);
+    if (state.gameState !== 'EDITOR') drawWorldLabels(ctx, worldLabelsFor(state, { shield: getUnlockedAbilities().includes('ghostShield') }), state.mapWidth || 800, state.mapHeight || 600);
     drawEchoHazardFlashes(ctx);
     drawScrubPreviewGhosts(ctx);
     if (state.failFx) drawBurst(ctx, state.failFx);
@@ -2104,6 +2186,7 @@ function draw() {
             ctx.fillStyle = '#fff'; ctx.font = 'bold 36px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText("LOOP FAILED", 400, 250);
             ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
             ctx.font = '16px "Space Grotesk"'; ctx.fillStyle = '#ffd0d0'; ctx.fillText('Rewinding — this run will NOT become an echo.', 400, 335);
+            ctx.fillText(`Failed loops this level: ${state.loopFails || 1}`, 400, 360);
             ctx.textAlign = 'left';
         }
     }

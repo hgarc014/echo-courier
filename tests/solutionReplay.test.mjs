@@ -9,6 +9,7 @@ import { runNaive as runNaiveW1 } from './harness/recordW1.mjs';
 import { LEVELS, getLevelSetup, serializeLevel } from '../src/data/levels.js';
 import { findEchoesEndingOnCracks } from '../src/validation/echoValidation.js';
 import { runNaive as runNaiveW4 } from './harness/recordW4.mjs';
+import { runNaive as runNaiveW5, dashRushL3, runQaPlan, QA_XR9_PLANS } from './harness/recordW5.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'solutions');
 const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort();
@@ -28,7 +29,7 @@ for (const f of files) {
         assert.ok(r.completed, `level not completed after ${r.ticks} ticks, ${r.loopsUsed} loops; fails: ${r.failMessages.join(' | ') || 'none'}`);
         if (r.par != null) assert.ok(r.loopsUsed <= r.par, `over par: ${r.loopsUsed} loops > par ${r.par}`);
         if (sol.completedLoops != null) assert.equal(r.loopsUsed, sol.completedLoops, 'loop count drifted from recording');
-        if (String(sol.levelName || '').startsWith('W2-') || String(sol.levelName || '').startsWith('W4-')) {
+        if (String(sol.levelName || '').startsWith('W2-') || String(sol.levelName || '').startsWith('W4-') || String(sol.levelName || '').startsWith('W5-')) {
             const ends = (state.pastRuns || []).map((run, id) => {
                 const step = run && run.length ? run[run.length - 1] : {};
                 return { id, x: step.x, y: step.y, w: 30, h: 30 };
@@ -64,6 +65,113 @@ for (const plan of ['l1-grab-first', 'l2-one-plate', 'l3-no-shield', 'l4-crack-p
         assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
     });
 }
+
+for (const f of ['w5-l1.json', 'w5-l2.json', 'w5-l3.json', 'w5-l4.json', 'w5-boss.json']) {
+    check(`truncated ${f} fails`, () => {
+        const sol = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+        const r = replaySolution({ ...sol, loops: sol.loops.slice(0, -1) }, { extraTicks: 90 });
+        assert.equal(r.completed, false, 'dropping the last loop still completed');
+    });
+}
+
+for (const plan of ['l1-plain-first', 'l1-one-echo', 'l2-blue-first', 'l3-direct', 'l3-park', 'l4-no-decoy', 'l4-sneak', 'l4-blue-middle', 'l4-decoy-first', 'l4-ignore-static', 'l4-miss-window', 'x9-frontal', 'x9-early-blue', 'x9-wrong-order', 'x9-camp', 'x9-triple', 'x9-qa-cheese', 'x9-qa-front-walk']) {
+    check(`naive W5 ${plan} fails`, () => {
+        const r = runNaiveW5(plan);
+        assert.equal(r.completed, false, `${plan} completed (${r.fail || 'no fail'})`);
+    });
+}
+
+// QA B r2 (N1): carrying the parcel into the L4 beam is a visible, counted loop fail.
+check('W5 N1: walking the parcel into the L4 beam fails the loop with a message', () => {
+    loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W5-L4')) });
+    const step = (k = []) => { for (const x of ['w', 'a', 's', 'd', 'space', 'r', 'shift']) keys[x] = false; for (const x of k) keys[x] = true; main.stepSimulation(); };
+    const pkg = state.packages[0];
+    for (let i = 0; i < 400 && (Math.abs(pkg.x - state.player.x) > 3 || Math.abs(pkg.y - state.player.y) > 3); i++) {
+        const dx = pkg.x - state.player.x, dy = pkg.y - state.player.y;
+        step([Math.abs(dy) > 3 ? (dy > 0 ? 's' : 'w') : (dx > 0 ? 'd' : 'a')]);
+    }
+    step(['space']); step();
+    assert.equal(pkg.carriedBy, 'player');
+    let msg = '';
+    for (let i = 0; i < 200 && !msg; i++) { step(['d']); msg = state.failMessage; }
+    assert.match(msg, /Laser|Package/, 'no fail message when the parcel hit the beam');
+    assert.equal(state.loopFails, 1, 'loop fail not counted');
+    const runs = state.pastRuns.length;
+    for (let i = 0; i < 200 && state.failTimer > 0; i++) step();
+    assert.equal(state.pastRuns.length, runs, 'the burned run must not become an echo');
+});
+
+// QA B r3 (B8): a dash's swept path must burn on a live beam, like walking in.
+function dashAcrossW4L1(beamOpen) {
+    loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W4-L1')) });
+    const L = state.lasers[0];
+    if (beamOpen) Object.defineProperty(L, 'isOpen', { get: () => true, set: () => {}, configurable: true });
+    state.player.x = L.x - 38; state.player.y = 460; state.player.dashCooldown = 0;
+    for (const k of Object.keys(keys)) keys[k] = false;
+    keys.d = true; keys.shift = true; main.stepSimulation(); keys.shift = false; keys.d = false; main.stepSimulation();
+    return { x: state.player.x, beamX: L.x + L.w, fail: state.failMessage };
+}
+check('W4-L1 B8: a dash across the thin live beam burns the courier', () => {
+    const r = dashAcrossW4L1(false);
+    assert.ok(r.x > r.beamX, `dash should land past the beam (x ${r.x})`);
+    assert.equal(r.fail, 'Burned by Laser Grid!');
+});
+check('W4-L1 B8: a dash across an open (inactive) beam is safe', () => {
+    const r = dashAcrossW4L1(true);
+    assert.ok(r.x > r.beamX); assert.ok(!r.fail, `unexpected fail ${r.fail}`);
+});
+
+check('Failed-loop counter survives R and resets on Q (full restart)', () => {
+    const r = dashAcrossW4L1(false);
+    assert.equal(r.fail, 'Burned by Laser Grid!');
+    assert.equal(state.loopFails, 1);
+    for (let i = 0; i < 200 && state.failTimer > 0; i++) main.stepSimulation();
+    keys.r = true; main.stepSimulation(); keys.r = false; main.stepSimulation();
+    assert.equal(state.loopFails, 1, 'R keeps the count');
+    main.restartLevel();
+    assert.equal(state.loopFails, 0, 'Q resets the count');
+});
+
+// QA B r2 (B6): a west dash at the closed back door used last tick's (south) facing.
+check('W5 B6: dashing west into XR-9\'s closed back door never jumps the courier south', () => {
+    loadLevel({ level: LEVELS.findIndex(l => l.name.startsWith('W5-BOSS')) });
+    let last = null; const jumps = [];
+    runQaPlan(QA_XR9_PLANS['k-d-east-door-dash'], () => {
+        const p = state.player;
+        if (last && state.currentTick > 0 && Math.abs(p.y - last.y) > 20) jumps.push([state.currentTick, Math.round(last.y), Math.round(p.y)]);
+        last = { x: p.x, y: p.y };
+    });
+    assert.deepEqual(jumps, [], `vertical jumps during a west dash: ${JSON.stringify(jumps)}`);
+});
+
+// QA B (B1): dash through XR-9's body into the back arc, then sit on the panel.
+check('W5 x9-qa-cheese: no dash-through, at most one panel hit per loop', () => {
+    const r = runNaiveW5('x9-qa-cheese');
+    assert.equal(r.completed, false);
+    assert.ok(r.hp >= 2, `QA cheese took XR-9 to hp ${r.hp} in 2 loops`);
+});
+check('W5 x9-triple: one panel hit per loop', () => {
+    const r = runNaiveW5('x9-triple');
+    assert.ok(r.hp >= 2, `triple route left hp ${r.hp}`);
+});
+
+check('W5 l4-ignore-static fails only because of static: the same inputs complete with the static removed', () => {
+    const r = runNaiveW5('l4-ignore-static', { noStatic: true });
+    assert.equal(r.completed, true, `no-static control failed (${r.fail || 'no fail'})`);
+});
+
+for (const plan of ['l2-control', 'l3-control', 'l4-control']) {
+    check(`W5 ${plan}: the naive haul completes when the echoes are right`, () => {
+        const r = runNaiveW5(plan);
+        assert.equal(r.completed, true, 'control haul failed, so the naive checks prove nothing');
+    });
+}
+
+check('W5-L3 gate is shut before even a dashing courier gets the parcel there', () => {
+    const r = dashRushL3();
+    assert.ok(r.dashes > 0, 'dash never fired');
+    assert.equal(r.gateOpen, false, `gate still open at tick ${r.tick}`);
+});
 
 check('truncated w2-l1 solution fails', () => {
     const sol = JSON.parse(readFileSync(join(dir, 'w2-l1.json'), 'utf8'));

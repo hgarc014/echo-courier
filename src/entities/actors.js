@@ -22,6 +22,21 @@ function drawGhostShield(ctx, actor) {
     ctx.stroke();
     ctx.fillStyle = 'rgba(255, 221, 0, 0.25)';
     ctx.fillRect(slab.x, slab.y, slab.w, slab.h);
+    // Facing cone: the shield only cuts a beam it faces along.
+    const ang = Math.atan2(f.y, f.x);
+    ctx.fillStyle = 'rgba(255, 221, 0, 0.22)';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, 46, ang - 0.45, ang + 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 221, 0, 0.95)';
+    ctx.beginPath();
+    ctx.moveTo(cx + f.x * 30, cy + f.y * 30);
+    ctx.lineTo(cx + f.x * 20 - f.y * 6, cy + f.y * 20 + f.x * 6);
+    ctx.lineTo(cx + f.x * 20 + f.y * 6, cy + f.y * 20 - f.x * 6);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
 }
 
@@ -126,6 +141,7 @@ export class Ghost extends Entity {
         this.dashCooldown = 0;
     }
     update(pkgs, staticZones, winds) {
+        if (this.vaporized) { this.isActive = false; this.moving = false; return; }
         this.isActive = true;
         if (this.spawnTtl > 0) this.spawnTtl--;
         this.intendedDx = 0;
