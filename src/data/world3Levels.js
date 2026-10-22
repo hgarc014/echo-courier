@@ -201,7 +201,7 @@ export const W3_LEVELS = [
     level(
         'W3-L4: Heavy Contraband',
         'Toss the decoy north of the crack so the guard crosses it. Step on the crack behind them, then haul the crate along the bottom while the camera looks north.',
-        'The heavy crate is too slow to pass the patrol. Loop 1: from the top of the gap, toss the decoy so it lands north of the crack. Next loop: once the guard has crossed, step on the crack so it breaks behind them. Then haul the crate along the bottom wall when the camera swings north, and take the clock door.',
+        'The heavy crate is too slow to pass the patrol. Loop 1: stand against the north wall above the gap and toss the decoy south so it lands north of the crack. Next loop: once the guard has crossed, step on the crack so it breaks behind them. Then haul the crate along the bottom wall when the camera swings north, and take the clock door.',
         3, 2, 35, W3_L4_LAYOUT,
         { ...TOSS, crackSpeed: 'fast' }
     ),
