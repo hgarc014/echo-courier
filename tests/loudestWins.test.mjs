@@ -175,20 +175,20 @@ function stampRun(lead, { courierOnPlate = true } = {}) {
     return { boss, k, log };
 }
 
-check('stamp window is exactly 0.5 s (30 ticks): a stamp 30 ticks out stuns, 31 ticks out is TOO EARLY', () => {
-    assert.equal(STAMP_WINDOW_TICKS, 30);
-    const ok = stampRun(30);
+check('stamp window is exactly 0.75 s (45 ticks): a stamp 45 ticks out stuns, 46 ticks out is TOO EARLY', () => {
+    assert.equal(STAMP_WINDOW_TICKS, 45);
+    const ok = stampRun(45);
     assert.equal(ok.boss.hp, 2, 'stamp inside the window stuns');
     assert.equal(ok.log.feedback, 'STAMP OK');
     const late = stampRun(1);
     assert.equal(late.boss.hp, 2, 'stamp on the strike tick stuns');
-    const early = stampRun(31);
+    const early = stampRun(46);
     assert.equal(early.boss.hp, 3, 'stamp outside the window does not stun');
     assert.equal(early.log.feedback, 'TOO EARLY');
 });
 
 check('an early stamp keeps the locked crack intact until the strike (no crumble, no early fire)', () => {
-    const early = stampRun(55);
+    const early = stampRun(58);
     assert.deepEqual(early.log.crackBeforeStrike, { collapsing: false, broken: false });
     assert.equal(early.k.collapsing || early.k.broken, true, 'the strike itself collapses it');
     assert.equal(early.boss.hp, 3);
@@ -249,6 +249,82 @@ check('loop 1 shows the REC stamp cue on each core plate; later loops do not', (
     state.pastRuns = [[]];
     assert.equal(draw(), 0);
     state.pastRuns = [];
+});
+
+function recCtx() {
+    const calls = [];
+    const ctx = new Proxy({}, { get: (_, k) => (k === 'measureText' ? () => ({ width: 10 }) : (k === 'fillText' ? (t) => calls.push(t) : () => {})), set: () => true });
+    return { ctx, calls };
+}
+
+check('no trap after a missed stun: each core ring leaves plain floor, and walking off after the ring breaks survives', () => {
+    for (const id of ['c1', 'c2', 'c3']) {
+        start();
+        const plate = state.plates.find(p => p.id === id);
+        const sides = [[plate.x - 40, plate.y], [plate.x + 40, plate.y], [plate.x, plate.y - 40], [plate.x, plate.y + 40]];
+        const open = sides.filter(([x, y]) => !state.cracks.some(c => c.x === x && c.y === y));
+        assert.ok(open.length >= 1, `${id} ring has no gap`);
+    }
+    // Courier on c3, every ring crack broken (as after a missed stun): walk east and live.
+    start();
+    const c3 = state.plates.find(p => p.id === 'c3');
+    for (const c of state.cracks) if (Math.abs(c.x - c3.x) + Math.abs(c.y - c3.y) === 40) { c.broken = true; c.stage = 4; }
+    state.player.x = c3.x + 5; state.player.y = c3.y + 5;
+    let fail = '';
+    for (let i = 0; i < 40; i++) { clear(); keys.d = true; main.stepSimulation(); fail = fail || state.failMessage; }
+    for (let i = 0; i < 20; i++) { clear(); keys.s = true; main.stepSimulation(); fail = fail || state.failMessage; }
+    clear();
+    assert.equal(fail, '', 'walked off the plate through the gap');
+    assert.ok(state.player.x > c3.x + 40, 'left the plate eastward');
+});
+
+check('the strike countdown is the last thing drawn (never under the boss or the !)', () => {
+    start();
+    main.stepSimulation();
+    const b = state.burrowers[0];
+    const { ctx, calls } = recCtx();
+    b.render(ctx);
+    assert.match(calls[calls.length - 1], /^\d+\.\ds$/, `last text drawn: ${calls[calls.length - 1]}`);
+    const iBang = calls.lastIndexOf('!');
+    assert.ok(iBang >= 0 && iBang < calls.length - 1, "'!' is drawn before the countdown");
+});
+
+check("STAMP NOW pulses in the last 0.75 s of a strike on the live courier, and not earlier", () => {
+    start();
+    const b = state.burrowers[0];
+    let sawEarly = false;
+    let sawCue = false;
+    // Pace so the courier survives; watch the first strike.
+    for (let i = 0; i < 245 && !state.failMessage; i++) {
+        clear(); keys.d = (i % 80) < 40; keys.a = !keys.d; main.stepSimulation();
+        const { ctx, calls } = recCtx();
+        b.drawStampCue(ctx);
+        const cue = calls.includes('STAMP NOW');
+        const left = b.ticksToStrike();
+        if (cue) { sawCue = true; assert.ok(left < STAMP_WINDOW_TICKS, `cue with ${left} ticks left`); }
+        if (!cue && b.phase === 'telegraph' && left != null && left < STAMP_WINDOW_TICKS && b.playerMode) sawEarly = true;
+    }
+    assert.equal(sawCue, true, 'cue appeared');
+    assert.equal(sawEarly, false, 'cue on for the whole window');
+});
+
+check('during replay a ghost marker shows when the echo will stamp, and that it is in the window', () => {
+    // Recorded route: loop 1 is the stamper; loop 2's lock is on ECHO 1.
+    const loop1 = sol.loops[0];
+    replaySolution({ ...sol, loops: [loop1] }, { extraTicks: 0 });
+    clear();
+    assert.equal(state.activeGhosts.length, 1, 'loop 1 became echo 1');
+    let pred = null;
+    for (let i = 0; i < 470 && !pred && !state.failMessage; i++) {
+        clear(); keys.d = (i % 80) < 40; keys.a = !keys.d; main.stepSimulation();
+        const b = state.burrowers[0];
+        if (b.lockedTile && !b.playerMode) pred = b.predictedStamp();
+    }
+    assert.ok(pred, 'prediction while locked on the echo');
+    assert.equal(pred.inWindow, true);
+    const { ctx, calls } = recCtx();
+    state.burrowers[0].drawStampCue(ctx);
+    assert.ok(calls.some(t => /^ECHO 1 stamps .*✓$/.test(t)), calls.join(' | '));
 });
 
 if (failures) { console.log(`${failures} failed`); process.exit(1); }

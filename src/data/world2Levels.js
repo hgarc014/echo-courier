@@ -155,11 +155,11 @@ const W2_MB_LAYOUT = base({
     ],
     packages: [{ x: 340, y: 470, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
     cracks: [
-        ...ring(80, 80, ['l', 'r', 'u', 'd']),
-        ...ring(480, 60, ['l', 'r', 'u', 'd']),
-        // Every core plate sits in a full crack ring: a body reaches a plate only by
-        // stepping on a crack, which is noise ('Loudest wins').
-        ...ring(480, 280, ['l', 'r', 'u', 'd'])
+        // Each core plate's ring leaves its east side as plain floor: a guaranteed
+        // way off the plate after a missed stun breaks the other three cracks.
+        ...ring(80, 80, ['l', 'u', 'd']),
+        ...ring(480, 60, ['l', 'u', 'd']),
+        ...ring(480, 280, ['l', 'u', 'd'])
     ],
     burrowers: [{
         x: 470, y: 200, w: 36, h: 36, id: 'burrower',
@@ -221,14 +221,14 @@ export const W2_LEVELS = [
     ),
     level(
         'W2-MB: Sinkhole',
-        'Loudest wins: it strikes whoever last stepped on a crack or plate, or YOUR tile. Stun it 3 times: you on the CORE plate, an echo stamping the marked crack in the last 0.5 s. Then deliver.',
+        'Loudest wins: it strikes whoever last stepped on a crack or plate, or YOUR tile. Stun it 3 times: you on the CORE plate, an echo stamping the marked crack in the last 0.75 s. Then deliver.',
         'Something under the subfloor hunts by sound. Whoever last stepped onto a crack or a plate is the one it hunts and it surfaces on a crack by them. With no noise it comes up under YOU, on any floor, so keep moving. Hold the gold core plate beside that crack while an echo stamps the crack right as it surfaces, and it is stunned. One stun per loop, then it sleeps until the loop clock rewinds. Three stuns open the door.',
         4, 3, 30, W2_MB_LAYOUT,
         {
             unlocks: ['dash'],
             flags: {
                 isBoss: true,
-                hintLine: 'It hunts the last step on a crack or plate, else YOU: keep moving. Stun: you on the CORE plate + an echo stepping onto the marked crack in its last 0.5 s and staying ON it. 1 stun per loop.',
+                hintLine: 'It hunts the last step on a crack or plate, else YOU: keep moving. Stun: you on the CORE plate + an echo stepping onto the marked crack in its last 0.75 s and staying ON it. 1 stun per loop.',
                 bossIntro: {
                     speaker: 'BURROWER',
                     text: 'I hear every step on cracks and plates, and I hunt the loudest. Stand still and I rise under you. Hold the plate beside my crack and have your echo stamp it as I rise. One stun, then I sleep until your loop clock rewinds.'
