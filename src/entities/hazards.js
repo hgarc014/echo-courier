@@ -494,6 +494,12 @@ export class ShooterRobot extends Entity {
         if (t >= period - tele) return { phase: 'warn', charge: (t - (period - tele)) / tele };
         return { phase: 'idle', charge: 0 };
     }
+    /** Warn fill alpha: a bright onset for the first 0.3s so the sweep start is not missed. */
+    sweepWarnAlpha(charge) {
+        const elapsed = charge * this.sweepTelegraphTicks();
+        if (elapsed < 18) return 0.5 - 0.15 * (elapsed / 18);
+        return 0.08 + 0.22 * charge;
+    }
     /**
      * Perimeter sweep lanes: two along each border, each starting in a corner and
      * stopping at the first wall or closed door on its centre line. Together they
@@ -695,7 +701,7 @@ export class ShooterRobot extends Entity {
             for (const l of this.sweepLanes()) {
                 if (sw.phase === 'fire') { ctx.fillStyle = 'rgba(255,0,68,0.55)'; ctx.fillRect(l.x, l.y, l.w, l.h); }
                 else {
-                    ctx.fillStyle = `rgba(255,0,68,${0.08 + 0.22 * sw.charge})`;
+                    ctx.fillStyle = `rgba(255,0,68,${this.sweepWarnAlpha(sw.charge)})`;
                     ctx.fillRect(l.x, l.y, l.w, l.h);
                     ctx.strokeStyle = 'rgba(255,80,120,0.9)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
                     ctx.strokeRect(l.x, l.y, l.w, l.h);
