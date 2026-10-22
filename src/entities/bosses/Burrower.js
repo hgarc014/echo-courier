@@ -1176,12 +1176,30 @@ export class Burrower extends Entity {
         }
     }
 
+    // Core plates already spent on a stun: greyed out with a USED tag so they never
+    // read as live. Rendering only; the plate itself still presses as before.
+    drawRetiredPlates(ctx) {
+        const live = this.liveCoreIds();
+        for (const p of state.plates || []) {
+            if (!p || !this.spentPlateIds.includes(p.id) || live.includes(p.id)) continue;
+            ctx.save();
+            ctx.fillStyle = 'rgba(40, 44, 50, 0.72)';
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.strokeStyle = 'rgba(150, 156, 164, 0.9)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2);
+            ctx.restore();
+            paintLabel(ctx, 'USED', p.x + p.w / 2, p.y - 6, { color: '#9aa1a9', h: 13, font: 'bold 10px "Space Grotesk", sans-serif' });
+        }
+    }
+
     render(ctx) {
         const cx = this.x + this.w / 2;
         const cy = this.y + this.h / 2;
         const tick = state.currentTick || 0;
         const dormant = this.phase === 'dormant';
         ctx.save();
+        this.drawRetiredPlates(ctx);
         this.drawSurfaceMark(ctx);
 
         if (this.phase === 'stun' || this.stunFlash > 0) {

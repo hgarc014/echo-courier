@@ -492,5 +492,25 @@ check('the recorded route stuns from a different core plate each loop', () => {
     assert.deepEqual([...(b.spentPlateIds || [])].sort(), ['c1', 'c2', 'c3']);
 });
 
+
+check('retired core plates are drawn greyed with a USED tag; the lit plate is not', () => {
+    resetWorld();
+    state.plates = [new PressurePlate('c1', 80, 80, []), new PressurePlate('c2', 400, 80, [])];
+    const boss = new Burrower(300, 300, { corePlateIds: ['c1', 'c2'] });
+    const draw = () => {
+        const fills = []; const texts = [];
+        const ctx = new Proxy({}, { get: (_, key) => (key === 'measureText' ? () => ({ width: 10 }) : key === 'fillRect' ? (x, y) => fills.push([x, y]) : key === 'fillText' ? (tx) => texts.push(tx) : () => {}), set: () => true });
+        boss.drawRetiredPlates(ctx);
+        return { fills, texts };
+    };
+    assert.deepEqual(draw().texts, []);
+    boss.stunPlateId = 'c1'; boss.applyStun();
+    const d = draw();
+    assert.ok(d.fills.some(([x, y]) => x === 80 && y === 80), 'c1 dimmed');
+    assert.ok(!d.fills.some(([x]) => x === 400), 'lit c2 not dimmed');
+    assert.ok(d.texts.includes('USED'));
+    state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
 if (failures) { console.log(`${failures} failed`); process.exit(1); }
 console.log('loudest wins checks passed');
