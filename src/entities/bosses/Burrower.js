@@ -26,13 +26,13 @@ export const NOISE_TTL_TICKS = 90;      // 1.5 s: older noise no longer counts
 // (exactly 0.75 s, the window the hint and the STAMP NOW cue advertise) and it is
 // still on it at the strike, while the live courier holds that plate. No hidden
 // grace: the accepted window and the advertised one are the same number.
-export const STAMP_WINDOW_TICKS = 45;
+export const STAMP_WINDOW_TICKS = 90;   // 1.5 s: the STAMP NOW cue lead and the accept window
 export const STAMP_GRACE_TICKS = 0;
 export const STAMP_ACCEPT_TICKS = STAMP_WINDOW_TICKS + STAMP_GRACE_TICKS;
 export const STAMP_WINDOW_SECONDS = STAMP_WINDOW_TICKS / TICKS_PER_SECOND;
 export const FEEDBACK_TICKS = 75;      // >= 1 s on screen
-// A stamp up to 1.5 s before the strike (but before the window) reads TOO EARLY.
-export const EARLY_TICKS = 90;
+// A stamp in the 1.5 s before the window opens (before STAMP NOW shows) reads TOO EARLY.
+export const EARLY_TICKS = STAMP_WINDOW_TICKS * 2;
 export const STRIKE_FAIL = 'Struck by the Burrower!';
 const GRID = 40;
 export const RIPPLE_TICKS = 36;
@@ -415,7 +415,8 @@ export class Burrower extends Entity {
             seen.add(key);
             const surf = this.surfaceUnder(actor);
             const prev = this.footing.get(key) || null;
-            if (surf && surf.key !== prev) {
+            // A spent echo is silent: it can never be hunted or stamp again.
+            if (surf && surf.key !== prev && !(actorTargetInfo(actor).kind === 'echo' && this.echoSpent(actor))) {
                 const info = actorTargetInfo(actor);
                 this.noise.set(key, { tick: this.clock, centerTick: null, surface: surf.key, surfaceKind: surf.kind, kind: info.kind, id: info.id });
                 const c = center(actor);
@@ -800,6 +801,7 @@ export class Burrower extends Entity {
             this.stunEchoId = null;
             // Fresh start after a stun: the stun stamp's noise must not steer the next lock.
             this.noise.clear();
+            this.echoLeft = false; this.stampSeen = false;
             this.hunt = null;
             this.rememberCheckpoint();
             this.stunFlash = 20;
@@ -820,6 +822,7 @@ export class Burrower extends Entity {
     }
 
     endCycle() {
+        this.echoLeft = false; this.stampSeen = false;
         this.phase = 'burrow';
         this.phaseTicks = 0;
         this.cycleTicks = 0;
@@ -886,6 +889,7 @@ export class Burrower extends Entity {
             this.refreshAimPosition(actors);
             if (!this.validateLock()) return;
             if (!this.homeFallback) this.markLockedWarning();
+            this.trackEchoLeft(actors);
             this.slideToTile();
             if (this.phaseTicks >= this.telegraphTicks()) this.strike(actors);
             return;
@@ -972,7 +976,10 @@ export class Burrower extends Entity {
             const above = ptr.targetTile.y - 10;
             const below = ptr.targetTile.y + ptr.targetTile.h + 10;
             // Player mode: above the courier and the '!' (the sprite covers the tile).
-            const y = this.playerMode ? Math.max(12, ptr.targetTile.y - 58) : (above < 24 ? below : above);
+            // The ECHO n marker label sits above the same tile: go below so they never overlap.
+            const pt = (this._lastPrediction || {}).tile;
+            const markerHere = pt && Math.abs(pt.x - ptr.targetTile.x) < GRID * 2 && Math.abs(pt.y - ptr.targetTile.y) < GRID * 2;
+            const y = this.playerMode ? Math.max(12, ptr.targetTile.y - 58) : (above < 24 || markerHere ? below : above);
             paintLabel(ctx, text, ptr.arrowTo.x, y, { color, h: 15 });
         }
     }
@@ -986,9 +993,19 @@ export class Burrower extends Entity {
 
     // The locked strike tile, and whose noise it was locked on. The live hunt (who
     // the next lock goes to) is drawn separately by drawHunt.
+    // During the cue: an echo that stamped the lit ring and then stepped off means the
+    // stun is lost. Drop HOLD/STAMP NOW at once so the courier gets off the plate.
+    trackEchoLeft(actors) {
+        if (this.echoLeft) return;
+        const on = this.liveRingCracks().some(c => this.echoStamped(c, actors));
+        if (on) this.stampSeen = true;
+        else if (this.stampSeen) this.echoLeft = true;
+    }
+
     targetLabel() {
         const ptr = this.targetPointers();
         if (!ptr.targetTile) return null;
+        if (this.echoLeft && this.phase === 'telegraph') return 'ECHO LEFT — step off!';
         if (this.playerMode) {
             if (this.playerHoldsLivePlate()) return this.phase === 'telegraph' ? 'HOLD — echo stamps now' : 'HOLD the lit plate';
             return this.phase === 'telegraph' ? 'STRIKES HERE · MOVE!' : 'STRIKES YOUR TILE';
@@ -1181,7 +1198,11 @@ export class Burrower extends Entity {
     // and replays inside the window of the same strike next loop (cycles are fixed).
     stampNowActive() {
         const left = this.ticksToStrike();
-        return this.playerMode && this.phase === 'telegraph' && left != null && left >= 1 && left <= STAMP_WINDOW_TICKS;
+        if (this.phase !== 'telegraph' || this.echoLeft || left == null || left < 1 || left > STAMP_WINDOW_TICKS) return false;
+        // Any strike on or beside the lit plate cues the stamp, not only player-mode.
+        if (this.playerMode) return true;
+        const t = this.lockedTile;
+        return !!t && this.liveRingCracks().some(c => c.x === t.x && c.y === t.y);
     }
 
     drawStampCue(ctx) {

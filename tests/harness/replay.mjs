@@ -50,7 +50,7 @@ export function loadLevel(solution) {
  * Replay a solution. Returns { completed, loopsUsed, ticks, failMessages, par }.
  * loopsUsed is the 1-based live loop (Nth loop is N), same number the HUD shows.
  */
-export function replaySolution(solution, { extraTicks = 600 } = {}) {
+export function replaySolution(solution, { extraTicks = 600, onTick = null } = {}) {
     loadLevel(solution);
     const failMessages = [];
     let ticks = 0;
@@ -62,7 +62,7 @@ export function replaySolution(solution, { extraTicks = 600 } = {}) {
             for (let i = 0; i < count; i++) {
                 if (state.gameState === 'LEVEL_COMPLETE') break outer;
                 setKeys(frameKey);
-                main.stepSimulation(); ticks++; observe();
+                main.stepSimulation(); ticks++; observe(); if (onTick) onTick();
             }
         }
     }

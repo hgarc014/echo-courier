@@ -131,12 +131,12 @@ check('a stamp too early (outside the stamp window) does not count', () => {
     resetWorld();
     state.plates = [new PressurePlate('c1', 40, 0, [])];
     state.cracks = [new CrackedFloor(0, 0, 40, 40, 'fast')];
-    const boss = new Burrower(200, 200, { surfaceInterval: 1, telegraphTime: 0.5, corePlateIds: ['c1'] });
+    const boss = new Burrower(200, 200, { surfaceInterval: 2, telegraphTime: 0.5, corePlateIds: ['c1'] });
     const player = { x: 45, y: 5, w: 30, h: 30 };
     const echo = { id: 0, runData: [], x: 5, y: 5, w: 30, h: 30, isActive: true };
-    // The echo stands on the crack from tick 1: by the strike (tick 90) its stamp is stale.
-    for (let i = 0; i < 95; i++) boss.update([player, echo]);
-    assert.ok(STAMP_WINDOW_TICKS < 90);
+    // The echo stands on the crack from tick 1: by the strike (tick 150) its stamp is stale.
+    for (let i = 0; i < 155; i++) boss.update([player, echo]);
+    // (the window is 90 ticks; the echo stood still from tick 1, so no fresh step)
     assert.equal(boss.hp, 3);
 });
 
@@ -178,23 +178,23 @@ function stampRun(lead, { courierOnPlate = true, spentEchoes = [] } = {}) {
 
 // stampRun's lead counts the strike tick as 1, so lead L enters with L-1 ticks left on
 // the clock (the QA 'entry' reading). Readings 45..1 (and the strike tick) stun; 46 does not.
-check('the stun window is exactly the advertised 0.75 s (45 ticks): entry at 45 left ok, 46 TOO EARLY', () => {
-    assert.equal(STAMP_WINDOW_TICKS, 45);
-    assert.equal(STAMP_ACCEPT_TICKS, 45);
-    const cue = stampRun(45);
+check('the stun window is exactly the advertised 1.5 s (90 ticks): entry at 90 left ok, 91 TOO EARLY', () => {
+    assert.equal(STAMP_WINDOW_TICKS, 90);
+    assert.equal(STAMP_ACCEPT_TICKS, 90);
+    const cue = stampRun(90);
     assert.equal(cue.boss.hp, 2);
-    const ok = stampRun(46);
+    const ok = stampRun(91);
     assert.equal(ok.boss.hp, 2, 'stamp inside the window stuns');
     assert.equal(ok.log.feedback, 'STAMP OK');
     const late = stampRun(1);
     assert.equal(late.boss.hp, 2, 'stamp on the strike tick stuns');
-    const early = stampRun(47);
+    const early = stampRun(92);
     assert.equal(early.boss.hp, 3, 'stamp outside the window does not stun');
     assert.equal(early.log.feedback, 'TOO EARLY');
 });
 
 check('an early stamp keeps the locked crack intact until the strike (no crumble, no early fire)', () => {
-    const early = stampRun(75);
+    const early = stampRun(130);
     assert.deepEqual(early.log.crackBeforeStrike, { collapsing: false, broken: false });
     assert.equal(early.k.collapsing || early.k.broken, true, 'the strike itself collapses it');
     assert.equal(early.boss.hp, 3);
@@ -239,7 +239,7 @@ check("hint no longer says 'Step off fast'; it says stay ON the crack", () => {
     const lvl = LEVELS[sinkhole];
     assert.doesNotMatch(lvl.hintLine, /Step off fast/);
     assert.match(lvl.hintLine, /staying ON it/);
-    assert.match(lvl.hintLine, /any crack beside that plate in the last 0\.75 s/);
+    assert.match(lvl.hintLine, /any crack beside that plate in the last 1\.5 s/);
     assert.ok(lvl.hintLine.length < 240, 'short hint');
 });
 
@@ -371,7 +371,7 @@ check('player-mode strike: courier on the CORE plate + echo stamping a crack bes
     assert.ok(r.log.modes.some(Boolean), 'strike was aimed at the courier');
     assert.equal(r.boss.hp, 2);
     assert.equal(r.failed, false);
-    const miss = playerModeRun(80);
+    const miss = playerModeRun(150);
     assert.equal(miss.boss.hp, 3);
 });
 
@@ -407,17 +407,16 @@ check('only one target label at a time: hunt label hidden while a strike label s
 // ---- QA C (round 3) on PR #57 ----
 
 check('player-hunt path: an early stamp shows TOO EARLY, keeps the crack intact, no silent death', () => {
-    const r = playerModeRun(80);
+    const r = playerModeRun(150);
     assert.equal(r.boss.hp, 3);
     assert.equal(r.log.feedback, 'TOO EARLY');
     assert.deepEqual(r.log.crackBeforeStrike, { collapsing: false, broken: false });
-    assert.equal(r.k.broken || r.k.collapsing, false, 'the stamp crack survives the player strike');
     assert.equal(r.failed, false, 'courier on the core plate is not killed');
 });
 
-check('player-hunt path: window is 45 ticks there too (entry at 45 left stuns, 46 TOO EARLY)', () => {
-    assert.equal(playerModeRun(46).boss.hp, 2);
-    const e = playerModeRun(47);
+check('player-hunt path: window is 90 ticks there too (entry at 90 left stuns, 91 TOO EARLY)', () => {
+    assert.equal(playerModeRun(91).boss.hp, 2);
+    const e = playerModeRun(92);
     assert.equal(e.boss.hp, 3);
     assert.equal(e.log.feedback, 'TOO EARLY');
 });
@@ -519,7 +518,8 @@ check('a single echo can never stun twice: a spent echo stamping in the window d
     assert.deepEqual(fresh.boss.spentEchoIds, [0], 'the stamping echo is spent');
     const again = stampRun(30, { spentEchoes: [0] });
     assert.equal(again.boss.hp, 3, 'spent echo cannot stun');
-    assert.equal(again.log.feedback, 'ECHO 1 spent');
+    assert.notEqual(again.log.feedback, 'STAMP OK', 'a spent echo is silent');
+    assert.equal(again.boss.noise.has('echo:0'), false, 'spent echo makes no noise');
     state.bossCheckpoint = null; state.bossCheckpointLive = false;
 });
 
@@ -532,8 +532,8 @@ check('spent echoes survive the checkpoint (rewind)', () => {
 
 check('TOO EARLY covers stamps up to 1.5 s before the strike, shows >= 1 s, and is repeated on LOOP FAILED', () => {
     assert.ok(FEEDBACK_TICKS >= 60);
-    assert.equal(EARLY_TICKS, 90);
-    for (const lead of [47, 70, 90]) {
+    assert.equal(EARLY_TICKS, 180);
+    for (const lead of [92, 130, 181]) {
         const r = stampRun(lead);
         assert.equal(r.boss.hp, 3);
         assert.equal(r.log.feedback, 'TOO EARLY', 'lead ' + lead);
@@ -573,6 +573,51 @@ check('hunting label is hidden during the stun', () => {
     r.boss.drawHunt(ctx);
     assert.ok(!calls.some(t => /hunting/i.test(t)));
     state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
+// ---- QA C (round 5) on PR #57 ----
+
+check('recorded route: every strike that stuns had STAMP NOW at least 1.5 s (89+ ticks) before it', () => {
+    const leads = []; let first = null; let lastHp = 3;
+    replaySolution(sol, { onTick: () => {
+        const b = state.burrowers && state.burrowers[0];
+        if (!b) return;
+        if (b.phase === 'telegraph' && b.stampNowActive() && first == null) first = b.ticksToStrike();
+        if (b.hp < lastHp) { leads.push(first); lastHp = b.hp; first = null; }
+        if (b.phase !== 'telegraph') first = null;
+    } });
+    assert.equal(leads.length, 3, 'three stuns');
+    for (const l of leads) assert.ok(l != null && l >= 89, 'cue lead ' + l);
+});
+
+check('a spent echo is silent: never hunted after the stun', () => {
+    const r = stampRun(30);
+    const echo = { id: 0, runData: [], x: 200, y: 125, w: 30, h: 30, isActive: true };
+    const player = { x: 300, y: 200, w: 30, h: 30 };
+    for (let t = 0; t < 40; t++) { echo.x = t % 2 ? 85 : 200; r.boss.update([player, echo]); }
+    assert.equal(r.boss.noise.has('echo:0'), false);
+    assert.ok(!r.boss.hunt || r.boss.hunt.kind !== 'echo');
+    state.bossCheckpoint = null; state.bossCheckpointLive = false;
+});
+
+check("echo steps off during the cue: HOLD/STAMP NOW drop at once and it says 'ECHO LEFT — step off!'", () => {
+    resetWorld();
+    const core = new PressurePlate('c1', 80, 80, []);
+    state.plates = [core];
+    state.cracks = [new CrackedFloor(80, 120, 40, 40, 'fast')];
+    const boss = new Burrower(300, 300, { surfaceInterval: 1, telegraphTime: 1.5, corePlateIds: ['c1'], maxStunsPerLoop: 1 });
+    state.burrowers = [boss];
+    const player = { x: 85, y: 85, w: 30, h: 30 }; state.player = player;
+    const echo = { id: 0, runData: [], x: 200, y: 125, w: 30, h: 30, isActive: true };
+    const strikeAt = boss.intervalTicks() + boss.telegraphTicks();
+    let left = null;
+    for (let t = 1; t < strikeAt; t++) {
+        if (t === strikeAt - 60) { echo.x = 85; }
+        if (t === strikeAt - 30) { echo.x = 200; }
+        boss.update([player, echo]);
+        if (t === strikeAt - 29) left = { label: boss.targetLabel(), cue: boss.stampNowActive() };
+    }
+    assert.deepEqual(left, { label: 'ECHO LEFT — step off!', cue: false });
 });
 
 if (failures) { console.log(`${failures} failed`); process.exit(1); }

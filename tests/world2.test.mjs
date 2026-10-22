@@ -72,8 +72,8 @@ for (const { level, index } of w2) {
             assert.equal(json.burrowers.length, 1);
             const boss = json.burrowers[0];
             assert.equal(boss.hp, 3);
-            assert.equal(boss.surfaceInterval, 3);
-            assert.equal(boss.telegraphTime, 1);
+            assert.equal(boss.surfaceInterval, 2.5);
+            assert.equal(boss.telegraphTime, 1.5);
             assert.equal(boss.stunTime, 2);
             assert.deepStrictEqual(boss.corePlateIds, ['c3', 'c2', 'c1']);
             assert.equal(boss.defeatDoorId, 'boss_door');
