@@ -1196,7 +1196,19 @@ export class Burrower extends Entity {
     // STAMP NOW: in the last STAMP_WINDOW_TICKS before a strike aimed at the live
     // courier, pulse every crack beside a core plate. A step there now is recorded,
     // and replays inside the window of the same strike next loop (cycles are fixed).
+    // Dormant after this loop's stun: next loop the boss strikes on the base schedule
+    // (every surface+telegraph period from loop start) until its own stun, so a stamp
+    // here in the 1.5 s before each of those strikes replays inside next loop's window.
+    nextLoopCueLeft() {
+        if (this.phase !== 'dormant' || this.defeated) return null;
+        const P = this.intervalTicks() + this.telegraphTicks();
+        const t = Number(state.currentTick) || 0;
+        return P - (t % P);
+    }
+
     stampNowActive() {
+        const nl = this.nextLoopCueLeft();
+        if (nl != null) return nl >= 1 && nl <= STAMP_WINDOW_TICKS;
         const left = this.ticksToStrike();
         if (this.phase !== 'telegraph' || this.echoLeft || left == null || left < 1 || left > STAMP_WINDOW_TICKS) return false;
         // Any strike on or beside the lit plate cues the stamp, not only player-mode.
@@ -1221,7 +1233,7 @@ export class Burrower extends Entity {
             }
             const core = plates[0];
             if (core || plates.length) {
-                for (const p of plates) paintLabel(ctx, 'STAMP NOW', p.x + p.w / 2, p.y + p.h + 52, { color: '#9dffb0', h: 16, font: 'bold 12px "Space Grotesk", sans-serif' });
+                for (const p of plates) paintLabel(ctx, this.phase === 'dormant' ? 'STAMP NOW · for next loop' : 'STAMP NOW', p.x + p.w / 2, p.y + p.h + 52, { color: '#9dffb0', h: 16, font: 'bold 12px "Space Grotesk", sans-serif' });
             }
         }
         const pred = this.predictedStamp();
