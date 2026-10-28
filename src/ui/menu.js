@@ -1,3 +1,4 @@
+import { version, gitSha, builtAt } from '../buildInfo.js';
 import { state, getCredits, getPlayerRank, saveState, getUnlockedAbilities, isDevMode, applyDevModeUi, isUnlockAll, isLevelUnlocked, purchaseAbility } from '../core/state.js';
 import { LEVELS, WORLDS, getShopUnlockedAbilities, formatParTooltip, levelSelectEntries } from '../data/levels.js';
 import { DEV_PROGRESS_NOTE } from '../core/loopDisplay.js';
@@ -88,8 +89,35 @@ export function refreshLevelSelectGrid() {
     }
 }
 
+function formatBuiltAt(iso) {
+    try {
+        const date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return String(iso || '');
+        return new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Los_Angeles',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZoneName: 'short',
+        }).format(date);
+    } catch {
+        return String(iso || '');
+    }
+}
+
+/** Home-screen line so a playtester can see which build they have. */
+export function applyBuildFooter() {
+    const el = document.getElementById('build-footer');
+    if (!el) return;
+    el.textContent = `v${version} · ${gitSha} · ${formatBuiltAt(builtAt)}`;
+    el.title = `Echo Courier ${version} (${gitSha}), built ${builtAt}`;
+}
+
 export function initMenu() {
     applyDevModeUi();
+    applyBuildFooter();
     document.getElementById('title-screen').classList.remove('hidden');
     document.getElementById('app-layout').classList.add('hidden');
     document.getElementById('level-complete').classList.add('hidden');
@@ -268,3 +296,5 @@ function levelSelectIconHtml(unlocked, hasGold) {
     if (hasGold) return '<span class="level-star" aria-hidden="true">⭐</span>';
     return '<span class="level-star-slot" aria-hidden="true"></span>';
 }
+
+applyBuildFooter();

@@ -336,6 +336,30 @@ kbd {
     margin-bottom: clamp(12px, 6vh, 60px); text-transform: uppercase;
 }
 
+/* Version + build time. Sits in the bottom padding band so it does not cover menu buttons. */
+#title-screen {
+    padding-bottom: max(28px, calc(env(safe-area-inset-bottom) + 18px));
+}
+.build-footer {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: max(6px, env(safe-area-inset-bottom));
+    margin: 0;
+    pointer-events: none;
+    user-select: none;
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+    color: rgba(125, 133, 144, 0.92);
+    text-transform: none;
+}
+#title-screen.submenu-open .build-footer {
+    visibility: hidden;
+}
+
 h2 { color: var(--accent-safe); font-size: 2.5rem; margin-bottom: 16px; letter-spacing: 4px; }
 .victory-text { color: var(--accent-interact); }
 
