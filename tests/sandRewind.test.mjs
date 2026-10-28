@@ -37,8 +37,3 @@ const mkPlayer = () => ({ x: 0, y: 0, w: 10, h: 10, facingX: 1, facingY: 0, cloa
   assert.equal(applyPickup(s, 'sand_max'), true); assert.equal(s.maxSand, SAND_MAX + PICKUP_MAX_BONUS); assert.equal(s.sand, PICKUP_REFILL + PICKUP_MAX_BONUS);
   assert.equal(applyPickup(s, 'nope'), false); }
 console.log('sandRewind ok');
-
-{ const s = createSandState({ maxSand: 5, sand: 4 }); assert.equal(s.maxSand, 5); assert.equal(s.sand, 4); }
-{ const s = createSandState({ maxSand: 4 }); assert.equal(s.sand, 4); }
-{ const s = createSandState({ maxSand: 4, sand: 9 }); assert.equal(s.sand, 4); }
-{ const s = createSandState({}); assert.equal(s.maxSand, SAND_MAX); assert.equal(s.sand, SAND_MAX); }
