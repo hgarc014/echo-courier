@@ -79,7 +79,7 @@ export function generateFloor(seed, roomCount) {
         walls, doors, plates,
         packages: [],
         pickups: placePickups(seed, n),
-        lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], hints: []
+        lasers: [], guards: placeGuards(seed, n), cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], hints: []
     };
     const meta = floorMeta(seed, n);
     return { layout, meta, info: { seed, roomCount: n, echoRoom, airlock } };
@@ -100,6 +100,26 @@ export function placePickups(seed, n) {
         const y = rng() < 0.5 ? pick(rng, 6, 10) * 20 : pick(rng, 19, 22) * 20;
         const type = rng() < 0.7 ? 'sand_refill' : 'sand_max';
         out.push({ id: `pickup${k}`, x, y, w: PICKUP_SIZE, h: PICKUP_SIZE, type });
+    }
+    return out;
+}
+
+// 1-2 guards, each a short patrol ({ points }) inside one room. Separate RNG stream so walls/doors/plates/pickups stay stable.
+// Never the exit room. Bottom-right band (x=400..540, y=520|540) stays off walls, the doorway lane (y=240..360),
+// left-side plates, lane plates (y=280), and the delivery zone. Two guards use different rooms.
+export function placeGuards(seed, n) {
+    const rng = makeRng(((Number(seed) >>> 0) ^ 0x6A21) || 7);
+    const count = pick(rng, 1, 2);
+    const rooms = [];
+    for (let i = 0; i < n - 1; i++) rooms.push(i);
+    const out = [];
+    for (let k = 0; k < count; k++) {
+        const room = rooms.splice(pick(rng, 0, rooms.length - 1), 1)[0];
+        const left = room * ROOM_W;
+        const y = rng() < 0.5 ? 520 : 540;
+        const x0 = left + pick(rng, 20, 22) * 20;
+        const x1 = x0 + pick(rng, 3, 5) * 20;
+        out.push({ points: [{ x: x0, y }, { x: x1, y }] });
     }
     return out;
 }

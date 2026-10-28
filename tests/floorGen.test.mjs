@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { replaySolution } from './harness/replay.mjs';
 import { recordFloor, runNaiveFloor } from './harness/recordFloor.mjs';
-import { generateFloor, ROOM_W, H } from '../src/data/floorGen.js';
+import { generateFloor, ROOM_W, H, GAP_Y, GAP_H } from '../src/data/floorGen.js';
 
 let failures = 0;
 function check(name, fn) {
@@ -33,6 +33,37 @@ check('floor has 1-2 seeded run pickups in walkable interiors (sand_refill|sand_
     assert.equal(types.size, 2);
 });
 
+check('floor has 1-2 guards with patrol points in walkable interiors', () => {
+    const counts = new Set();
+    const GUARD = 30; // Guard ctor footprint
+    for (let s = 1; s <= 200; s++) {
+        const { layout } = generateFloor(s);
+        const gs = layout.guards;
+        assert.ok(Array.isArray(gs) && gs.length >= 1 && gs.length <= 2, `seed ${s} count`);
+        counts.add(gs.length);
+        const rooms = [];
+        for (const g of gs) {
+            assert.ok(Array.isArray(g.points) && g.points.length >= 2, `seed ${s} points`);
+            assert.notDeepEqual(g.points[0], g.points[1]);
+            const room = Math.floor(g.points[0].x / ROOM_W);
+            rooms.push(room);
+            for (const pt of g.points) {
+                assert.equal(Math.floor(pt.x / ROOM_W), room, `seed ${s} patrol leaves its room`);
+                assert.ok(pt.x >= 20 && pt.y >= 20 && pt.x + GUARD <= layout.width - 20 && pt.y + GUARD <= H - 20, `seed ${s} out of bounds`);
+                const body = { x: pt.x, y: pt.y, w: GUARD, h: GUARD };
+                const hit = (r) => body.x < r.x + (r.w ?? 40) && body.x + body.w > r.x && body.y < r.y + (r.h ?? 40) && body.y + body.h > r.y;
+                for (const w of layout.walls) assert.ok(!hit(w), `seed ${s} guard in wall`);
+                for (const pl of layout.plates) assert.ok(!hit(pl), `seed ${s} guard on plate`);
+                assert.ok(!hit(layout.deliveryZone), `seed ${s} guard in zone`);
+                const lane = { x: room * ROOM_W, y: GAP_Y, w: ROOM_W, h: GAP_H };
+                assert.ok(!hit(lane), `seed ${s} guard in doorway lane`);
+            }
+        }
+        if (gs.length === 2) assert.notEqual(rooms[0], rooms[1], `seed ${s} both guards in one room`);
+    }
+    assert.equal(counts.size, 2);
+});
+
 check('same seed gives the same floor; different seeds vary', () => {
     for (const s of SEEDS) assert.deepEqual(generateFloor(s), generateFloor(s));
     const shapes = new Set(SEEDS.map(s => JSON.stringify(generateFloor(s).layout)));
@@ -53,7 +84,7 @@ check('room count is 3-5 (default and clamped)', () => {
 check('schema: every door has a plate, no timers, no packages, exit zone in last room', () => {
     for (let s = 1; s <= 50; s++) {
         const { layout: L, info } = generateFloor(s);
-        for (const k of ['lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'hints']) assert.deepEqual(L[k], []);
+        for (const k of ['lasers', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'hints']) assert.deepEqual(L[k], []);
         assert.equal(L.doors.length, info.roomCount); // n-2 plain + 2 airlock
         for (const d of L.doors) {
             assert.equal(d.type, 'standard');
