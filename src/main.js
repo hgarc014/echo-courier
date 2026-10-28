@@ -1179,6 +1179,7 @@ export function levelFailed(reason) {
             state.failTimer = 0; state.failMessage = "";
             SFX.rewind();
             startShake(10, 4);
+            state.deathUndoFlash = 45; // HUD pulse + 'SAND SAVE' caption
             return;
         }
     }
@@ -1437,7 +1438,10 @@ function updateSandHud() {
     if (fill) fill.style.width = pct.toFixed(1) + '%';
     box.classList.toggle('sand-rewinding', !!state.sandRewinding);
     const label = document.getElementById('sand-text');
-    if (label) label.textContent = state.sand.sand.toFixed(1) + 's';
+    const flash = (state.deathUndoFlash || 0) > 0;
+    if (flash) state.deathUndoFlash--;
+    box.classList.toggle('sand-save-flash', flash);
+    if (label) label.textContent = flash ? 'SAND SAVE' : state.sand.sand.toFixed(1) + 's';
 }
 
 function update() {
