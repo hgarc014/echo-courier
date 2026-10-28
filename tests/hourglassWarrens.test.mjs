@@ -437,55 +437,72 @@ check('a fresh run starts in Halls and a clear advances into Hourglass Warrens',
     quiet();
     state.rogueChamber.ticksLeft = 0;
     state.rogueChamber.aspectPending = false;
-    main.stepSimulation();
-    assert.equal(state.rogueChamber.aspectPending, true);
-    chooseAspect('echo-slot');
-    assert.equal(state.rogueRun.outcome, null);
-    assert.equal(state.rogueRun.active, true);
-    assert.equal(state.rogueRun.biomeIndex, 1);
-    assert.equal(state.gameState, 'PLAYING');
-    assert.equal(state.currentLevelMeta.hall, WARREN_NAME);
-    assert.equal(state.currentLevelMeta.biome, 'hourglass-warrens');
-    const expected = generateForBiome('hourglass-warrens', 1);
-    assert.equal(state.currentLevelMeta.name, expected.meta.name);
-    assert.equal(state.currentLevelMeta.obj, expected.meta.obj);
-    assert.equal(state.currentLevelMeta.clear, expected.meta.clear);
-    assert.equal(state.player.x, expected.layout.player.x);
-    assert.equal(state.player.y, expected.layout.player.y);
-    assert.equal(state.currentLevelMeta.maxGhosts, ghosts + 1);
-    assert.equal(state.sand.maxSand, maxSand);
-    assert.ok(state.sand.sand >= BLINK_COST);
-    assert.equal(state.sand.history.length, 0);
-    for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
-        assert.ok(state.currentLevelMeta.grants.includes(id), id);
+    const kicker = { textContent: '' };
+    const aspectRoot = {
+        classList: { add() {}, remove() {}, contains() { return false; } },
+        dataset: { bound: '1' },
+        querySelector(sel) { return sel === '.aspect-pick-kicker' ? kicker : null; },
+        addEventListener() {}
+    };
+    const prevGet = document.getElementById;
+    document.getElementById = (id) => (id === 'aspect-pick' ? aspectRoot : prevGet(id));
+    try {
+        main.stepSimulation();
+        assert.equal(state.rogueChamber.aspectPending, true);
+        assert.equal(kicker.textContent, 'Second-hand Halls');
+        chooseAspect('echo-slot');
+        assert.equal(state.rogueRun.outcome, null);
+        assert.equal(state.rogueRun.active, true);
+        assert.equal(state.rogueRun.biomeIndex, 1);
+        assert.equal(state.gameState, 'PLAYING');
+        assert.equal(state.currentLevelMeta.hall, WARREN_NAME);
+        assert.equal(state.currentLevelMeta.biome, 'hourglass-warrens');
+        const expected = generateForBiome('hourglass-warrens', 1);
+        assert.equal(state.currentLevelMeta.name, expected.meta.name);
+        assert.equal(state.currentLevelMeta.obj, expected.meta.obj);
+        assert.equal(state.currentLevelMeta.clear, expected.meta.clear);
+        assert.equal(state.player.x, expected.layout.player.x);
+        assert.equal(state.player.y, expected.layout.player.y);
+        assert.equal(state.currentLevelMeta.maxGhosts, ghosts + 1);
+        assert.equal(state.sand.maxSand, maxSand);
+        assert.ok(state.sand.sand >= BLINK_COST);
+        assert.equal(state.sand.history.length, 0);
+        for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
+            assert.ok(state.currentLevelMeta.grants.includes(id), id);
+        }
+        quiet();
+        state.rogueChamber.aspectPending = false;
+        if (state.rogueChamber.type === 'timer') state.rogueChamber.ticksLeft = 0;
+        else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
+        else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+        release();
+        main.stepSimulation();
+        assert.equal(state.rogueChamber.aspectPending, true);
+        assert.equal(kicker.textContent, WARREN_NAME);
+        chooseAspect('start-sand');
+        assert.equal(state.gameState, 'PLAYING');
+        assert.equal(state.rogueRun.outcome, null);
+        assert.equal(state.rogueRun.active, true);
+        assert.equal(state.rogueRun.biomeIndex, 2);
+        assert.equal(state.currentLevelMeta.hall, 'Echo Courts');
+        assert.equal(state.currentLevelMeta.biome, 'echo-courts');
+        quiet();
+        state.rogueChamber.aspectPending = false;
+        if (state.rogueChamber.type === 'timer') state.rogueChamber.ticksLeft = 0;
+        else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
+        else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+        release();
+        main.stepSimulation();
+        assert.equal(state.rogueChamber.aspectPending, true);
+        assert.equal(kicker.textContent, 'Echo Courts');
+        chooseAspect('sand-tank');
+        assert.equal(state.gameState, 'RUN_OVER');
+        assert.equal(state.rogueRun.outcome, 'cleared');
+        assert.equal(state.rogueRun.active, false);
+    } finally {
+        document.getElementById = prevGet;
     }
-    quiet();
-    state.rogueChamber.aspectPending = false;
-    if (state.rogueChamber.type === 'timer') state.rogueChamber.ticksLeft = 0;
-    else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
-    else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
-    release();
-    main.stepSimulation();
-    assert.equal(state.rogueChamber.aspectPending, true);
-    chooseAspect('start-sand');
-    assert.equal(state.gameState, 'PLAYING');
-    assert.equal(state.rogueRun.outcome, null);
-    assert.equal(state.rogueRun.active, true);
-    assert.equal(state.rogueRun.biomeIndex, 2);
-    assert.equal(state.currentLevelMeta.hall, 'Echo Courts');
-    assert.equal(state.currentLevelMeta.biome, 'echo-courts');
-    quiet();
-    state.rogueChamber.aspectPending = false;
-    if (state.rogueChamber.type === 'timer') state.rogueChamber.ticksLeft = 0;
-    else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
-    else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
-    release();
-    main.stepSimulation();
-    assert.equal(state.rogueChamber.aspectPending, true);
-    chooseAspect('sand-tank');
-    assert.equal(state.gameState, 'RUN_OVER');
-    assert.equal(state.rogueRun.outcome, 'cleared');
-    assert.equal(state.rogueRun.active, false);
+
 });
 
 await Promise.all(jobs);

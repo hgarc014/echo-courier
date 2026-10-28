@@ -223,6 +223,10 @@ check('aspect panel markup has three boon buttons', () => {
     }
     assert.ok(html.includes('+Sand Tank') && html.includes('+Start Sand') && html.includes('+Echo Slot'));
     assert.ok(css.includes('#aspect-pick') && css.includes('.aspect-card'));
+    assert.ok(html.includes('class="aspect-pick-kicker"'));
+    const aspectSrc = readFileSync(join(root, 'src/ui/aspectPick.js'), 'utf8');
+    assert.match(aspectSrc, /querySelector\('\.aspect-pick-kicker'\)/);
+    assert.match(aspectSrc, /kick\.textContent = label/);
     const entry = html.match(/<script\s+type="module"\s+src="([^"]+)"/);
     assert.equal(entry[1], 'src/main.js');
     assert.ok(html.includes('src/ui/aspectPick.js'));
@@ -231,6 +235,7 @@ check('aspect panel markup has three boon buttons', () => {
 function makeAspectRoot() {
     let hidden = true;
     const listeners = {};
+    const kicker = { textContent: 'Second-hand Halls' };
     return {
         classList: {
             add(c) { if (c === 'hidden') hidden = true; },
@@ -238,8 +243,10 @@ function makeAspectRoot() {
             contains(c) { return c === 'hidden' && hidden; }
         },
         dataset: {},
+        querySelector(sel) { return sel === '.aspect-pick-kicker' ? kicker : null; },
         addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
         listeners,
+        kicker,
         isHidden() { return hidden; }
     };
 }
@@ -253,7 +260,9 @@ check('showAspectPick / hideAspectPick and a button call onPick(id) once', async
     assert.equal(globalThis.showAspectPick, showAspectPick);
     assert.equal(globalThis.hideAspectPick, hideAspectPick);
     const picked = [];
+    assert.equal(aspectRoot.kicker.textContent, 'Second-hand Halls');
     showAspectPick((id) => picked.push(id));
+    assert.equal(aspectRoot.kicker.textContent, 'Second-hand Halls');
     assert.equal(aspectRoot.isHidden(), false);
     const btn = {
         getAttribute: (k) => (k === 'data-aspect' ? 'echo-slot' : null),
@@ -264,11 +273,17 @@ check('showAspectPick / hideAspectPick and a button call onPick(id) once', async
     assert.equal(aspectRoot.isHidden(), true);
     aspectRoot.listeners.click[0]({ target: btn });
     assert.deepEqual(picked, ['echo-slot']);
-    showAspectPick((id) => picked.push(id));
+    showAspectPick((id) => picked.push(id), 'Hourglass Warrens');
+    assert.equal(aspectRoot.kicker.textContent, 'Hourglass Warrens');
+    showAspectPick((id) => picked.push(id), '   ');
+    assert.equal(aspectRoot.kicker.textContent, 'Hourglass Warrens');
     hideAspectPick();
     assert.equal(aspectRoot.isHidden(), true);
     aspectRoot.listeners.click[0]({ target: { ...btn, getAttribute: () => 'sand-tank', closest: btn.closest } });
     assert.deepEqual(picked, ['echo-slot']);
+    showAspectPick((id) => picked.push(id), 'Second-hand Halls');
+    assert.equal(aspectRoot.kicker.textContent, 'Second-hand Halls');
+    hideAspectPick();
 });
 
 await Promise.all(jobs);
