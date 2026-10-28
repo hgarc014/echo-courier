@@ -8,7 +8,7 @@ import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { ROOM_W } from './data/floorGen.js';
-import { generateChamber } from './data/secondHandHalls.js';
+import { BIOME_ORDER, nextBiomeIndex } from './rogue/biomes.js';
 import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
@@ -1312,18 +1312,17 @@ export function startPlaytestFromEditor() {
 }
 
 // ---- Roguelike run loop (hand-edit) ----
-// A run = one Second-hand Halls chamber played through the playtest path (customLayout), so campaign LEVELS are untouched.
-// Clear opens the aspect picker, then Run Over. Any death / ESC ends the run. Aspect bonuses are run-only.
-export function startRogueRun(seed) {
-    seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
+// A run walks BIOME_ORDER (Second-hand Halls, then Hourglass Warrens) through the
+// playtest path (customLayout), so campaign LEVELS are untouched.
+// Clear opens the aspect picker, then the next biome. The last biome ends at Run Over.
+// Any death / ESC ends the run. Aspect bonuses are run-only and carry across biomes.
+function enterRogueChamber(biomeIndex, fresh) {
     const meta = loadRogueMeta();
-    const chamber = generateChamber(seed);
+    const biome = BIOME_ORDER[biomeIndex] || BIOME_ORDER[0];
+    const chamber = biome.generateChamber(state.rogueRun.seed);
     const layout = chamber.layout;
     const cmeta = chamber.meta;
     const clear = cmeta.clear;
-    hideAspectPick();
-    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
-    state.sandRewinding = false;
     state.rogueChamber = {
         type: clear === 'kill' ? 'wave' : clear,
         zone: layout.deliveryZone,
@@ -1331,7 +1330,12 @@ export function startRogueRun(seed) {
         enemiesLeft: clear === 'kill' ? cmeta.waveCount : null,
         aspectPending: false
     };
-    state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
+    if (fresh || !state.sand) {
+        state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
+    } else {
+        resetHistory(state.sand);
+        state.deathUndoFlash = 0;
+    }
     state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
     state.editorReturnLayout = layout;
     state.customLayout = layout;
@@ -1343,12 +1347,17 @@ export function startRogueRun(seed) {
     document.querySelector('.bottom-hud')?.classList.remove('hidden');
     document.getElementById('mobile-controls')?.classList.remove('hidden');
     setPlaytestReturnVisible(false);
+    const baseGhosts = (cmeta.maxGhosts ?? 2) + meta.echoSlotBonus;
+    const carriedGhosts = !fresh && state.currentLevelMeta ? Number(state.currentLevelMeta.maxGhosts) || 0 : 0;
     state.currentLevelMeta = {
         name: cmeta.name,
         obj: cmeta.obj,
         par: cmeta.par,
+        hall: cmeta.hall,
+        biome: biome.id,
+        clear: cmeta.clear,
         challenge: { desc: 'Rogue run', check: () => false },
-        maxGhosts: (cmeta.maxGhosts ?? 2) + meta.echoSlotBonus,
+        maxGhosts: Math.max(baseGhosts, carriedGhosts),
         loopTime: rogueLoopTime(meta),
         crackSpeed: 'normal',
         grants: ['dash', 'toss', 'cloak', 'ghostShield'],
@@ -1358,7 +1367,7 @@ export function startRogueRun(seed) {
     applyLevelAbilityOverrides(state.currentLevelMeta);
     state.worldUnlockedAbilities = null;
     state.bossCheckpoint = null; state.bossCheckpointLive = false; state.pendingBossIntro = null;
-    document.getElementById('level-display').innerText = 'ROGUE';
+    document.getElementById('level-display').innerText = biome.name;
     document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
     applyLevelHint(state.currentLevelMeta);
     clearGatekeeperCheckpoint();
@@ -1379,6 +1388,27 @@ export function startRogueRun(seed) {
     state.gameState = 'PLAYING';
     Object.assign(prevKeys, keys);
     syncTouchUi();
+}
+
+export function startRogueRun(seed) {
+    seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
+    hideAspectPick();
+    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0 };
+    state.sandRewinding = false;
+    enterRogueChamber(0, true);
+}
+
+// Aspect pick on a cleared chamber. Returns false when this was the last biome.
+function advanceRogueBiome() {
+    const run = state.rogueRun;
+    if (!run?.active) return false;
+    const next = nextBiomeIndex(run.biomeIndex ?? 0);
+    if (next == null) return false;
+    run.biomeIndex = next;
+    run.outcome = null;
+    state.sandRewinding = false;
+    enterRogueChamber(next, false);
+    return true;
 }
 
 // Timer chambers count down. Wave chambers recount guards that are not echo-distracted.
@@ -1940,7 +1970,7 @@ function update() {
                 showAspectPick(id => {
                     applyAspect(id);
                     hideAspectPick();
-                    showRunOver(true);
+                    if (!advanceRogueBiome()) showRunOver(true);
                 });
                 updatePrevKeys();
                 return;

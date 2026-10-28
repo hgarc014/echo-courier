@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
-import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizePar, normalizeWorldId, WORLDS, copyBossMeta, normalizeHintLine, normalizePitKillFraction } from '../data/levels.js';
+import { LEVELS, serializeLevel, deserializeLevel, createBoundWalls, isBoundWall, cloneDemo, normalizeLoopTime, normalizePar, normalizeWorldId, WORLDS, copyBossMeta, copyRogueChamberMeta, normalizeHintLine, normalizePitKillFraction } from '../data/levels.js';
+import { editorChamberOptions, rogueChamberEditorLayout } from '../rogue/biomes.js';
 import { keys } from '../core/input.js';
 import { panCamera, screenToWorld, getCamera, getMapSize, setMapSize, VIEW_WIDTH, VIEW_HEIGHT } from '../core/camera.js';
 import { Wall, Door, AlarmDoor, TimerDoor, PressurePlate, TemporalPlate, Package, HintPlate } from '../entities/interactables.js';
@@ -13,6 +14,20 @@ import { normalizeTimeline } from '../systems/temporalPlate.js';
 import { getWaypoints, moveEntityTo, addWaypoint, removeWaypoint, applyInspectorEdits, applyBurrowerConfig, applyPrismConfig, applyRobotConfig, applyLaserConfig, applyPackageConfig, applyAbilityList, ABILITY_IDS, degToRad, radToDeg, addAudit, removeAudit, applyGatekeeperEdits } from './editorInspector.js';
 
 export const EDITOR_SAVE_PREFIX = 'echoCourier_editorSave_';
+
+/** Fill a <select> with BIOME_ORDER chamber types. Returns the option rows. */
+export function fillRogueChamberSelect(select) {
+    const options = editorChamberOptions();
+    if (!select) return options;
+    select.innerHTML = '';
+    for (const opt of options) {
+        const el = document.createElement('option');
+        el.value = opt.biomeId + '|' + opt.typeId;
+        el.textContent = opt.label;
+        select.appendChild(el);
+    }
+    return options;
+}
 
 export let selectedEntity = null;
 let dragX = 0; let dragY = 0; let isDragging = false;
@@ -104,6 +119,7 @@ export function setEditorLevelMetaFromLevel(level) {
     const pitKillFraction = normalizePitKillFraction(level.pitKillFraction);
     if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
     copyBossMeta(level, state.editorLevelMeta);
+    copyRogueChamberMeta(level, state.editorLevelMeta);
     if (level.challenge && !level.isPlaytest) state.editorLevelMeta.challengeRef = level.name;
     markEditorHintSaved(state.editorLevelMeta.hintLine || '');
     return state.editorLevelMeta;
@@ -146,6 +162,10 @@ function syncLevelConfigForm() {
     setVal('editor-meta-boss-text', meta.bossIntro?.text || '');
     setVal('editor-meta-boss-door', meta.bossIntroDoorId || '');
     setVal('editor-meta-challenge', meta.challengeRef || '');
+    setVal('editor-meta-hall', meta.hall || '');
+    setVal('editor-meta-biome', meta.biome || '');
+    setVal('editor-meta-chamber', meta.chamberType || '');
+    setVal('editor-meta-clear', meta.clear || '');
     if (worldEl) worldEl.value = meta.world != null ? String(meta.world) : '';
     const unlockSet = new Set(meta.unlocks || []);
     for (const id of ['dash', 'toss', 'cloak', 'ghostShield']) {
@@ -231,6 +251,12 @@ function applyLevelConfigForm() {
         bossIntro: { speaker: val('editor-meta-boss-speaker'), text: val('editor-meta-boss-text') },
         bossIntroDoorId: val('editor-meta-boss-door'),
         challengeRef: val('editor-meta-challenge')
+    }, state.editorLevelMeta);
+    copyRogueChamberMeta({
+        hall: val('editor-meta-hall'),
+        biome: val('editor-meta-biome'),
+        chamberType: val('editor-meta-chamber'),
+        clear: val('editor-meta-clear')
     }, state.editorLevelMeta);
     setSaveStatus('Level config applied');
     return true;
@@ -524,6 +550,30 @@ export function initEditor(canvas, ctx) {
         window.startEditorMode(null, idx);
         syncLevelConfigForm();
     };
+
+    fillRogueChamberSelect(document.getElementById('editor-rogue-chamber'));
+    document.getElementById('editor-load-rogue-chamber')?.addEventListener('click', () => {
+        const sel = document.getElementById('editor-rogue-chamber');
+        const raw = String(sel && sel.value || '');
+        const bar = raw.indexOf('|');
+        if (bar <= 0) {
+            setSaveStatus('Pick a rogue chamber', false);
+            return;
+        }
+        const biomeId = raw.slice(0, bar);
+        const typeId = raw.slice(bar + 1);
+        const seed = (parseInt(document.getElementById('editor-rogue-seed')?.value, 10) || 1) >>> 0;
+        let layout;
+        try {
+            layout = rogueChamberEditorLayout(biomeId, typeId, seed);
+        } catch (err) {
+            setSaveStatus(err.message || 'Could not load chamber', false);
+            return;
+        }
+        pushUndo();
+        window.startEditorMode(JSON.stringify(layout));
+        setSaveStatus(`Loaded ${layout.meta.hall}: ${layout.meta.name}`);
+    });
 
     document.getElementById('editor-map-apply')?.addEventListener('click', () => {
         const w = parseInt(document.getElementById('editor-map-w').value, 10);

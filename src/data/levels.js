@@ -1076,6 +1076,23 @@ export function getChallengeByRef(ref) {
     return LEVELS.find(l => l.name === ref && l.challenge)?.challenge || null;
 }
 
+// Rogue chamber identity edited in the level architect. Omitted when blank so
+// campaign levels keep their existing JSON. clear is kill | rift | timer only.
+const ROGUE_CHAMBER_CLEARS = new Set(['kill', 'rift', 'timer']);
+export function copyRogueChamberMeta(from, to) {
+    if (!from || !to) return to;
+    const text = (key) => (typeof from[key] === 'string' ? from[key].trim() : '');
+    const hall = text('hall');
+    const biome = text('biome');
+    const chamberType = text('chamberType');
+    const clear = text('clear');
+    if (hall) to.hall = hall;
+    if (biome) to.biome = biome;
+    if (chamberType) to.chamberType = chamberType;
+    if (ROGUE_CHAMBER_CLEARS.has(clear)) to.clear = clear;
+    return to;
+}
+
 function withMapSize(entities, size) {
     return { ...entities, mapWidth: size.mapWidth, mapHeight: size.mapHeight };
 }
@@ -1189,6 +1206,7 @@ export function serializeLevel(src = state) {
         const pitKillFraction = normalizePitKillFraction(m.pitKillFraction);
         if (pitKillFraction != null) payload.meta.pitKillFraction = pitKillFraction;
         copyBossMeta(m, payload.meta);
+        copyRogueChamberMeta(m, payload.meta);
         if (demo) payload.meta.demo = demo;
     }
     return payload;
@@ -1261,6 +1279,7 @@ export function deserializeLevel(data) {
             const pitKillFraction = normalizePitKillFraction(data.meta.pitKillFraction);
             if (pitKillFraction != null) state.editorLevelMeta.pitKillFraction = pitKillFraction;
             copyBossMeta(data.meta, state.editorLevelMeta);
+            copyRogueChamberMeta(data.meta, state.editorLevelMeta);
         } else if (demo || crackSpeed) {
             if (!state.editorLevelMeta) {
                 state.editorLevelMeta = {

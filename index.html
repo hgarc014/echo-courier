@@ -260,6 +260,11 @@
         <h4 style="margin-bottom: 10px;">Load Level</h4>
         <select id="editor-load-level" style="width:100%; padding: 8px; background: #000; color: var(--text-main); border: 1px solid #444; margin-bottom: 10px;"></select>
         <button class="secondary-btn" id="editor-load-btn" style="width:100%; margin-top:0;">Import From Game</button>
+        <h4 style="margin: 14px 0 10px;">Rogue Chambers</h4>
+        <select id="editor-rogue-chamber" style="width:100%; padding: 8px; background: #000; color: var(--text-main); border: 1px solid #444; margin-bottom: 10px;"></select>
+        <label style="font-size:0.8rem; display:block; margin-bottom:8px;">Seed <input type="number" id="editor-rogue-seed" min="1" step="1" value="1" style="width:88px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <button class="secondary-btn" id="editor-load-rogue-chamber" type="button" style="width:100%; margin-top:0;">Load Chamber</button>
+        <p style="font-size:0.7rem; color:#7d8590; margin:8px 0 0;">Second-hand Halls, then Hourglass Warrens. Loaded layouts edit, playtest, save, and JSON round-trip. Cameras stay off the new warren chambers.</p>
         <hr style="border-color:#333; margin: 15px 0;">
         <h4 style="margin-bottom: 10px;">Map Size</h4>
         <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
@@ -319,6 +324,17 @@
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Speaker <input id="editor-meta-speaker" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Briefing<textarea id="editor-meta-text" rows="3" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></textarea></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Objective <input id="editor-meta-obj" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Hall <input id="editor-meta-hall" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Biome <input id="editor-meta-biome" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Chamber type <input id="editor-meta-chamber" type="text" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
+        <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Clear
+          <select id="editor-meta-clear" style="padding:6px; background:#000; color:var(--text-main); border:1px solid #444;">
+            <option value="">(none)</option>
+            <option value="kill">kill</option>
+            <option value="rift">rift</option>
+            <option value="timer">timer</option>
+          </select>
+        </label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Hint line (HUD, not a hint plate)<textarea id="editor-meta-hint" rows="2" style="width:100%; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></textarea></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Pit kill fraction (0.60–0.70, blank = 0.65) <input id="editor-meta-pitfraction" type="number" min="0.6" max="0.7" step="0.01" placeholder="0.65" style="width:88px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
         <label style="font-size:0.8rem; display:block; margin-bottom:6px;">Max Ghosts <input id="editor-meta-maxghosts" type="number" min="0" max="8" value="3" style="width:72px; padding:6px; background:#000; color:var(--text-main); border:1px solid #444;"></label>
