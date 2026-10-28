@@ -7,7 +7,7 @@ import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { generateFloor, ROOM_W } from './data/floorGen.js';
-import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime } from './rogue/rogueMeta.js';
+import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
@@ -1285,7 +1285,7 @@ export function startRogueRun(seed) {
     const floor = generateFloor(seed);
     const layout = floor.layout;
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
-    state.sand = createSandState();
+    state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: rogueStartSand(meta) });
     state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
     state.editorReturnLayout = layout;
     state.customLayout = layout;
@@ -1348,6 +1348,7 @@ function showRunOver(cleared) {
     const title = document.getElementById('run-over-title');
     if (title) { title.innerText = cleared ? 'FLOOR CLEARED' : 'RUN FAILED'; title.style.color = cleared ? '#00f3ff' : '#ff3366'; }
     syncRunOverUnlock();
+    syncRogueShop();
     el.classList.remove('hidden');
 }
 
@@ -1372,6 +1373,31 @@ export function syncRogueHub() {
     const m = loadRogueMeta();
     const el = document.getElementById('rogue-meta-info');
     if (el) el.innerText = `Echo slots: ${rogueMaxGhosts(m)}  |  Record length: ${rogueLoopTime(m)}s  |  Runs: ${m.runs} (cleared ${m.clears})`;
+    syncRogueShop();
+}
+
+/** Render sandTank/startSand shop into every .rogue-shop container (hub + Run Over). */
+export function syncRogueShop() {
+    if (typeof document === 'undefined') return;
+    const m = loadRogueMeta();
+    const items = shopItems(m);
+    document.querySelectorAll('.rogue-shop').forEach(box => {
+        const pts = box.querySelector('.rogue-shop-points');
+        if (pts) pts.innerText = 'SHOP POINTS: ' + (m.shopPoints | 0);
+        const list = box.querySelector('.rogue-shop-list');
+        if (!list) return;
+        list.innerHTML = '';
+        for (const it of items) {
+            const b = document.createElement('button');
+            b.className = 'secondary-btn';
+            b.style.cssText = 'display:block;margin:4px auto;min-width:260px;font-size:0.8rem;';
+            b.dataset.shopId = it.id;
+            b.innerText = `${it.label.toUpperCase()} ${it.level}/${it.maxLevel} — ` + (it.maxed ? 'MAXED' : `COST ${it.cost}`);
+            b.disabled = it.maxed || !it.affordable;
+            b.onclick = () => window.buyRogueShop?.(it.id);
+            list.appendChild(b);
+        }
+    });
 }
 
 export function returnToEditor() {
@@ -2528,6 +2554,13 @@ window.onload = () => {
     window.startRogueRun = () => startRogueRun();
     window.restartRogueRun = () => startRogueRun();
     window.claimRogueUnlock = claimRogueUnlock;
+    window.rogueShopItems = () => shopItems();
+    window.syncRogueShop = syncRogueShop;
+    window.buyRogueShop = (id) => {
+        const m = buyRogueShop(id);
+        if (m) { syncRogueHub(); syncRunOverUnlock(); window.syncRogueShop?.(); }
+        return m;
+    };
     window.openRogueHub = () => { syncRogueHub(); showSubMenu('rogue'); };
     window.nextLevel = () => {
         if (state.playtesting || state.currentLevelMeta?.isPlaytest) { returnToEditor(); return; }
