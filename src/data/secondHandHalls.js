@@ -144,11 +144,14 @@ function beamCross(rng) {
     };
 }
 
-// Vertical gate in front of the rift, one guard pacing the approach.
+// Vertical gate in front of the rift. One guard paces the approach. Every
+// waypoint stays >=200px from spawn (player ~48,200) so the wave does not
+// open on a catch. x0 is 240 or 260: 220 is still ~199px when gy is 300,
+// and 280 walks the 30px body into the nearest gate (x >= 460).
 function riftDash(rng) {
     const gateX = 460 + pick(rng, 0, 3) * 20;
     const gy = 300 + pick(rng, 0, 2) * 20;
-    const x0 = 160 + pick(rng, 0, 2) * 20;
+    const x0 = 240 + pick(rng, 0, 1) * 20;
     return {
         layout: shell({
             player: { x: 48, y: 200 },
