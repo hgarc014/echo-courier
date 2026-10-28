@@ -1398,6 +1398,14 @@ export function startRogueRun(seed) {
     enterRogueChamber(0, true);
 }
 
+// Hall from the chamber just cleared (meta.hall). Biome registry if that is missing.
+function clearedBiomeKicker() {
+    const hall = state.currentLevelMeta?.hall;
+    if (typeof hall === 'string' && hall.trim()) return hall.trim();
+    const biome = BIOME_ORDER[state.rogueRun?.biomeIndex ?? 0] || BIOME_ORDER[0];
+    return biome?.name || '';
+}
+
 // Aspect pick on a cleared chamber. Returns false when this was the last biome.
 function advanceRogueBiome() {
     const run = state.rogueRun;
@@ -1971,7 +1979,7 @@ function update() {
                     applyAspect(id);
                     hideAspectPick();
                     if (!advanceRogueBiome()) showRunOver(true);
-                });
+                }, clearedBiomeKicker());
                 updatePrevKeys();
                 return;
             }
