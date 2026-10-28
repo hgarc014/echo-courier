@@ -24,6 +24,15 @@ const mainSrc = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
 assert.match(mainSrc, /isKeyJustPressed\('f'\)/, 'toss keeps f');
 assert.match(mainSrc, /isKeyJustPressed\('b'\)/);
 assert.match(mainSrc, /commitSandEcho\(/);
+assert.match(mainSrc, /Math\.max\(rogueStartSand\(meta\),\s*BLINK_COST\s*\+\s*0\.1\)/);
+
+// A fresh run can pay for a blink before any shop upgrade.
+{
+    release();
+    main.startRogueRun(1);
+    assert.ok(state.sand.sand >= BLINK_COST, 'start sand covers a blink');
+    assert.ok(state.sand.sand >= BLINK_COST + 0.1);
+}
 
 // Blink snaps, spends sand, grants iframes. Next tick decrements. Death is skipped until they expire.
 {

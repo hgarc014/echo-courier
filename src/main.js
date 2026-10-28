@@ -19,7 +19,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
-import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo, canBlinkRewind, applyBlinkRewind, BLINK_IFRAMES, bumpMaxSand, refillSand } from './systems/sandRewind.js';
+import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo, canBlinkRewind, applyBlinkRewind, BLINK_COST, BLINK_IFRAMES, bumpMaxSand, refillSand } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -1331,7 +1331,7 @@ export function startRogueRun(seed) {
         enemiesLeft: clear === 'kill' ? cmeta.waveCount : null,
         aspectPending: false
     };
-    state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: rogueStartSand(meta) });
+    state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
     state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
     state.editorReturnLayout = layout;
     state.customLayout = layout;

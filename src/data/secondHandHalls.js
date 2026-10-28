@@ -91,18 +91,19 @@ function sweepYard(rng) {
     };
 }
 
-// Corridor lanes the courier can actually reach. Clear is the whole guard wave.
+// Open middle lane the courier can reach. Every waypoint stays >=200px from spawn
+// so the wave does not open on a catch. Clear is the whole guard wave.
 function patrolCorridor(rng) {
-    const y1 = 190 + pick(rng, 0, 1) * 20;
-    const y2 = 360 + pick(rng, 0, 1) * 20;
+    const y1 = 190 + pick(rng, 0, 2) * 20;
+    const y2 = 350 + pick(rng, 0, 2) * 20;
     const span = pick(rng, 0, 3) * 20;
     const guards = [
-        { path: [{ x: 80, y: y1 }, { x: 680 - span, y: y1 }] },
-        { path: [{ x: 120 + span, y: y2 }, { x: 700, y: y2 }] }
+        { path: [{ x: 320, y: y1 }, { x: 700 - span, y: y1 }] },
+        { path: [{ x: 300 + span, y: y2 }, { x: 660, y: y2 }] }
     ];
     if (rng() < 0.45) {
-        const y3 = 250 + pick(rng, 0, 1) * 10;
-        guards.push({ path: [{ x: 180, y: y3 }, { x: 520, y: y3 }] });
+        const y3 = 270 + pick(rng, 0, 1) * 20;
+        guards.push({ path: [{ x: 380, y: y3 }, { x: 580, y: y3 }] });
     }
     return {
         layout: shell({
