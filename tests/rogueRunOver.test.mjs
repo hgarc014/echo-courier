@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { main, state, keys } from './harness/replay.mjs';
 import { ROGUE_META_KEY, loadRogueMeta } from '../src/rogue/rogueMeta.js';
+import { chooseAspect } from '../src/ui/aspectPick.js';
 
 localStorage.removeItem(ROGUE_META_KEY);
 
@@ -52,11 +53,17 @@ assert.equal(state.gameState, 'PLAYING');
 assert.equal(state.rogueRun.active, true);
 assert.equal(state.rogueRun.outcome, null);
 state.guards = [];
-const zone = state.deliveryZone;
-state.player.x = zone.x + 4;
-state.player.y = zone.y + 4;
+state.lasers = [];
+state.cameras = [];
+state.drones = [];
+state.rogueChamber.type = 'timer';
+state.rogueChamber.ticksLeft = 0;
+state.rogueChamber.aspectPending = false;
 release();
 main.stepSimulation();
+assert.equal(state.rogueChamber.aspectPending, true);
+assert.equal(state.gameState, 'PLAYING');
+chooseAspect('echo-slot');
 assert.equal(state.gameState, 'RUN_OVER');
 assert.equal(state.rogueRun.outcome, 'cleared');
 assert.equal(loadRogueMeta().shopPoints, 3, 'clear grants +2 Chrono Dust');
