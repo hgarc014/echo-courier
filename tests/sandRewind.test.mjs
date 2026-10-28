@@ -54,3 +54,36 @@ console.log('sandRewind ok');
   // empty history fails
   const e = createSandState(); assert.equal(canDeathUndo(e), false);
 }
+
+// blink rewind — pops history like death-undo and returns frames popped
+{ const { canBlinkRewind, applyBlinkRewind, timeRupture, BLINK_COST, BLINK_FRAMES, BLINK_IFRAMES, TIME_RUPTURE_ENABLED } = await import('../src/systems/sandRewind.js');
+  assert.equal(BLINK_FRAMES, 24);
+  assert.equal(BLINK_COST, 0.6);
+  assert.equal(BLINK_IFRAMES, 30);
+  assert.equal(TIME_RUPTURE_ENABLED, false);
+  assert.equal(timeRupture(), undefined);
+  const { readFileSync } = await import('node:fs');
+  assert.match(readFileSync(new URL('../src/systems/sandRewind.js', import.meta.url), 'utf8'), /function timeRupture\([\s\S]*TODO/);
+
+  const s = createSandState(); const p = mkPlayer();
+  for (let t = 0; t < 120; t++) { p.x = t; tickSand(s, { holding: false, player: p, packages: [], tick: t }); }
+  p.x = 999; const before = s.sand;
+  assert.equal(canBlinkRewind(s), true);
+  const frames = applyBlinkRewind(s, p, []);
+  assert.equal(frames, BLINK_FRAMES);
+  assert.equal(p.x, 120 - BLINK_FRAMES); assert.equal(s.history.length, 120 - BLINK_FRAMES);
+  assert.ok(Math.abs(s.sand - (before - BLINK_COST)) < 1e-9); assert.equal(s.rewinding, false);
+  // short sand fails, position unchanged
+  s.sand = BLINK_COST - 0.01; const hist = s.history.length; p.x = 500;
+  assert.equal(canBlinkRewind(s), false); assert.equal(applyBlinkRewind(s, p, []), 0); assert.equal(p.x, 500); assert.equal(s.history.length, hist);
+  // empty history fails
+  const e = createSandState(); e.sand = BLINK_COST; assert.equal(canBlinkRewind(e), false); assert.equal(applyBlinkRewind(e, p, []), 0);
+  assert.equal(canBlinkRewind(null), false);
+  // shorter than BLINK_FRAMES still pops what exists and spends the full cost
+  const short = createSandState(); const q = mkPlayer();
+  for (let t = 0; t < 10; t++) { q.x = t * 3; tickSand(short, { holding: false, player: q, packages: [], tick: t }); }
+  q.x = 999; const sandBefore = short.sand;
+  assert.equal(applyBlinkRewind(short, q, []), 10);
+  assert.equal(q.x, 0); assert.equal(short.history.length, 0);
+  assert.ok(Math.abs(short.sand - (sandBefore - BLINK_COST)) < 1e-9);
+}

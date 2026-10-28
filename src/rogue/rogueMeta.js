@@ -57,9 +57,11 @@ export function grantUnlock(meta = loadRogueMeta()) {
     return next;
 }
 
-/** Record a finished run (count only; called at Run Over). */
+/** Record a finished run (called at Run Over). shopPoints == Chrono Dust. */
 export function recordRunEnd(cleared, meta = loadRogueMeta()) {
-    const next = { ...meta, runs: meta.runs + 1, clears: meta.clears + (cleared ? 1 : 0), shopPoints: (meta.shopPoints | 0) + (cleared ? 1 : 0) };
+    // shopPoints == Chrono Dust. A failed run grants 1; a clear grants 2.
+    const dust = cleared ? 2 : 1;
+    const next = { ...meta, runs: meta.runs + 1, clears: meta.clears + (cleared ? 1 : 0), shopPoints: (meta.shopPoints | 0) + dust };
     saveRogueMeta(next);
     return next;
 }

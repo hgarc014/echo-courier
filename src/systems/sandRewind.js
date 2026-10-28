@@ -111,3 +111,30 @@ export function applyDeathUndo(sand, player, packages) {
     sand.rewinding = false;
     return { ok: true, frames: n };
 }
+
+// Blink rewind (Rogue Run): a short snap, cheaper than death-undo, plus iframes.
+export const BLINK_FRAMES = 24;   // ~0.4s at 60Hz
+export const BLINK_COST = 0.6;    // seconds of sand
+export const BLINK_IFRAMES = 30;
+
+export function canBlinkRewind(sand) {
+    return !!sand && sand.sand >= BLINK_COST && sand.history.length > 0;
+}
+
+/** Pop history like death-undo. Returns frames popped (0 if the blink cannot happen). */
+export function applyBlinkRewind(sand, player, packages) {
+    if (!canBlinkRewind(sand)) return 0;
+    const n = Math.min(BLINK_FRAMES, sand.history.length);
+    const popped = sand.history.splice(sand.history.length - n, n);
+    applySnapshot(player, packages, popped[0]);
+    sand.sand = Math.max(0, sand.sand - BLINK_COST);
+    sand.rewinding = false;
+    return n;
+}
+
+/** When true, a blink may rupture the timeline. Off for this slice. */
+export const TIME_RUPTURE_ENABLED = false;
+
+export function timeRupture() {
+    // TODO: time rupture — split the timeline when a blink crosses a sealed moment.
+}

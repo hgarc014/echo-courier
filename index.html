@@ -195,6 +195,26 @@
                     <p>You have mastered the time loops.</p>
                     <button class="primary-btn" onclick="returnToMenu()">MAIN MENU</button>
                 </div>
+                <!-- After a chamber clear: showAspectPick(onPick). Ids: sand-tank, start-sand, echo-slot. -->
+                <div id="aspect-pick" class="hidden overlay panel aspect-pick" role="dialog" aria-labelledby="aspect-pick-title">
+                    <p class="aspect-pick-kicker">Second-hand Halls</p>
+                    <h2 id="aspect-pick-title">Choose an Aspect</h2>
+                    <p class="aspect-pick-sub">The chamber is clear. Take one boon.</p>
+                    <div class="aspect-pick-row">
+                        <button type="button" class="aspect-card" data-aspect="sand-tank">
+                            <span class="aspect-card-name">+Sand Tank</span>
+                            <span class="aspect-card-detail">+1s max sand</span>
+                        </button>
+                        <button type="button" class="aspect-card" data-aspect="start-sand">
+                            <span class="aspect-card-name">+Start Sand</span>
+                            <span class="aspect-card-detail">+0.5s sand at the door</span>
+                        </button>
+                        <button type="button" class="aspect-card" data-aspect="echo-slot">
+                            <span class="aspect-card-name">+Echo Slot</span>
+                            <span class="aspect-card-detail">One more echo</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div id="mobile-controls" aria-hidden="true">
@@ -345,5 +365,6 @@
     </div>
     
     <script type="module" src="src/main.js"></script>
+    <script type="module" src="src/ui/aspectPick.js"></script>
 </body>
 </html>

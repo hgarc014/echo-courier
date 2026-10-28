@@ -1,4 +1,5 @@
 import { pushEchoRun, rogueZoneClear, commitSandEcho } from './systems/sandEcho.js';
+import { chamberClearedByRift, chamberClearedByTimer, chamberClearedByWave } from './rogue/chamberClear.js';
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
@@ -6,7 +7,9 @@ import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing
 import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { generateFloor, ROOM_W } from './data/floorGen.js';
+import { ROOM_W } from './data/floorGen.js';
+import { generateChamber } from './data/secondHandHalls.js';
+import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -16,7 +19,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
-import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo } from './systems/sandRewind.js';
+import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo, canBlinkRewind, applyBlinkRewind, BLINK_COST, BLINK_IFRAMES, bumpMaxSand, refillSand } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -537,6 +540,7 @@ function resetPlayerLoopState() {
     state.player.cloakTimer = 0;
     state.player.dashCooldown = 0;
     state.player.tossCooldown = 0;
+    state.player.invulnTicks = 0;
 }
 
 function loadCurrentEntities() {
@@ -1168,8 +1172,24 @@ export function restartLevel() {
     Object.assign(prevKeys, keys);
 }
 
+function rogueInvulnerable() {
+    return !!(state.rogueRun?.active && (state.player?.invulnTicks | 0) > 0);
+}
+
+/** Apply a fail and stop the frame. Iframes swallow it and let the tick continue. */
+function failUnlessInvuln(reason) {
+    if (!reason) return false;
+    if (rogueInvulnerable()) return false;
+    levelFailed(reason);
+    return true;
+}
+
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
+    // Aspect picker is modal: a clear already happened, so a late hit must not fail the run.
+    if (state.rogueRun?.active && state.rogueChamber?.aspectPending) return;
+    // Blink iframes: the hit does not kill, and does not spend a death-undo.
+    if (rogueInvulnerable()) return;
     // Rogue Run death-undo: spend sand to auto-rewind ~1s instead of dying.
     // Skipped when a package was destroyed (rewind restores only the player).
     if (state.rogueRun?.active && state.sand && !/destroyed/i.test(reason || '') && canDeathUndo(state.sand)) {
@@ -1194,6 +1214,8 @@ export function levelFailed(reason) {
 export function returnToMenu() {
     if (isDemoActive()) stopDemo({ markSeen: false });
     state.rogueRun = null;
+    state.rogueChamber = null;
+    hideAspectPick();
     document.getElementById('run-over')?.classList.add('hidden');
     stopDialogSpeech();
     state.playtesting = false;
@@ -1290,15 +1312,26 @@ export function startPlaytestFromEditor() {
 }
 
 // ---- Roguelike run loop (hand-edit) ----
-// A run = one generated floor played through the playtest path (customLayout), so campaign LEVELS are untouched.
-// Clear (all delivered) or any death / ESC ends the run -> Run Over overlay. Nothing persists mid-run.
+// A run = one Second-hand Halls chamber played through the playtest path (customLayout), so campaign LEVELS are untouched.
+// Clear opens the aspect picker, then Run Over. Any death / ESC ends the run. Aspect bonuses are run-only.
 export function startRogueRun(seed) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
     const meta = loadRogueMeta();
-    const floor = generateFloor(seed);
-    const layout = floor.layout;
+    const chamber = generateChamber(seed);
+    const layout = chamber.layout;
+    const cmeta = chamber.meta;
+    const clear = cmeta.clear;
+    hideAspectPick();
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
-    state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: rogueStartSand(meta) });
+    state.sandRewinding = false;
+    state.rogueChamber = {
+        type: clear === 'kill' ? 'wave' : clear,
+        zone: layout.deliveryZone,
+        ticksLeft: clear === 'timer' ? cmeta.clearSeconds * 60 : null,
+        enemiesLeft: clear === 'kill' ? cmeta.waveCount : null,
+        aspectPending: false
+    };
+    state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
     state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
     state.editorReturnLayout = layout;
     state.customLayout = layout;
@@ -1311,11 +1344,11 @@ export function startRogueRun(seed) {
     document.getElementById('mobile-controls')?.classList.remove('hidden');
     setPlaytestReturnVisible(false);
     state.currentLevelMeta = {
-        name: `Rogue ${floor.meta?.name || 'Floor'}`,
-        obj: `${floor.meta?.obj || 'Reach the exit zone.'} One death ends the run.`,
-        par: floor.meta?.par,
+        name: cmeta.name,
+        obj: cmeta.obj,
+        par: cmeta.par,
         challenge: { desc: 'Rogue run', check: () => false },
-        maxGhosts: (floor.meta?.maxGhosts ?? 2) + meta.echoSlotBonus,
+        maxGhosts: (cmeta.maxGhosts ?? 2) + meta.echoSlotBonus,
         loopTime: rogueLoopTime(meta),
         crackSpeed: 'normal',
         grants: ['dash', 'toss', 'cloak', 'ghostShield'],
@@ -1348,8 +1381,33 @@ export function startRogueRun(seed) {
     syncTouchUi();
 }
 
+// Timer chambers count down. Wave chambers recount guards that are not echo-distracted.
+// Rewind ticks and an open aspect picker do not advance either clock.
+function tickRogueChamber() {
+    if (!state.rogueRun?.active || state.sandRewinding) return;
+    const chamber = state.rogueChamber;
+    if (!chamber || chamber.aspectPending) return;
+    if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') chamber.ticksLeft -= 1;
+    else if (chamber.type === 'wave') {
+        chamber.enemiesLeft = (state.guards || []).filter(g => g && g.state !== 'distracted').length;
+    }
+}
+
+/** Run-only boons from the aspect picker. Does not write rogue meta. */
+export function applyAspect(id) {
+    if (!state.rogueRun?.active) return;
+    if (id === 'sand-tank') {
+        if (state.sand) bumpMaxSand(state.sand, 1);
+    } else if (id === 'start-sand') {
+        if (state.sand) refillSand(state.sand, 0.5);
+    } else if (id === 'echo-slot' && state.currentLevelMeta) {
+        state.currentLevelMeta.maxGhosts = (Number(state.currentLevelMeta.maxGhosts) || 0) + 1;
+    }
+}
+
 function showRunOver(cleared) {
     if (!state.rogueRun?.active) return;
+    hideAspectPick();
     state.rogueRun.active = false;
     state.rogueRun.outcome = cleared ? 'cleared' : 'failed';
     state.sand = null; state.roguePickups = []; // run-only sand bonuses never leak
@@ -1396,7 +1454,7 @@ export function syncRogueShop() {
     const items = shopItems(m);
     document.querySelectorAll('.rogue-shop').forEach(box => {
         const pts = box.querySelector('.rogue-shop-points');
-        if (pts) pts.innerText = 'SHOP POINTS: ' + (m.shopPoints | 0);
+        if (pts) pts.innerText = 'CHRONO DUST: ' + (m.shopPoints | 0);
         const list = box.querySelector('.rogue-shop-list');
         if (!list) return;
         list.innerHTML = '';
@@ -1479,6 +1537,14 @@ function update() {
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
 
+    // Aspect UI is open: do not advance the world, and do not re-check win or fail.
+    if (state.rogueRun?.active && state.rogueChamber?.aspectPending) {
+        updatePrevKeys();
+        return;
+    }
+
+    if (state.rogueRun?.active && state.player && state.player.invulnTicks > 0) state.player.invulnTicks--;
+
     // Sand rewind (Rogue Run only): while E held with sand, move player back and freeze the world.
     // Echoes commit on RELEASE (or sand empty) only if the hold lasted ≥ MIN_ECHO_SEGMENT frames.
     if (state.rogueRun?.active && state.sand && state.failTimer === 0) {
@@ -1516,6 +1582,18 @@ function update() {
         state.sandEchoPending = null;
         state.sandHoldTicks = 0;
         updateSandHud();
+    }
+
+    // Blink rewind. 'f' is toss (isKeyJustPressed); 'b' is free. Rogue Run only.
+    // E-release above still commits a sand echo when the hold lasted >= MIN_ECHO_SEGMENT.
+    if (state.rogueRun?.active && state.sand && state.player && state.failTimer === 0 && !state.sandRewinding
+        && isKeyJustPressed('b') && canBlinkRewind(state.sand)) {
+        const frames = applyBlinkRewind(state.sand, state.player, state.packages);
+        if (frames > 0) {
+            state.player.invulnTicks = BLINK_IFRAMES;
+            SFX.rewind();
+            updateSandHud();
+        }
     }
 
     // Run-only sand pickups: collect on touch (not while rewinding).
@@ -1592,7 +1670,7 @@ function update() {
     state.robots.forEach(r => r.update(state.player, state.activeGhosts, state.walls));
     for (let p of state.projectiles) {
         let fail = p.update(state.walls, state.activeGhosts, state.player, state.packages);
-        if (fail) { levelFailed(fail); return; }
+        if (failUnlessInvuln(fail)) return;
     }
     state.projectiles = state.projectiles.filter(p => p.active);
 
@@ -1654,7 +1732,7 @@ function update() {
     for(let d of state.drones) {
         if (d.alive === false) continue;
         let fail = d.update(state.player, noiseSources);
-        if (fail) { levelFailed(fail); return; }
+        if (failUnlessInvuln(fail)) return;
     }
     if (state.drones.some(d => d.alive === false)) state.drones = state.drones.filter(d => d.alive !== false);
 
@@ -1678,10 +1756,10 @@ function update() {
         if (door && door.gateLocked) door.isOpen = false;
     }
 
-    for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
+    for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (failUnlessInvuln(fail)) return; }
     for (const burrower of state.burrowers || []) burrower.update(allActors);
     syncBossHud();
-    for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
+    for(let c of state.cracks) { let fail = c.update(allActors); if (failUnlessInvuln(fail)) return; }
     // The floor resolves after the strike decision. Drop a mark that the crack
     // update just invalidated so the drawn telegraph is never a broken tile.
     for (const burrower of state.burrowers || []) {
@@ -1741,9 +1819,12 @@ function update() {
     const slabs = collectShieldSlabs(state.player, state.activeGhosts, shieldOn);
     const dashSweep = state.dashSweep; state.dashSweep = null;
     for (const l of state.lasers) {
-        if (state.player.cloakTimer <= 0 && (laserThreatens(l, state.player, slabs) || (dashSweep && laserThreatens(l, dashSweep, slabs)))) { levelFailed("Burned by Laser Grid!"); return; }
+        if (state.player.cloakTimer <= 0 && (laserThreatens(l, state.player, slabs) || (dashSweep && laserThreatens(l, dashSweep, slabs)))) {
+            if (failUnlessInvuln("Burned by Laser Grid!")) return;
+        }
         for (const p of state.packages) {
             if (!p.isDestroyed && p.type === 'fragile' && laserThreatens(l, p, slabs)) {
+                if (rogueInvulnerable()) continue;
                 p.breakApart('vapor'); SFX.break(); SFX.laserHit(); levelFailed("Fragile Package Destroyed!"); return;
             }
         }
@@ -1756,7 +1837,7 @@ function update() {
             walls: state.walls,
             slabs
         });
-        if (fail) { levelFailed(fail); return; }
+        if (failUnlessInvuln(fail)) return;
     }
 
     if (interactJustPressed) {
@@ -1792,7 +1873,7 @@ function update() {
     }
 
     for (let p of state.packages) {
-        let fail = p.update(); if (fail) { levelFailed(fail); return; }
+        let fail = p.update(); if (failUnlessInvuln(fail)) return;
         if (p.isDestroyed) continue; // breakFx still advances inside update()
         
         let pEnvVx = 0, pEnvVy = 0;
@@ -1833,13 +1914,39 @@ function update() {
     }
 
     updateDeliveryProgressUI();
+    tickRogueChamber();
     const requiredPackages = getRequiredPackages();
     let allDelivered = requiredPackages.length > 0 && requiredPackages.every(isPackageDelivered);
     // Rogue floors with no packages clear by the player reaching the delivery zone.
-    if (!allDelivered && state.rogueRun?.active) allDelivered = rogueZoneClear(requiredPackages, state.player, state.deliveryZone);
+    // A set rogueChamber replaces that exit with its own rule (rift / timer / wave).
+    if (!allDelivered && state.rogueRun?.active && !state.rogueChamber?.aspectPending) {
+        const chamber = state.rogueChamber;
+        if (chamber) {
+            if (chamber.type === 'rift') allDelivered = chamberClearedByRift(state.player, chamber.zone || state.deliveryZone);
+            else if (chamber.type === 'timer') allDelivered = chamberClearedByTimer(chamber.ticksLeft);
+            else if (chamber.type === 'wave') allDelivered = chamberClearedByWave(chamber.enemiesLeft);
+        } else {
+            allDelivered = rogueZoneClear(requiredPackages, state.player, state.deliveryZone);
+        }
+    }
     
     if (allDelivered && state.gameState === 'PLAYING' && !isDemoActive()) { 
-        if (state.rogueRun?.active) { SFX.win(); showRunOver(true); return; }
+        if (state.rogueRun?.active) {
+            const chamber = state.rogueChamber;
+            if (chamber?.aspectPending) { updatePrevKeys(); return; }
+            if (chamber) {
+                chamber.aspectPending = true;
+                SFX.win();
+                showAspectPick(id => {
+                    applyAspect(id);
+                    hideAspectPick();
+                    showRunOver(true);
+                });
+                updatePrevKeys();
+                return;
+            }
+            SFX.win(); showRunOver(true); return;
+        }
         SFX.win(); state.gameState = 'LEVEL_COMPLETE'; uiLevelComplete.classList.remove('hidden'); 
         let chalMsg = document.getElementById('challenge-result');
         let nextBtn = document.getElementById('next-level-btn');
