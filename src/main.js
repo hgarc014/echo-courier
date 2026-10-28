@@ -16,7 +16,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
-import { createSandState, tickSand, resetHistory, canRewind, SAND_MAX } from './systems/sandRewind.js';
+import { createSandState, tickSand, resetHistory, canRewind, applyPickup } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -1286,6 +1286,7 @@ export function startRogueRun(seed) {
     const layout = floor.layout;
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
     state.sand = createSandState();
+    state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
     state.editorReturnLayout = layout;
     state.customLayout = layout;
     state.playtesting = true;
@@ -1338,6 +1339,7 @@ function showRunOver(cleared) {
     if (!state.rogueRun?.active) return;
     state.rogueRun.active = false;
     state.rogueRun.outcome = cleared ? 'cleared' : 'failed';
+    state.sand = null; state.roguePickups = []; // run-only sand bonuses never leak
     state.failTimer = 0;
     state.gameState = 'RUN_OVER';
     recordRunEnd(cleared);
@@ -1392,7 +1394,7 @@ function updateSandHud() {
     const on = !!(state.rogueRun?.active && state.sand);
     box.classList.toggle('hidden', !on);
     if (!on) return;
-    const pct = Math.max(0, Math.min(100, (state.sand.sand / SAND_MAX) * 100));
+    const pct = Math.max(0, Math.min(100, (state.sand.sand / state.sand.maxSand) * 100));
     const fill = document.getElementById('sand-fill');
     if (fill) fill.style.width = pct.toFixed(1) + '%';
     box.classList.toggle('sand-rewinding', !!state.sandRewinding);
@@ -1472,6 +1474,15 @@ function update() {
         state.sandEchoPending = null;
         state.sandHoldTicks = 0;
         updateSandHud();
+    }
+
+    // Run-only sand pickups: collect on touch (not while rewinding).
+    if (state.rogueRun?.active && state.sand && !state.sandRewinding && state.failTimer === 0 && state.roguePickups?.length) {
+        const pl = state.player;
+        for (const pk of state.roguePickups) {
+            if (pk.collected || !AABB(pl.x, pl.y, pl.w, pl.h, pk.x, pk.y, pk.w, pk.h)) continue;
+            if (applyPickup(state.sand, pk.type)) { pk.collected = true; SFX.pickup(); updateSandHud(); }
+        }
     }
 
     recordFrame(keys);
@@ -2246,7 +2257,14 @@ function draw() {
     }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
-    state.deliveryZone.render(ctx); drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
+    state.deliveryZone.render(ctx);
+    for (const pk of (state.roguePickups || [])) {
+        if (pk.collected) continue;
+        ctx.save(); ctx.fillStyle = pk.type === 'sand_max' ? '#ffb347' : '#f4d35e'; ctx.globalAlpha = 0.85;
+        ctx.fillRect(pk.x, pk.y, pk.w, pk.h); ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(pk.type === 'sand_max' ? '+MAX' : 'SAND', pk.x + pk.w / 2, pk.y + pk.h / 2 + 3); ctx.restore();
+    }
+    drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
     // Plates draw over beams so a plate under a laser column (W5-L4) stays readable.
     state.lasers.forEach(l => l.render(ctx)); drawShieldShadows(ctx); drawBeamFixtures(ctx); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
