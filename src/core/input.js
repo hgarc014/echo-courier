@@ -1,4 +1,4 @@
-export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, q: false, shift: false, f: false, c: false, esc: false, enter: false };
+export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, q: false, shift: false, f: false, c: false, esc: false, enter: false, e: false };
 export const prevKeys = { ...keys };
 const justPressed = { ...keys };
 const pendingRelease = { ...keys };
@@ -14,6 +14,7 @@ const CODE_TO_KEY = {
     ShiftLeft: 'shift', ShiftRight: 'shift',
     KeyF: 'f',
     KeyC: 'c',
+    KeyE: 'e',
     Escape: 'esc',
     Enter: 'enter', NumpadEnter: 'enter',
 };
