@@ -143,6 +143,24 @@ check('patrol corridor keeps every guard path point at least 200px from the cour
     }
 });
 
+check('rift dash keeps every guard path point at least 200px from the courier', () => {
+    for (let s = 1; s <= 40; s++) {
+        const { layout, info } = generateChamber(s, 'rift-dash');
+        const p = layout.player;
+        assert.equal(info.clear, 'rift');
+        assert.ok(layout.guards.length >= 1);
+        assert.equal(layout.lasers.length >= 1, true);
+        assert.deepEqual(layout.packages, []);
+        assert.deepEqual(layout.plates, []);
+        for (const g of layout.guards) {
+            for (const pt of g.path) {
+                const d = Math.hypot(pt.x - p.x, pt.y - p.y);
+                assert.ok(d >= 200, `seed ${s} (${pt.x},${pt.y}) is ${d.toFixed(1)}px from the courier`);
+            }
+        }
+    }
+});
+
 check('bodies stay off walls and off the courier; rift chambers keep the zone clear', () => {
     const body = 30;
     for (let s = 1; s <= 25; s++) {
