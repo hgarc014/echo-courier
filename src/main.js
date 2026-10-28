@@ -1,4 +1,5 @@
 import { pushEchoRun, rogueZoneClear, commitSandEcho } from './systems/sandEcho.js';
+import { chamberClearedByRift, chamberClearedByTimer, chamberClearedByWave } from './rogue/chamberClear.js';
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
@@ -1313,6 +1314,7 @@ export function startRogueRun(seed) {
     const floor = generateFloor(seed);
     const layout = floor.layout;
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
+    state.rogueChamber = null;
     state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: rogueStartSand(meta) });
     state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
     state.editorReturnLayout = layout;
@@ -1868,7 +1870,17 @@ function update() {
     const requiredPackages = getRequiredPackages();
     let allDelivered = requiredPackages.length > 0 && requiredPackages.every(isPackageDelivered);
     // Rogue floors with no packages clear by the player reaching the delivery zone.
-    if (!allDelivered && state.rogueRun?.active) allDelivered = rogueZoneClear(requiredPackages, state.player, state.deliveryZone);
+    // A set rogueChamber replaces that exit with its own rule (rift / timer / wave).
+    if (!allDelivered && state.rogueRun?.active) {
+        const chamber = state.rogueChamber;
+        if (chamber) {
+            if (chamber.type === 'rift') allDelivered = chamberClearedByRift(state.player, chamber.zone || state.deliveryZone);
+            else if (chamber.type === 'timer') allDelivered = chamberClearedByTimer(chamber.ticksLeft);
+            else if (chamber.type === 'wave') allDelivered = chamberClearedByWave(chamber.enemiesLeft);
+        } else {
+            allDelivered = rogueZoneClear(requiredPackages, state.player, state.deliveryZone);
+        }
+    }
     
     if (allDelivered && state.gameState === 'PLAYING' && !isDemoActive()) { 
         if (state.rogueRun?.active) { SFX.win(); showRunOver(true); return; }
