@@ -77,12 +77,13 @@ check('chamber types cover kill, rift, and timer with guard pressure only', () =
 });
 
 check('biome order is Second-hand Halls then Hourglass Warrens', () => {
-    assert.deepEqual(BIOME_ORDER.map(b => b.id), ['second-hand-halls', 'hourglass-warrens']);
-    assert.deepEqual(BIOME_ORDER.map(b => b.name), ['Second-hand Halls', WARREN_NAME]);
+    assert.deepEqual(BIOME_ORDER.map(b => b.id).slice(0, 2), ['second-hand-halls', 'hourglass-warrens']);
+    assert.deepEqual(BIOME_ORDER.map(b => b.name).slice(0, 2), ['Second-hand Halls', WARREN_NAME]);
+    assert.equal(BIOME_ORDER[2].id, 'echo-courts');
     assert.equal(BIOME_ORDER[0].generateChamber, generateHalls);
     assert.equal(BIOME_ORDER[1].generateChamber, generateChamber);
     assert.equal(nextBiomeIndex(0), 1);
-    assert.equal(nextBiomeIndex(1), null);
+    assert.equal(nextBiomeIndex(1), 2);
     assert.deepEqual(generateForBiome('second-hand-halls', 4, 'patrol-corridor'), generateHalls(4, 'patrol-corridor'));
     assert.deepEqual(generateForBiome('hourglass-warrens', 4, 'sand-funnel'), generateChamber(4, 'sand-funnel'));
     assert.deepEqual(generateForBiome(undefined, 4), generateHalls(4));
@@ -479,12 +480,29 @@ check('a fresh run starts in Halls and a clear advances into Hourglass Warrens',
         assert.equal(state.rogueChamber.aspectPending, true);
         assert.equal(kicker.textContent, WARREN_NAME);
         chooseAspect('start-sand');
+        assert.equal(state.gameState, 'PLAYING');
+        assert.equal(state.rogueRun.outcome, null);
+        assert.equal(state.rogueRun.active, true);
+        assert.equal(state.rogueRun.biomeIndex, 2);
+        assert.equal(state.currentLevelMeta.hall, 'Echo Courts');
+        assert.equal(state.currentLevelMeta.biome, 'echo-courts');
+        quiet();
+        state.rogueChamber.aspectPending = false;
+        if (state.rogueChamber.type === 'timer') state.rogueChamber.ticksLeft = 0;
+        else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
+        else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+        release();
+        main.stepSimulation();
+        assert.equal(state.rogueChamber.aspectPending, true);
+        assert.equal(kicker.textContent, 'Echo Courts');
+        chooseAspect('sand-tank');
         assert.equal(state.gameState, 'RUN_OVER');
         assert.equal(state.rogueRun.outcome, 'cleared');
         assert.equal(state.rogueRun.active, false);
     } finally {
         document.getElementById = prevGet;
     }
+
 });
 
 await Promise.all(jobs);
