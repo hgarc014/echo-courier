@@ -1411,7 +1411,7 @@ export function syncRogueShop() {
     const items = shopItems(m);
     document.querySelectorAll('.rogue-shop').forEach(box => {
         const pts = box.querySelector('.rogue-shop-points');
-        if (pts) pts.innerText = 'SHOP POINTS: ' + (m.shopPoints | 0);
+        if (pts) pts.innerText = 'CHRONO DUST: ' + (m.shopPoints | 0);
         const list = box.querySelector('.rogue-shop-list');
         if (!list) return;
         list.innerHTML = '';
