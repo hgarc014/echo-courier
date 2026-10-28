@@ -1,6 +1,7 @@
 // Chamber clear predicates + the Rogue Run win hook.
-// A generated chamber ticks (timer / wave) and a clear opens the aspect picker
-// before Run Over. A null chamber still clears by standing in the exit zone.
+// A generated chamber ticks (timer / wave) and a clear opens the aspect picker.
+// An earlier biome advances after the pick; the last biome still ends at Run Over.
+// A null chamber still clears by standing in the exit zone.
 // Run: node tests/chamberClear.test.mjs
 import assert from 'node:assert/strict';
 import { chamberClearedByRift, chamberClearedByTimer, chamberClearedByWave } from '../src/rogue/chamberClear.js';
@@ -55,6 +56,28 @@ function guard(st) {
     return { state: st, update() { return null; } };
 }
 
+// Walk Hourglass (and any later biome) to Run Over without a second echo-slot.
+function settleRogueClear() {
+    let steps = 0;
+    while (state.rogueRun?.active && state.gameState === 'PLAYING' && steps++ < 6) {
+        release();
+        state.guards = [];
+        state.cameras = [];
+        state.lasers = [];
+        state.drones = [];
+        const chamber = state.rogueChamber;
+        if (!chamber || chamber.aspectPending) break;
+        if (chamber.type === 'timer') chamber.ticksLeft = 0;
+        else if (chamber.type === 'wave') chamber.enemiesLeft = 0;
+        else if (chamber.type === 'rift') chamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+        else break;
+        main.stepSimulation();
+        if (state.gameState !== 'PLAYING') break;
+        if (state.rogueChamber?.aspectPending) chooseAspect('sand-tank');
+        else break;
+    }
+}
+
 release();
 main.startRogueRun(1);
 assert.equal(state.currentLevelMeta.name, 'Timed Hold');
@@ -91,7 +114,11 @@ assert.equal(state.rogueRun.outcome, null);
 const ghosts = state.currentLevelMeta.maxGhosts;
 chooseAspect('echo-slot');
 assert.equal(state.currentLevelMeta.maxGhosts, ghosts + 1);
+assert.equal(state.rogueRun.outcome, null, 'Halls clear advances into the next biome');
+assert.equal(state.rogueRun.active, true);
+settleRogueClear();
 assert.equal(state.rogueRun.outcome, 'cleared');
+assert.equal(state.currentLevelMeta.maxGhosts, ghosts + 1);
 
 begin();
 state.sand.sand = 0;
@@ -133,6 +160,7 @@ main.stepSimulation();
 assert.equal(state.rogueChamber.enemiesLeft, 0);
 assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('start-sand');
+settleRogueClear();
 assert.equal(state.rogueRun.outcome, 'cleared');
 
 begin();
@@ -143,6 +171,7 @@ state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 40, h: 40 }
 main.stepSimulation();
 assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('sand-tank');
+settleRogueClear();
 assert.equal(state.rogueRun.outcome, 'cleared');
 
 begin();
@@ -153,6 +182,7 @@ standInExit();
 main.stepSimulation();
 assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('echo-slot');
+settleRogueClear();
 assert.equal(state.rogueRun.outcome, 'cleared');
 
 begin();
