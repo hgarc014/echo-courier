@@ -1312,8 +1312,9 @@ export function startPlaytestFromEditor() {
 }
 
 // ---- Roguelike run loop (hand-edit) ----
-// A run walks BIOME_ORDER (Second-hand Halls, then Hourglass Warrens) through the
-// playtest path (customLayout), so campaign LEVELS are untouched.
+// A run walks BIOME_ORDER (Second-hand Halls, Hourglass Warrens, Echo Courts).
+// The Still is not in the order yet. Campaign LEVELS stay off this path
+// (playtest path / customLayout).
 // Clear opens the aspect picker, then the next biome. The last biome ends at Run Over.
 // Any death / ESC ends the run. Aspect bonuses are run-only and carry across biomes.
 function enterRogueChamber(biomeIndex, fresh) {
