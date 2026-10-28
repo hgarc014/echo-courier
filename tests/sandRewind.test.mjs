@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createSandState, pushSnapshot, tickSand, applySnapshot, canRewind, HISTORY_CAP, SAND_MAX } from '../src/systems/sandRewind.js';
+import { createSandState, pushSnapshot, tickSand, applySnapshot, canRewind, HISTORY_CAP, SAND_MAX, refillSand, bumpMaxSand, applyPickup, PICKUP_REFILL, PICKUP_MAX_BONUS } from '../src/systems/sandRewind.js';
 
 const mkPlayer = () => ({ x: 0, y: 0, w: 10, h: 10, facingX: 1, facingY: 0, cloakTimer: 0, dashCooldown: 0, tossCooldown: 0 });
 
@@ -25,4 +25,15 @@ const mkPlayer = () => ({ x: 0, y: 0, w: 10, h: 10, facingX: 1, facingY: 0, cloa
 // carried package reattached
 { const p = mkPlayer(); const pkg = { id: 'k', w: 4, h: 4, carriedBy: null };
   applySnapshot(p, [pkg], { x: 10, y: 10, carriedPackageId: 'k' }); assert.equal(pkg.carriedBy, 'player'); assert.equal(pkg.x, 13); }
+// maxSand: bump raises cap, refill and tick respect it
+{ const s = createSandState(); assert.equal(s.maxSand, SAND_MAX);
+  s.sand = 1; bumpMaxSand(s, 1); assert.equal(s.maxSand, SAND_MAX + 1); assert.equal(s.sand, 2);
+  refillSand(s, 10); assert.equal(s.sand, SAND_MAX + 1);
+  s.sand = s.maxSand - 0.001; const p = mkPlayer();
+  for (let i = 0; i < 60; i++) tickSand(s, { holding: false, player: p, packages: [], tick: i });
+  assert.equal(s.sand, s.maxSand); }
+// applyPickup
+{ const s = createSandState(); s.sand = 0; assert.equal(applyPickup(s, 'sand_refill'), true); assert.equal(s.sand, PICKUP_REFILL);
+  assert.equal(applyPickup(s, 'sand_max'), true); assert.equal(s.maxSand, SAND_MAX + PICKUP_MAX_BONUS); assert.equal(s.sand, PICKUP_REFILL + PICKUP_MAX_BONUS);
+  assert.equal(applyPickup(s, 'nope'), false); }
 console.log('sandRewind ok');

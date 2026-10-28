@@ -5,7 +5,7 @@ export const SAND_REFILL_RATE = 0.25;   // seconds refilled per real second when
 export const HISTORY_CAP = 180;         // ~3s at 60Hz
 
 export function createSandState() {
-    return { sand: SAND_MAX, history: [], rewinding: false };
+    return { sand: SAND_MAX, maxSand: SAND_MAX, history: [], rewinding: false };
 }
 
 export function snapshotPlayer(player, packages, tick) {
@@ -65,13 +65,29 @@ export function tickSand(sand, { holding, player, packages, tick }) {
         return true;
     }
     sand.rewinding = false;
-    sand.sand = Math.min(SAND_MAX, sand.sand + dt * SAND_REFILL_RATE);
+    sand.sand = Math.min(sand.maxSand, sand.sand + dt * SAND_REFILL_RATE);
     pushSnapshot(sand, snapshotPlayer(player, packages, tick));
     return false;
 }
 
-export function refillSand(sand, amount = SAND_MAX) {
-    sand.sand = Math.min(SAND_MAX, sand.sand + amount);
+export function refillSand(sand, amount = sand.maxSand) {
+    sand.sand = Math.min(sand.maxSand, sand.sand + amount);
+}
+
+// Run-only bonus: raise the cap and top up current sand by the same amount.
+export function bumpMaxSand(sand, extra) {
+    sand.maxSand += extra;
+    sand.sand = Math.min(sand.maxSand, sand.sand + extra);
+}
+
+export const PICKUP_REFILL = 1.5;   // sand_refill: +1.5s, capped at maxSand
+export const PICKUP_MAX_BONUS = 1.0; // sand_max: +1.0s cap and +1.0s current
+
+export function applyPickup(sand, type) {
+    if (type === 'sand_refill') refillSand(sand, PICKUP_REFILL);
+    else if (type === 'sand_max') bumpMaxSand(sand, PICKUP_MAX_BONUS);
+    else return false;
+    return true;
 }
 
 export function resetHistory(sand) { sand.history.length = 0; sand.rewinding = false; }
