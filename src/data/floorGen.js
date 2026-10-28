@@ -79,10 +79,30 @@ export function generateFloor(seed, roomCount) {
         deliveryZone: { x: W - 180, y: zoneY, w: 120, h: 120 },
         walls, doors, plates,
         packages: [{ x: 300, y: pkgY, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+        pickups: placePickups(seed, n),
         lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], hints: []
     };
     const meta = floorMeta(seed, n);
     return { layout, meta, info: { seed, roomCount: n, echoRoom, airlock } };
+}
+
+export const PICKUP_SIZE = 28;
+// 1-2 run-only sand pickups (sand_refill | sand_max) in room interiors. Separate RNG stream so floor shape is unchanged.
+// Bands y=120..200 / 380..460 avoid walls, the doorway lane plates (y=280) and corner plates (y=60/500).
+export function placePickups(seed, n) {
+    const rng = makeRng(((Number(seed) >>> 0) ^ 0x5A4D) || 7);
+    const count = pick(rng, 1, 2);
+    const rooms = [];
+    for (let i = 0; i < n; i++) rooms.push(i);
+    const out = [];
+    for (let k = 0; k < count; k++) {
+        const room = rooms.splice(pick(rng, 0, rooms.length - 1), 1)[0];
+        const x = room * ROOM_W + pick(rng, 8, room === n - 1 ? 18 : 23) * 20; // last room: stay left of delivery zone
+        const y = rng() < 0.5 ? pick(rng, 6, 10) * 20 : pick(rng, 19, 22) * 20;
+        const type = rng() < 0.7 ? 'sand_refill' : 'sand_max';
+        out.push({ id: `pickup${k}`, x, y, w: PICKUP_SIZE, h: PICKUP_SIZE, type });
+    }
+    return out;
 }
 
 export function floorMeta(seed, roomCount) {

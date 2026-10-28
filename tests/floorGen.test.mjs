@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { replaySolution } from './harness/replay.mjs';
 import { recordFloor, runNaiveFloor } from './harness/recordFloor.mjs';
-import { generateFloor, ROOM_W } from '../src/data/floorGen.js';
+import { generateFloor, ROOM_W, H } from '../src/data/floorGen.js';
 
 let failures = 0;
 function check(name, fn) {
@@ -13,6 +13,25 @@ function check(name, fn) {
     catch (e) { failures++; console.log(`  FAIL ${name}\n       ${e.message}`); }
 }
 const SEEDS = [1, 2, 3, 7, 42, 1234];
+
+check('floor has 1-2 seeded run pickups in walkable interiors (sand_refill|sand_max, 28x28)', () => {
+    for (let s = 1; s <= 200; s++) {
+        const { layout } = generateFloor(s);
+        assert.ok(Array.isArray(layout.pickups) && layout.pickups.length >= 1 && layout.pickups.length <= 2);
+        for (const p of layout.pickups) {
+            assert.ok(p.type === 'sand_refill' || p.type === 'sand_max');
+            assert.equal(p.w, 28); assert.equal(p.h, 28); assert.ok(p.id);
+            assert.ok(p.x > 0 && p.x + p.w < layout.width && p.y > 20 && p.y + p.h < H - 20);
+            const hit = (r) => p.x < r.x + (r.w ?? 40) && p.x + p.w > r.x && p.y < r.y + (r.h ?? 40) && p.y + p.h > r.y;
+            for (const w of layout.walls) assert.ok(!hit(w), `seed ${s} pickup in wall`);
+            for (const d of layout.doors) assert.ok(!hit(d), `seed ${s} pickup in door`);
+            for (const pl of layout.plates) assert.ok(!hit(pl), `seed ${s} pickup on plate`);
+            assert.ok(!hit(layout.deliveryZone), `seed ${s} pickup in zone`);
+        }
+    }
+    const types = new Set(); for (let s = 1; s <= 200; s++) generateFloor(s).layout.pickups.forEach(p => types.add(p.type));
+    assert.equal(types.size, 2);
+});
 
 check('same seed gives the same floor; different seeds vary', () => {
     for (const s of SEEDS) assert.deepEqual(generateFloor(s), generateFloor(s));
