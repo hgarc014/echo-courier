@@ -1,0 +1,249 @@
+{
+ "format": "echo-courier-solution/v1",
+ "level": null,
+ "levelName": "Floor 2",
+ "layout": {
+  "width": 3000,
+  "height": 600,
+  "mapWidth": 3000,
+  "mapHeight": 600,
+  "player": {
+   "x": 100,
+   "y": 285
+  },
+  "deliveryZone": {
+   "x": 2820,
+   "y": 200,
+   "w": 120,
+   "h": 120
+  },
+  "walls": [
+   {
+    "x": 0,
+    "y": 0,
+    "w": 3000,
+    "h": 20
+   },
+   {
+    "x": 0,
+    "y": 580,
+    "w": 3000,
+    "h": 20
+   },
+   {
+    "x": 0,
+    "y": 0,
+    "w": 20,
+    "h": 600
+   },
+   {
+    "x": 2980,
+    "y": 0,
+    "w": 20,
+    "h": 600
+   },
+   {
+    "x": 580,
+    "y": 20,
+    "w": 20,
+    "h": 220
+   },
+   {
+    "x": 580,
+    "y": 360,
+    "w": 20,
+    "h": 220
+   },
+   {
+    "x": 1180,
+    "y": 20,
+    "w": 40,
+    "h": 220
+   },
+   {
+    "x": 1180,
+    "y": 360,
+    "w": 40,
+    "h": 220
+   },
+   {
+    "x": 1780,
+    "y": 20,
+    "w": 20,
+    "h": 220
+   },
+   {
+    "x": 1780,
+    "y": 360,
+    "w": 20,
+    "h": 220
+   },
+   {
+    "x": 2380,
+    "y": 20,
+    "w": 20,
+    "h": 220
+   },
+   {
+    "x": 2380,
+    "y": 360,
+    "w": 20,
+    "h": 220
+   }
+  ],
+  "doors": [
+   {
+    "x": 580,
+    "y": 240,
+    "w": 20,
+    "h": 120,
+    "id": "d0",
+    "type": "standard"
+   },
+   {
+    "x": 1180,
+    "y": 240,
+    "w": 20,
+    "h": 120,
+    "id": "d1a",
+    "type": "standard"
+   },
+   {
+    "x": 1200,
+    "y": 240,
+    "w": 20,
+    "h": 120,
+    "id": "d1b",
+    "type": "standard"
+   },
+   {
+    "x": 1780,
+    "y": 240,
+    "w": 20,
+    "h": 120,
+    "id": "d2",
+    "type": "standard"
+   },
+   {
+    "x": 2380,
+    "y": 240,
+    "w": 20,
+    "h": 120,
+    "id": "d3",
+    "type": "standard"
+   }
+  ],
+  "plates": [
+   {
+    "x": 570,
+    "y": 280,
+    "linkedIds": [
+     "d0"
+    ],
+    "id": "p0",
+    "type": "standard"
+   },
+   {
+    "x": 660,
+    "y": 60,
+    "linkedIds": [
+     "d1a"
+    ],
+    "id": "p1top",
+    "type": "standard"
+   },
+   {
+    "x": 680,
+    "y": 500,
+    "linkedIds": [
+     "d1b"
+    ],
+    "id": "p1bot",
+    "type": "standard"
+   },
+   {
+    "x": 1770,
+    "y": 280,
+    "linkedIds": [
+     "d2"
+    ],
+    "id": "p2",
+    "type": "standard"
+   },
+   {
+    "x": 2370,
+    "y": 280,
+    "linkedIds": [
+     "d3"
+    ],
+    "id": "p3",
+    "type": "standard"
+   }
+  ],
+  "hints": [],
+  "packages": [
+   {
+    "x": 300,
+    "y": 320,
+    "id": "pkg1",
+    "packageType": "standard",
+    "requiredForDelivery": true
+   }
+  ],
+  "lasers": [],
+  "guards": [],
+  "cameras": [],
+  "drones": [],
+  "winds": [],
+  "statics": [],
+  "cracks": [],
+  "robots": [],
+  "burrowers": [],
+  "gatekeepers": [],
+  "prisms": [],
+  "crackSpeed": "normal",
+  "meta": {
+   "name": "Floor 2",
+   "story": {
+    "speaker": "",
+    "text": ""
+   },
+   "obj": "Cross 5 rooms. One airlock needs an echo on a plate.",
+   "grants": [],
+   "maxGhosts": 2,
+   "crackSpeed": "normal",
+   "par": 3
+  }
+ },
+ "meta": {
+  "name": "Floor 2",
+  "maxGhosts": 2,
+  "grants": [],
+  "crackSpeed": "normal"
+ },
+ "loops": [
+  [
+   ["d", 141],
+   ["w", 55],
+   ["", 4],
+   ["r", 1]
+  ],
+  [
+   ["d", 162],
+   ["s", 55],
+   ["", 4],
+   ["r", 1]
+  ],
+  [
+   ["d", 66],
+   ["s", 9],
+   ["space", 1],
+   ["", 1],
+   ["w", 9],
+   ["d", 635],
+   ["w", 11],
+   ["space", 1]
+  ]
+ ],
+ "completedLoops": 3
+}

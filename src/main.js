@@ -5,6 +5,8 @@ import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing
 import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
+import { generateFloor, ROOM_W } from './data/floorGen.js';
+import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
@@ -556,6 +558,12 @@ function applyLoadedLevel(setupData) {
 
 function syncGameplayCamera() {
     if (state.gameState === 'EDITOR' || !state.player) return;
+    if (state.currentLevelMeta?.isRogue) {
+        // Frame the player's whole room (ROOM_W <= VIEW_WIDTH) so airlock plates in opposite corners stay on-screen.
+        const room = Math.floor((state.player.x + state.player.w / 2) / ROOM_W);
+        followWorldPoint(room * ROOM_W + ROOM_W / 2, state.player.y + state.player.h / 2);
+        return;
+    }
     followWorldPoint(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
 }
 
@@ -1170,6 +1178,8 @@ export function levelFailed(reason) {
 }
 export function returnToMenu() {
     if (isDemoActive()) stopDemo({ markSeen: false });
+    state.rogueRun = null;
+    document.getElementById('run-over')?.classList.add('hidden');
     stopDialogSpeech();
     state.playtesting = false;
     state.customLayout = null;
@@ -1186,7 +1196,8 @@ function setPlaytestReturnVisible(on) {
 }
 
 function handleEscape() {
-    if (state.playtesting) returnToEditor();
+    if (state.rogueRun?.active) showRunOver(false);
+    else if (state.playtesting) returnToEditor();
     else returnToMenu();
 }
 
@@ -1263,6 +1274,101 @@ export function startPlaytestFromEditor() {
     syncTouchUi();
 }
 
+// ---- Roguelike run loop (hand-edit) ----
+// A run = one generated floor played through the playtest path (customLayout), so campaign LEVELS are untouched.
+// Clear (all delivered) or any death / ESC ends the run -> Run Over overlay. Nothing persists mid-run.
+export function startRogueRun(seed) {
+    seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
+    const meta = loadRogueMeta();
+    const floor = generateFloor(seed);
+    const layout = floor.layout;
+    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
+    state.editorReturnLayout = layout;
+    state.customLayout = layout;
+    state.playtesting = true;
+    document.getElementById('run-over')?.classList.add('hidden');
+    document.getElementById('title-screen')?.classList.add('hidden');
+    uiAppLayout.classList.remove('hidden');
+    document.querySelector('.top-hud')?.classList.remove('hidden');
+    document.querySelector('.bottom-hud')?.classList.remove('hidden');
+    document.getElementById('mobile-controls')?.classList.remove('hidden');
+    setPlaytestReturnVisible(false);
+    state.currentLevelMeta = {
+        name: `Rogue ${floor.meta?.name || 'Floor'}`,
+        obj: `${floor.meta?.obj || 'Deliver the package.'} One death ends the run.`,
+        par: floor.meta?.par,
+        challenge: { desc: 'Rogue run', check: () => false },
+        maxGhosts: (floor.meta?.maxGhosts ?? 2) + meta.echoSlotBonus,
+        loopTime: rogueLoopTime(meta),
+        crackSpeed: 'normal',
+        grants: ['dash', 'toss', 'cloak', 'ghostShield'],
+        isPlaytest: true,
+        isRogue: true
+    };
+    applyLevelAbilityOverrides(state.currentLevelMeta);
+    state.worldUnlockedAbilities = null;
+    state.bossCheckpoint = null; state.bossCheckpointLive = false; state.pendingBossIntro = null;
+    document.getElementById('level-display').innerText = 'ROGUE';
+    document.getElementById('objective-text').innerText = state.currentLevelMeta.obj;
+    applyLevelHint(state.currentLevelMeta);
+    clearGatekeeperCheckpoint();
+    applyLoadedLevel(deserializeLevel({ ...layout }));
+    beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
+    updateHUD();
+    state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
+    updateDeliveryProgressUI();
+    applyChallengeHud(state.currentLevelMeta, state.currentLevelIndex);
+    state.pastRuns = []; state.lastRunFailed = false; state.loopFails = 0; state.loopNumber = 1; state.currentRun = []; state.currentTick = 0; state.activeGhosts = [];
+    state.failTimer = 0; state.failMessage = ""; state.alarmState = false;
+    clearLoopFx();
+    uiLevelComplete.classList.add('hidden');
+    uiGameOver.classList.add('hidden');
+    syncLoopCountUI();
+    hideLevelDialog();
+    startMusic();
+    state.gameState = 'PLAYING';
+    Object.assign(prevKeys, keys);
+    syncTouchUi();
+}
+
+function showRunOver(cleared) {
+    if (!state.rogueRun?.active) return;
+    state.rogueRun.active = false;
+    state.rogueRun.outcome = cleared ? 'cleared' : 'failed';
+    state.failTimer = 0;
+    state.gameState = 'RUN_OVER';
+    recordRunEnd(cleared);
+    const el = document.getElementById('run-over');
+    if (!el) return;
+    const title = document.getElementById('run-over-title');
+    if (title) { title.innerText = cleared ? 'FLOOR CLEARED' : 'RUN FAILED'; title.style.color = cleared ? '#00f3ff' : '#ff3366'; }
+    syncRunOverUnlock();
+    el.classList.remove('hidden');
+}
+
+function syncRunOverUnlock() {
+    const u = nextUnlock();
+    const btn = document.getElementById('run-over-unlock-btn');
+    const msg = document.getElementById('run-over-msg');
+    const taken = !!state.rogueRun?.unlockTaken;
+    if (btn) { btn.classList.toggle('hidden', !u || taken); if (u) btn.innerText = 'UNLOCK: ' + u.label; }
+    if (msg) msg.innerText = taken ? 'Unlock saved.' : (u ? 'Claim one meta unlock:' : 'All rogue unlocks owned.');
+}
+
+export function claimRogueUnlock() {
+    if (!state.rogueRun || state.rogueRun.active || state.rogueRun.unlockTaken) return;
+    grantUnlock();
+    state.rogueRun.unlockTaken = true;
+    syncRunOverUnlock();
+    syncRogueHub();
+}
+
+export function syncRogueHub() {
+    const m = loadRogueMeta();
+    const el = document.getElementById('rogue-meta-info');
+    if (el) el.innerText = `Echo slots: ${rogueMaxGhosts(m)}  |  Record length: ${rogueLoopTime(m)}s  |  Runs: ${m.runs} (cleared ${m.clears})`;
+}
+
 export function returnToEditor() {
     if (isDemoActive()) stopDemo({ markSeen: false });
     const snapshot = state.editorReturnLayout;
@@ -1318,7 +1424,7 @@ function update() {
     if (state.failTimer > 0) {
         state.failTimer--;
         for (const p of state.packages) if (p.breakFx) p.update();
-        if (state.failTimer === 0) resetRun();
+        if (state.failTimer === 0) { if (state.rogueRun?.active) showRunOver(false); else resetRun(); }
         updatePrevKeys();
         return;
     }
@@ -1622,6 +1728,7 @@ function update() {
     let allDelivered = requiredPackages.length > 0 && requiredPackages.every(isPackageDelivered);
     
     if (allDelivered && state.gameState === 'PLAYING' && !isDemoActive()) { 
+        if (state.rogueRun?.active) { SFX.win(); showRunOver(true); return; }
         SFX.win(); state.gameState = 'LEVEL_COMPLETE'; uiLevelComplete.classList.remove('hidden'); 
         let chalMsg = document.getElementById('challenge-result');
         let nextBtn = document.getElementById('next-level-btn');
@@ -2342,6 +2449,10 @@ window.onload = () => {
     const exportBtn = document.getElementById('export-solution-btn');
     if (exportBtn) exportBtn.hidden = !isDevUrlEnabled();
     window.returnToEditor = returnToEditor;
+    window.startRogueRun = () => startRogueRun();
+    window.restartRogueRun = () => startRogueRun();
+    window.claimRogueUnlock = claimRogueUnlock;
+    window.openRogueHub = () => { syncRogueHub(); showSubMenu('rogue'); };
     window.nextLevel = () => {
         if (state.playtesting || state.currentLevelMeta?.isPlaytest) { returnToEditor(); return; }
         let nextIndex = getNextLevelIndex(state.currentLevelIndex);

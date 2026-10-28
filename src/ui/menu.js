@@ -16,6 +16,7 @@ export function showSubMenu(menuId) {
     document.getElementById('sub-tutorials')?.classList.add('hidden');
     document.getElementById('sub-shop').classList.add('hidden');
     document.getElementById('sub-settings').classList.add('hidden');
+    document.getElementById('sub-rogue')?.classList.add('hidden');
     if (menuId === 'main') document.getElementById('main-menu-nav').classList.remove('hidden');
     else document.getElementById('sub-' + menuId).classList.remove('hidden');
     const title = document.getElementById('title-screen');
@@ -93,6 +94,7 @@ export function initMenu() {
     document.getElementById('app-layout').classList.add('hidden');
     document.getElementById('level-complete').classList.add('hidden');
     document.getElementById('game-over').classList.add('hidden');
+    document.getElementById('run-over')?.classList.add('hidden');
     showSubMenu('main');
     
     let uiTutorialGrid = document.getElementById('tutorial-select-grid');
