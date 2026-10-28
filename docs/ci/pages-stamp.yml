@@ -1,0 +1,54 @@
+# Install this file at .github/workflows/pages-stamp.yml.
+# It is stored under docs/ci/ because the push token is an OAuth app without the
+# workflow scope (same constraint as docs/ci/test.yml). GitHub rejects that path.
+#
+# Stamp the home footer with this push's SHA, then deploy that tree to GitHub Pages.
+# GITHUB_SHA is the commit that was pushed, so the live footer matches the main tip.
+# This job does not commit. A follow-up commit would lag one sha and could loop.
+#
+# One-time repo setting after install: Settings → Pages → Source: GitHub Actions.
+# While Pages stays "Deploy from branch: main /", the site serves the committed
+# src/buildInfo.js, which lags the tip by the stamp commit.
+
+name: pages-stamp
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stamp footer from the deploy SHA
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/stamp-build.mjs
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload stamped site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
