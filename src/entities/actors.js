@@ -108,6 +108,7 @@ export class PlayerEntity extends Entity {
         this.cloakTimer = 0;
         this.dashCooldown = 0;
         this.tossCooldown = 0;
+        this.invulnTicks = 0;
     }
     render(ctx) {
         const t = state.currentTick;

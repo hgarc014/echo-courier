@@ -16,7 +16,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
-import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo } from './systems/sandRewind.js';
+import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo, canBlinkRewind, applyBlinkRewind, BLINK_IFRAMES } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -537,6 +537,7 @@ function resetPlayerLoopState() {
     state.player.cloakTimer = 0;
     state.player.dashCooldown = 0;
     state.player.tossCooldown = 0;
+    state.player.invulnTicks = 0;
 }
 
 function loadCurrentEntities() {
@@ -1168,8 +1169,22 @@ export function restartLevel() {
     Object.assign(prevKeys, keys);
 }
 
+function rogueInvulnerable() {
+    return !!(state.rogueRun?.active && (state.player?.invulnTicks | 0) > 0);
+}
+
+/** Apply a fail and stop the frame. Iframes swallow it and let the tick continue. */
+function failUnlessInvuln(reason) {
+    if (!reason) return false;
+    if (rogueInvulnerable()) return false;
+    levelFailed(reason);
+    return true;
+}
+
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
+    // Blink iframes: the hit does not kill, and does not spend a death-undo.
+    if (rogueInvulnerable()) return;
     // Rogue Run death-undo: spend sand to auto-rewind ~1s instead of dying.
     // Skipped when a package was destroyed (rewind restores only the player).
     if (state.rogueRun?.active && state.sand && !/destroyed/i.test(reason || '') && canDeathUndo(state.sand)) {
@@ -1479,6 +1494,8 @@ function update() {
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
 
+    if (state.rogueRun?.active && state.player && state.player.invulnTicks > 0) state.player.invulnTicks--;
+
     // Sand rewind (Rogue Run only): while E held with sand, move player back and freeze the world.
     // Echoes commit on RELEASE (or sand empty) only if the hold lasted ≥ MIN_ECHO_SEGMENT frames.
     if (state.rogueRun?.active && state.sand && state.failTimer === 0) {
@@ -1516,6 +1533,18 @@ function update() {
         state.sandEchoPending = null;
         state.sandHoldTicks = 0;
         updateSandHud();
+    }
+
+    // Blink rewind. 'f' is toss (isKeyJustPressed); 'b' is free. Rogue Run only.
+    // E-release above still commits a sand echo when the hold lasted >= MIN_ECHO_SEGMENT.
+    if (state.rogueRun?.active && state.sand && state.player && state.failTimer === 0 && !state.sandRewinding
+        && isKeyJustPressed('b') && canBlinkRewind(state.sand)) {
+        const frames = applyBlinkRewind(state.sand, state.player, state.packages);
+        if (frames > 0) {
+            state.player.invulnTicks = BLINK_IFRAMES;
+            SFX.rewind();
+            updateSandHud();
+        }
     }
 
     // Run-only sand pickups: collect on touch (not while rewinding).
@@ -1592,7 +1621,7 @@ function update() {
     state.robots.forEach(r => r.update(state.player, state.activeGhosts, state.walls));
     for (let p of state.projectiles) {
         let fail = p.update(state.walls, state.activeGhosts, state.player, state.packages);
-        if (fail) { levelFailed(fail); return; }
+        if (failUnlessInvuln(fail)) return;
     }
     state.projectiles = state.projectiles.filter(p => p.active);
 
@@ -1654,7 +1683,7 @@ function update() {
     for(let d of state.drones) {
         if (d.alive === false) continue;
         let fail = d.update(state.player, noiseSources);
-        if (fail) { levelFailed(fail); return; }
+        if (failUnlessInvuln(fail)) return;
     }
     if (state.drones.some(d => d.alive === false)) state.drones = state.drones.filter(d => d.alive !== false);
 
@@ -1678,10 +1707,10 @@ function update() {
         if (door && door.gateLocked) door.isOpen = false;
     }
 
-    for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (fail) { levelFailed(fail); return; } }
+    for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (failUnlessInvuln(fail)) return; }
     for (const burrower of state.burrowers || []) burrower.update(allActors);
     syncBossHud();
-    for(let c of state.cracks) { let fail = c.update(allActors); if (fail) { levelFailed(fail); return; } }
+    for(let c of state.cracks) { let fail = c.update(allActors); if (failUnlessInvuln(fail)) return; }
     // The floor resolves after the strike decision. Drop a mark that the crack
     // update just invalidated so the drawn telegraph is never a broken tile.
     for (const burrower of state.burrowers || []) {
@@ -1741,9 +1770,12 @@ function update() {
     const slabs = collectShieldSlabs(state.player, state.activeGhosts, shieldOn);
     const dashSweep = state.dashSweep; state.dashSweep = null;
     for (const l of state.lasers) {
-        if (state.player.cloakTimer <= 0 && (laserThreatens(l, state.player, slabs) || (dashSweep && laserThreatens(l, dashSweep, slabs)))) { levelFailed("Burned by Laser Grid!"); return; }
+        if (state.player.cloakTimer <= 0 && (laserThreatens(l, state.player, slabs) || (dashSweep && laserThreatens(l, dashSweep, slabs)))) {
+            if (failUnlessInvuln("Burned by Laser Grid!")) return;
+        }
         for (const p of state.packages) {
             if (!p.isDestroyed && p.type === 'fragile' && laserThreatens(l, p, slabs)) {
+                if (rogueInvulnerable()) continue;
                 p.breakApart('vapor'); SFX.break(); SFX.laserHit(); levelFailed("Fragile Package Destroyed!"); return;
             }
         }
@@ -1756,7 +1788,7 @@ function update() {
             walls: state.walls,
             slabs
         });
-        if (fail) { levelFailed(fail); return; }
+        if (failUnlessInvuln(fail)) return;
     }
 
     if (interactJustPressed) {
@@ -1792,7 +1824,7 @@ function update() {
     }
 
     for (let p of state.packages) {
-        let fail = p.update(); if (fail) { levelFailed(fail); return; }
+        let fail = p.update(); if (failUnlessInvuln(fail)) return;
         if (p.isDestroyed) continue; // breakFx still advances inside update()
         
         let pEnvVx = 0, pEnvVy = 0;
