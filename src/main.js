@@ -16,7 +16,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
-import { createSandState, tickSand, resetHistory, SAND_MAX } from './systems/sandRewind.js';
+import { createSandState, tickSand, resetHistory, canRewind, SAND_MAX } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -1437,10 +1437,18 @@ function update() {
 
     // Sand rewind (Rogue Run only): while E held with sand, move player back and freeze the world.
     if (state.rogueRun?.active && state.sand && state.failTimer === 0) {
+        if (keys.e && !state.sandRewinding && canRewind(state.sand)) {
+            // Rewind START: the path about to be undone becomes a past-self echo playing forward.
+            const n = Math.min(state.sand.history.length, state.currentRun.length);
+            const segment = n > 0 ? state.currentRun.slice(-n) : null;
+            if (segment && pushEchoRun(state.pastRuns, segment, state.currentLevelMeta?.maxGhosts)) {
+                state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
+            }
+        }
         const rewound = tickSand(state.sand, { holding: !!keys.e, player: state.player, packages: state.packages, tick: state.currentTick });
         state.sandRewinding = rewound;
         updateSandHud();
-        if (rewound) { updatePrevKeys(); return; }
+        if (rewound) { if (state.currentRun.length) state.currentRun.pop(); updatePrevKeys(); return; }
     } else { state.sandRewinding = false; updateSandHud(); }
 
     recordFrame(keys);
