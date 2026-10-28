@@ -1,3 +1,4 @@
+import { pushEchoRun, rogueZoneClear, commitSandEcho } from './systems/sandEcho.js';
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
@@ -15,6 +16,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
+import { createSandState, tickSand, resetHistory, canRewind, SAND_MAX } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -1107,15 +1109,15 @@ export function resetRun() {
     state.pickupFlash = null;
     const recorded = state.currentTick > 0 && !failedRun;
     if (recorded) {
-        const cap = loopRecordCap();
-        const run = (cap != null && state.currentRun.length > cap) ? state.currentRun.slice(0, cap) : state.currentRun;
-        state.pastRuns.push([...run]);
+        pushEchoRun(state.pastRuns, state.currentRun, null, loopRecordCap());
         state.loopNumber = displayedLoopNumber(state.loopNumber) + 1;
     }
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    if (state.sand) resetHistory(state.sand);
     clearLoopFx();
     const loopLevel = state.currentLevelMeta || LEVELS[state.currentLevelIndex];
-    if (loopLevel && loopLevel.maxGhosts != null && state.pastRuns.length > loopLevel.maxGhosts) state.pastRuns.shift();
+    // rogue meta already folds echoSlotBonus into maxGhosts, so read it raw.
+    if (loopLevel && loopLevel.maxGhosts != null) pushEchoRun(state.pastRuns, null, loopLevel.maxGhosts);
 
     state.bossCheckpointLive = true;
     applyLoadedLevel(loadCurrentEntities());
@@ -1283,6 +1285,7 @@ export function startRogueRun(seed) {
     const floor = generateFloor(seed);
     const layout = floor.layout;
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
+    state.sand = createSandState();
     state.editorReturnLayout = layout;
     state.customLayout = layout;
     state.playtesting = true;
@@ -1383,6 +1386,20 @@ export function returnToEditor() {
     window.startEditorMode(json);
 }
 
+function updateSandHud() {
+    const box = document.getElementById('sand-box');
+    if (!box) return;
+    const on = !!(state.rogueRun?.active && state.sand);
+    box.classList.toggle('hidden', !on);
+    if (!on) return;
+    const pct = Math.max(0, Math.min(100, (state.sand.sand / SAND_MAX) * 100));
+    const fill = document.getElementById('sand-fill');
+    if (fill) fill.style.width = pct.toFixed(1) + '%';
+    box.classList.toggle('sand-rewinding', !!state.sandRewinding);
+    const label = document.getElementById('sand-text');
+    if (label) label.textContent = state.sand.sand.toFixed(1) + 's';
+}
+
 function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
@@ -1417,6 +1434,45 @@ function update() {
         return;
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
+
+    // Sand rewind (Rogue Run only): while E held with sand, move player back and freeze the world.
+    // Echoes commit on RELEASE (or sand empty) only if the hold lasted ≥ MIN_ECHO_SEGMENT frames.
+    if (state.rogueRun?.active && state.sand && state.failTimer === 0) {
+        const wasRewinding = !!state.sandRewinding;
+        if (keys.e && !wasRewinding && canRewind(state.sand)) {
+            // Rewind START: arm collector — do not spawn a ghost yet (short taps must create none).
+            state.sandEchoPending = [];
+            state.sandHoldTicks = 0;
+        }
+        const rewound = tickSand(state.sand, { holding: !!keys.e, player: state.player, packages: state.packages, tick: state.currentTick });
+        if (rewound) {
+            if (state.currentRun.length) {
+                const frame = state.currentRun.pop();
+                if (!state.sandEchoPending) state.sandEchoPending = [];
+                state.sandEchoPending.unshift(frame); // chronological: oldest undone first
+                state.sandHoldTicks = (state.sandHoldTicks || 0) + 1;
+            }
+            state.sandRewinding = true;
+            updateSandHud();
+            updatePrevKeys();
+            return;
+        }
+        if (wasRewinding) {
+            // Hold ended (key up or sand empty): commit only if held long enough.
+            if (commitSandEcho(state.pastRuns, state.sandEchoPending, state.sandHoldTicks, state.currentLevelMeta?.maxGhosts)) {
+                state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
+            }
+            state.sandEchoPending = null;
+            state.sandHoldTicks = 0;
+        }
+        state.sandRewinding = false;
+        updateSandHud();
+    } else {
+        state.sandRewinding = false;
+        state.sandEchoPending = null;
+        state.sandHoldTicks = 0;
+        updateSandHud();
+    }
 
     recordFrame(keys);
     tickLoopFx();
@@ -1726,6 +1782,8 @@ function update() {
     updateDeliveryProgressUI();
     const requiredPackages = getRequiredPackages();
     let allDelivered = requiredPackages.length > 0 && requiredPackages.every(isPackageDelivered);
+    // Rogue floors with no packages clear by the player reaching the delivery zone.
+    if (!allDelivered && state.rogueRun?.active) allDelivered = rogueZoneClear(requiredPackages, state.player, state.deliveryZone);
     
     if (allDelivered && state.gameState === 'PLAYING' && !isDemoActive()) { 
         if (state.rogueRun?.active) { SFX.win(); showRunOver(true); return; }

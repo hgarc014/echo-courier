@@ -1308,3 +1308,8 @@ body.touch-ui .demo-popup-panel {
     width: min(560px, 96%);
 }
 
+
+/* Sand rewind meter (Rogue Run) */
+#sand-box .sand-bar { display:inline-block; width:80px; height:8px; border:1px solid #e8c37a; vertical-align:middle; border-radius:2px; overflow:hidden; }
+#sand-box .sand-fill { display:block; height:100%; width:100%; background:#e8c37a; transition:width 60ms linear; }
+#sand-box.sand-rewinding { color:#ffe9a8; text-shadow:0 0 6px #e8c37a; }
