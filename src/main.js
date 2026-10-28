@@ -16,7 +16,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
-import { createSandState, tickSand, resetHistory, canRewind, applyPickup } from './systems/sandRewind.js';
+import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -1170,6 +1170,18 @@ export function restartLevel() {
 
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
+    // Rogue Run death-undo: spend sand to auto-rewind ~1s instead of dying.
+    // Skipped when a package was destroyed (rewind restores only the player).
+    if (state.rogueRun?.active && state.sand && !/destroyed/i.test(reason || '') && canDeathUndo(state.sand)) {
+        const r = applyDeathUndo(state.sand, state.player, state.packages);
+        if (r.ok) {
+            state.sandRewinding = false;
+            state.failTimer = 0; state.failMessage = "";
+            SFX.rewind();
+            startShake(10, 4);
+            return;
+        }
+    }
     state.lastRunFailed = true;
     state.loopFails = (state.loopFails || 0) + 1;
     SFX.fail();

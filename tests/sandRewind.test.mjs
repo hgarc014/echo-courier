@@ -37,3 +37,20 @@ const mkPlayer = () => ({ x: 0, y: 0, w: 10, h: 10, facingX: 1, facingY: 0, cloa
   assert.equal(applyPickup(s, 'sand_max'), true); assert.equal(s.maxSand, SAND_MAX + PICKUP_MAX_BONUS); assert.equal(s.sand, PICKUP_REFILL + PICKUP_MAX_BONUS);
   assert.equal(applyPickup(s, 'nope'), false); }
 console.log('sandRewind ok');
+
+// death undo
+{ const { canDeathUndo, applyDeathUndo, DEATH_UNDO_COST, DEATH_UNDO_FRAMES } = await import('../src/systems/sandRewind.js');
+  const s = createSandState(); const p = mkPlayer();
+  for (let t = 0; t < 120; t++) { p.x = t; tickSand(s, { holding: false, player: p, packages: [], tick: t }); }
+  p.x = 999; const before = s.sand;
+  assert.equal(canDeathUndo(s), true);
+  const r = applyDeathUndo(s, p, []);
+  assert.equal(r.ok, true); assert.equal(r.frames, DEATH_UNDO_FRAMES);
+  assert.equal(p.x, 120 - DEATH_UNDO_FRAMES); assert.equal(s.history.length, 120 - DEATH_UNDO_FRAMES);
+  assert.ok(Math.abs(s.sand - (before - DEATH_UNDO_COST)) < 1e-9); assert.equal(s.rewinding, false);
+  // short sand fails, no change
+  s.sand = DEATH_UNDO_COST - 0.01; p.x = 500;
+  assert.equal(canDeathUndo(s), false); assert.equal(applyDeathUndo(s, p, []).ok, false); assert.equal(p.x, 500);
+  // empty history fails
+  const e = createSandState(); assert.equal(canDeathUndo(e), false);
+}

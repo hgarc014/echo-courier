@@ -93,3 +93,21 @@ export function applyPickup(sand, type) {
 }
 
 export function resetHistory(sand) { sand.history.length = 0; sand.rewinding = false; }
+
+// Death-undo (Rogue Run): on a would-be death, auto-rewind ~1s for a sand premium.
+export const DEATH_UNDO_FRAMES = 60;  // ~1s at 60Hz
+export const DEATH_UNDO_COST = 1.5;   // sand seconds (more than the 1s rewound)
+
+export function canDeathUndo(sand) {
+    return !!sand && sand.sand >= DEATH_UNDO_COST && sand.history.length > 0;
+}
+
+export function applyDeathUndo(sand, player, packages) {
+    if (!canDeathUndo(sand)) return { ok: false, frames: 0 };
+    const n = Math.min(DEATH_UNDO_FRAMES, sand.history.length);
+    const popped = sand.history.splice(sand.history.length - n, n);
+    applySnapshot(player, packages, popped[0]);
+    sand.sand = Math.max(0, sand.sand - DEATH_UNDO_COST);
+    sand.rewinding = false;
+    return { ok: true, frames: n };
+}
