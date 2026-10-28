@@ -1348,6 +1348,7 @@ function showRunOver(cleared) {
     const title = document.getElementById('run-over-title');
     if (title) { title.innerText = cleared ? 'FLOOR CLEARED' : 'RUN FAILED'; title.style.color = cleared ? '#00f3ff' : '#ff3366'; }
     syncRunOverUnlock();
+    syncRogueShop();
     el.classList.remove('hidden');
 }
 
@@ -1372,6 +1373,31 @@ export function syncRogueHub() {
     const m = loadRogueMeta();
     const el = document.getElementById('rogue-meta-info');
     if (el) el.innerText = `Echo slots: ${rogueMaxGhosts(m)}  |  Record length: ${rogueLoopTime(m)}s  |  Runs: ${m.runs} (cleared ${m.clears})`;
+    syncRogueShop();
+}
+
+/** Render sandTank/startSand shop into every .rogue-shop container (hub + Run Over). */
+export function syncRogueShop() {
+    if (typeof document === 'undefined') return;
+    const m = loadRogueMeta();
+    const items = shopItems(m);
+    document.querySelectorAll('.rogue-shop').forEach(box => {
+        const pts = box.querySelector('.rogue-shop-points');
+        if (pts) pts.innerText = 'SHOP POINTS: ' + (m.shopPoints | 0);
+        const list = box.querySelector('.rogue-shop-list');
+        if (!list) return;
+        list.innerHTML = '';
+        for (const it of items) {
+            const b = document.createElement('button');
+            b.className = 'secondary-btn';
+            b.style.cssText = 'display:block;margin:4px auto;min-width:260px;font-size:0.8rem;';
+            b.dataset.shopId = it.id;
+            b.innerText = `${it.label.toUpperCase()} ${it.level}/${it.maxLevel} — ` + (it.maxed ? 'MAXED' : `COST ${it.cost}`);
+            b.disabled = it.maxed || !it.affordable;
+            b.onclick = () => window.buyRogueShop?.(it.id);
+            list.appendChild(b);
+        }
+    });
 }
 
 export function returnToEditor() {
@@ -2529,6 +2555,7 @@ window.onload = () => {
     window.restartRogueRun = () => startRogueRun();
     window.claimRogueUnlock = claimRogueUnlock;
     window.rogueShopItems = () => shopItems();
+    window.syncRogueShop = syncRogueShop;
     window.buyRogueShop = (id) => {
         const m = buyRogueShop(id);
         if (m) { syncRogueHub(); syncRunOverUnlock(); window.syncRogueShop?.(); }
