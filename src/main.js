@@ -5,7 +5,7 @@ import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing
 import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { generateFloor } from './data/floorGen.js';
+import { generateFloor, ROOM_W } from './data/floorGen.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -558,6 +558,12 @@ function applyLoadedLevel(setupData) {
 
 function syncGameplayCamera() {
     if (state.gameState === 'EDITOR' || !state.player) return;
+    if (state.currentLevelMeta?.isRogue) {
+        // Frame the player's whole room (ROOM_W <= VIEW_WIDTH) so airlock plates in opposite corners stay on-screen.
+        const room = Math.floor((state.player.x + state.player.w / 2) / ROOM_W);
+        followWorldPoint(room * ROOM_W + ROOM_W / 2, state.player.y + state.player.h / 2);
+        return;
+    }
     followWorldPoint(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
 }
 

@@ -1,6 +1,6 @@
 # Campaign → Roguelike migration plan
 
-Draft 2026-10-28 for Henry / PM. Based on thin slice [#62](https://github.com/hgarc014/echo-courier/pull/62) @ `624b5a7`. **Do not merge #62 until Henry finishes raw.githack playtest.**
+Draft 2026-10-28 for Henry / PM. Based on thin slice [#62](https://github.com/hgarc014/echo-courier/pull/62). **Play tip for raw.githack stays `624b5a7`.** Later commits (docs / camera) must not move that tip. **Do not merge #62 until Henry finishes playtest.**
 
 ## 1. Keep Level Select campaign vs sunset
 
@@ -16,7 +16,7 @@ Do **not** delete `LEVELS` / `WORLDS` data yet — they become the template libr
 
 ## 2. Worlds → room templates / mechanic pools for `floorGen`
 
-Today `generateFloor` builds plain doors + one echo airlock. Grow it by **mechanic pools**, one per world:
+Today `generateFloor` (v0) builds plain doors + one echo airlock. Grow it by **mechanic pools**, one per world. v0 stays the fallback when a pool is empty.
 
 | World | Mechanic pool (room recipes) |
 |---|---|
@@ -26,64 +26,107 @@ Today `generateFloor` builds plain doors + one echo airlock. Grow it by **mechan
 | W4 Beamworks | lasers, Echo Shield facing, Prism |
 | W5 Overclock | TemporalPlate timelines, static slow, dual airlocks |
 
-**Shape:** each recipe is a small layout fragment (`{ walls, doors, plates, … }` + spawn/exit sockets) authored in the editor (see §5), tagged with `world`, `tags`, `requiresEcho`, `difficulty`. `floorGen` picks 3–5 recipes from unlocked pools, stitches them into one wide layout (same pattern as #62 — one level, echo playback stays coherent).
+**Recipe / template schema** (one `ROOM_W`×`H` cell, local coords; IDs renamed `r{i}_{id}` when stitched):
 
-Unlock order: start with W1 pool only; clear a run (or meta milestones) opens the next pool. Campaign worlds map 1:1 onto pools so nothing is thrown away.
+```json
+{
+  "id": "w5-l1-airlock",
+  "source": "world5Levels[0]",
+  "world": 5,
+  "tier": 3,
+  "tags": ["airlock", "echo-required"],
+  "entry": { "y": 240, "h": 120 },
+  "exit":  { "y": 240, "h": 120 },
+  "requiresEcho": true,
+  "minEchoes": 1,
+  "forbid": ["timerDoor"],
+  "entities": { "walls": [], "plates": [], "doors": [], "guards": [], "lasers": [], "cracks": [], "cameras": [], "wires": [] }
+}
+```
+
+**Extraction phases (SWE B):**
+1. **Tag** campaign rooms with `{templateId, tier, tags}` — no behavior change.
+2. **Extract** via `scripts/extractTemplates.js` → `src/data/roomTemplates.json`; fail if a link points outside the room or gaps misalign.
+3. **Seed pools:** `floorGen.pickRooms(rng, depth)` by tier (d1–2 plates/doors; d3–4 guards/lasers/wires; d5+ temporal). Each floor still gets **exactly one** echo-required room. Early depths: no TimerDoor / hidden timing (Henry visibility rule).
+
+Unlock order: W1 pool only at first; clear a run (or meta milestones) opens the next pool. Campaign worlds map 1:1 onto pools.
 
 ## 3. Bosses as run end bosses
 
 | Boss | Source PR / level | Rogue role |
 |---|---|---|
 | Gatekeeper | W1-MB | Early-run optional elite (short room) |
-| Burrower / Sinkhole | W2-ish + [#57](https://github.com/hgarc014/echo-courier/pull/57) loudest-wins | Mid-run boss floor when W2 pool unlocked |
+| Burrower / Sinkhole | W2-ish + [#57](https://github.com/hgarc014/echo-courier/pull/57) loudest-wins | Mid-run boss when W2 pool unlocked |
 | Prism | W4-MB | Mid/late elite |
 | XR-9 | W5-BOSS + [#61](https://github.com/hgarc014/echo-courier/pull/61) sweep | Run finale when W5 pool unlocked |
 
-**Rule:** a “run” = N normal rooms + optional elite + **one** end boss chosen from the highest unlocked boss tier. Boss rooms are fixed hand-authored layouts (not fully procedural) so telegraph / par / recorded solutions still work. `#62` already ends on floor clear; next step is “clear floor → boss floor → Run Over”.
+**Rules:**
+- Boss layouts are **hand-authored**, not procedural (telegraph / par / recorded solutions stay valid).
+- Today (#62): one floor → Run Over.
+- Next: **N recipe rooms + optional elite + one end boss**, still **one continuous layout** (or boss as a second load) so echoes stay coherent.
+- Death budget stays **1** unless Henry asks otherwise.
+- No new boss AI — reuse Gatekeeper / Burrower / Prism / XR-9 entities as-is. CI replays each boss's recorded solution under run loopTime / echo slots.
 
-## 4. Progress wipe vs `echoCourier_rogueMeta`
+## 4. Unlock economy & progress wipe
+
+**Current #62 economy** (`src/rogue/rogueMeta.js`):
+- One claim per Run Over.
+- First unlock = **+1 echo slot** (base 2 → 3).
+- Later unlocks = **+30s** record on **60s** base, cap **+120s**.
+- Key: `echoCourier_rogueMeta` — **survives** Wipe / Dev Mode / Unlock All (not in `PROGRESS_KEYS`).
 
 | Store | Keys | Wipe / Dev Mode |
 |---|---|---|
 | Campaign progress | `echoCourier_maxLevel`, challenges, abilities, tutorials, cleared | Cleared by Wipe; blocked while Dev Mode / Unlock All |
-| Rogue meta (#62) | `echoCourier_rogueMeta` (echo slots, record bonus, runs, clears) | **Survives** Wipe and Dev Mode (not in `PROGRESS_KEYS`) |
+| Rogue meta (#62) | `echoCourier_rogueMeta` | Survives Wipe and Dev Mode |
 
-**Policy going forward:**
-
-- **Wipe Progress** = campaign only (current behavior). Add a separate “Reset Rogue Unlocks” button in Settings if Henry wants a hard reset.
-- Do **not** fold rogue meta into campaign save — keeps playtest / Unlock All from nuking roguelike progression.
-- Future meta (new pools, boss clears, cosmetics) stays under `echoCourier_rogue*` keys with the same survival rule.
-- Optional later: one-time migration that seeds rogue pool unlocks from `maxUnlockedLevel` / world clears so campaign veterans aren’t gated behind the tutorial again.
+**Policy:**
+- Wipe Progress = campaign only. Optional later: separate “Reset Rogue Unlocks” in Settings.
+- Do **not** fold rogue meta into campaign save.
+- Future pool / boss / cosmetic unlocks = separate `echoCourier_rogue*` keys, **not** campaign progress.
+- Optional later: one-time seed of pool unlocks from campaign `maxUnlockedLevel` so veterans aren't re-gated.
 
 ## 5. Editor: author room recipes, not full levels
 
-**Goal:** designers place a single room (≈600×600), mark sockets (entry gap, exit gap, package spawn, delivery), tag mechanics, playtest that room alone, export JSON recipe.
+**Goal:** place a single ≈600×600 room, mark sockets (entry/exit/package/delivery), tag mechanics, playtest alone, export JSON recipe.
 
 Minimum editor work:
+1. “Room recipe” mode: fixed canvas, socket markers, tags (`world`, `requiresEcho`, `difficulty`, `forbid`).
+2. Save/load + JSON round-trip (`serializeLevel` / `deserializeLevel`).
+3. Playtest one recipe in isolation.
+4. Warn when TimerDoor (or hidden-timer) appears in tier &lt; 3.
+5. `floorGen` imports the recipe bank; `recordFloor(templateId)` + tests: recorded clear; echo-required fails solo; links stay inside template.
 
-1. “Room recipe” mode: fixed canvas size, socket markers, tag fields (`world`, `requiresEcho`, `difficulty`).
-2. Save/load + JSON round-trip (same `serializeLevel` / `deserializeLevel` path; recipe is a clipped layout).
-3. Playtest one recipe in isolation (already close to editor playtest).
-4. `floorGen` imports the recipe bank instead of hardcoding walls.
+No new entity types for the first bank.
 
-Full campaign levels remain loadable for regression; new content prefers recipes. No new entity types required for the first bank (reuse plates/doors/guards/lasers/etc.).
+## 6. Camera / visibility (optional nit)
 
-## 6. Open PR disposition (#57 / #60 / #61)
+Airlock plates sit in opposite corners of a 600-wide room. **Landed after play tip** (commit after `624b5a7`): on rogue floors (`currentLevelMeta.isRogue`), `syncGameplayCamera` centers horizontally on the player's room so the whole cell stays in the 800×600 view. Campaign follow is unchanged. Future: if templates exceed 800 px, frame plates linked to the nearest door.
 
-Parked during the thin-slice window. Suggested fate:
+## 7. Open PR disposition (#57 / #60 / #61)
 
-| PR | Title | Disposition |
+| PR | Disposition |
+|---|---|
+| [#57](https://github.com/hgarc014/echo-courier/pull/57) Loudest wins @ `f7068ef` | Keep open. Retarget after #62 / playtest → W2 boss recipe. Don't rewrite into #62. |
+| [#60](https://github.com/hgarc014/echo-courier/pull/60) Panopticon WIP @ `ee1a78a` | Keep as WIP → **W3 template bank**, not linear campaign. Rebase after #62. |
+| [#61](https://github.com/hgarc014/echo-courier/pull/61) XR-9 sweep @ `820f71f` | Keep draft. Land after #62 as **run finale** boss params. |
+
+Do **not** pile these onto #62.
+
+## 8. Ownership checklist
+
+| Phase | Owner | Acceptance |
 |---|---|---|
-| [#57](https://github.com/hgarc014/echo-courier/pull/57) | Sinkhole “Loudest wins” @ `f7068ef` | **Keep open.** Retarget onto main after #62 lands (or after Henry’s playtest). Becomes W2 boss / Burrower room recipe behavior — don’t rewrite into #62. |
-| [#60](https://github.com/hgarc014/echo-courier/pull/60) | World 3 Panopticon WIP @ `ee1a78a` | **Keep open as WIP.** Finish as the **W3 room-template bank** (cameras/cloak), not as a linear campaign world PR. Rebase after #62. |
-| [#61](https://github.com/hgarc014/echo-courier/pull/61) | XR-9 perimeter sweep @ `820f71f` | **Keep open (draft).** Land after #62; folds into **run finale** boss params. Open-floor threat (still deferred) stays a follow-up. Retarget to main once #62 merges. |
-
-Do **not** pile these onto #62. #62 stays the thin slice Henry is playtesting.
+| Tag / extract / depth pools | SWE B | Catalog + tests; 1 echo-required/floor; no TimerDoor at early depth |
+| Echo playability + recorded solutions | SWE B | Template solutions clear; solo fails on echo-required |
+| Run hub / meta / unlock economy | SWE | Claims persist; `rogue*` keys only |
+| Boss floors wired into run | SWE + SWE B | Hand-authored bosses; solutions replay under run settings |
+| Verification | QA | Seed sweep; camera keeps airlock plates visible; campaign regression |
 
 ## Suggested next sprint order
 
-1. Henry playtest #62 on raw.githack → merge when he says go.
-2. Tiny UX nits (if not done this window): hide “EDITOR PLAYTEST” HUD in rogue, rename Q hint from “Restart Level” → “Restart Floor”, camera bias toward airlock plates.
+1. Henry playtest #62 @ `624b5a7` on raw.githack → merge when he says go.
+2. UX nits already partially done (room-frame camera); still: hide “EDITOR PLAYTEST” HUD in rogue, rename Q → “Restart Floor”.
 3. Recipe schema + 3 W1 rooms in the editor; `floorGen` reads the bank.
 4. Retarget/land #61 (XR-9 finale), then #57 (Burrower mid-boss).
 5. #60 as W3 pool once recipe pipeline exists.
@@ -91,4 +134,4 @@ Do **not** pile these onto #62. #62 stays the thin slice Henry is playtesting.
 
 ## Out of scope for this draft
 
-Death budget (currently 1 death = Run Over), multi-floor runs, meta shop beyond +1 echo / longer record, polish on Run Over panel.
+Multi-floor runs beyond the “N rooms + elite + boss” shape above, meta shop beyond +1 echo / longer record, Run Over polish, open-floor XR-9 threat.
