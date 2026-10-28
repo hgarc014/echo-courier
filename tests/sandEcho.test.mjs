@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+const S = await import('../src/systems/sandEcho.js');
+const past = [];
+assert.ok(S.pushEchoRun(past, [{x:1},{x:2}], 2));
+assert.equal(past.length, 1);
+S.pushEchoRun(past, [{x:3}], 2); S.pushEchoRun(past, [{x:4}], 2);
+assert.equal(past.length, 2); assert.equal(past[0][0].x, 3, 'oldest dropped');
+assert.equal(S.pushEchoRun(past, [], 2), false);
+assert.equal(S.spawnEchoFromBuffer([1,2,3], 2).length, 2);
+assert.equal(S.maxSandGhosts({ maxGhosts: 2, echoSlotBonus: 1 }), 3);
+const buf = []; S.recordSandSample(buf, { x: 0 }); assert.equal(buf.length, 1);
+const z = { x: 0, y: 0, w: 10, h: 10 };
+assert.ok(S.rogueZoneClear([], { x: 2, y: 2, w: 4, h: 4 }, z));
+assert.ok(!S.rogueZoneClear([{}], { x: 2, y: 2, w: 4, h: 4 }, z));
+assert.ok(!S.rogueZoneClear([], { x: 50, y: 2, w: 4, h: 4 }, z));
+console.log('sandEcho ok');

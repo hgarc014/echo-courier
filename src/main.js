@@ -1,3 +1,4 @@
+import { pushEchoRun, rogueZoneClear } from './systems/sandEcho.js';
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
@@ -1107,15 +1108,14 @@ export function resetRun() {
     state.pickupFlash = null;
     const recorded = state.currentTick > 0 && !failedRun;
     if (recorded) {
-        const cap = loopRecordCap();
-        const run = (cap != null && state.currentRun.length > cap) ? state.currentRun.slice(0, cap) : state.currentRun;
-        state.pastRuns.push([...run]);
+        pushEchoRun(state.pastRuns, state.currentRun, null, loopRecordCap());
         state.loopNumber = displayedLoopNumber(state.loopNumber) + 1;
     }
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
     clearLoopFx();
     const loopLevel = state.currentLevelMeta || LEVELS[state.currentLevelIndex];
-    if (loopLevel && loopLevel.maxGhosts != null && state.pastRuns.length > loopLevel.maxGhosts) state.pastRuns.shift();
+    // rogue meta already folds echoSlotBonus into maxGhosts, so read it raw.
+    if (loopLevel && loopLevel.maxGhosts != null) pushEchoRun(state.pastRuns, null, loopLevel.maxGhosts);
 
     state.bossCheckpointLive = true;
     applyLoadedLevel(loadCurrentEntities());
@@ -1726,6 +1726,8 @@ function update() {
     updateDeliveryProgressUI();
     const requiredPackages = getRequiredPackages();
     let allDelivered = requiredPackages.length > 0 && requiredPackages.every(isPackageDelivered);
+    // Rogue floors with no packages clear by the player reaching the delivery zone.
+    if (!allDelivered && state.rogueRun?.active) allDelivered = rogueZoneClear(requiredPackages, state.player, state.deliveryZone);
     
     if (allDelivered && state.gameState === 'PLAYING' && !isDemoActive()) { 
         if (state.rogueRun?.active) { SFX.win(); showRunOver(true); return; }
