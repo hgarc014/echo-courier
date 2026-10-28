@@ -4,8 +4,10 @@ export const SAND_MAX = 3.0;            // seconds of rewind fuel
 export const SAND_REFILL_RATE = 0.25;   // seconds refilled per real second when not rewinding
 export const HISTORY_CAP = 180;         // ~3s at 60Hz
 
-export function createSandState() {
-    return { sand: SAND_MAX, maxSand: SAND_MAX, history: [], rewinding: false };
+export function createSandState(opts = {}) {
+    const maxSand = opts.maxSand ?? SAND_MAX;
+    const sand = Math.min(maxSand, opts.sand ?? maxSand);
+    return { sand, maxSand, history: [], rewinding: false };
 }
 
 export function snapshotPlayer(player, packages, tick) {

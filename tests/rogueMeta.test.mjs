@@ -32,3 +32,27 @@ assert.deepEqual(M.loadRogueMeta(), M.defaultRogueMeta());
 const { readFileSync } = await import('node:fs');
 assert.ok(!readFileSync(new URL('../src/core/state.js', import.meta.url), 'utf8').includes('rogueMeta'));
 console.log('rogueMeta ok');
+
+// Shop: points, buy, caps, sand helpers
+store.clear();
+let m = M.loadRogueMeta();
+assert.equal(m.shopPoints, 0);
+assert.equal(M.rogueMaxSand(m), 3); assert.equal(M.rogueStartSand(m), 3);
+assert.equal(M.buyRogueShop('sandTank'), null, 'no points');
+M.recordRunEnd(false); assert.equal(M.loadRogueMeta().shopPoints, 0);
+for (let i = 0; i < 20; i++) M.recordRunEnd(true);
+m = M.loadRogueMeta(); assert.equal(m.shopPoints, 20); assert.equal(m.clears, 20);
+m = M.buyRogueShop('sandTank'); assert.equal(m.sandTankLevel, 1); assert.equal(m.shopPoints, 19);
+assert.equal(M.rogueMaxSand(m), 4); assert.equal(M.rogueStartSand(m), 3);
+m = M.buyRogueShop('startSand'); m = M.buyRogueShop('startSand');
+assert.equal(m.startSandLevel, 2); assert.equal(m.shopPoints, 16);
+assert.equal(M.rogueStartSand(m), 4);
+m = M.buyRogueShop('sandTank'); m = M.buyRogueShop('sandTank'); assert.equal(m.sandTankLevel, 3); assert.equal(m.shopPoints, 11);
+assert.equal(M.buyRogueShop('sandTank'), null, 'maxed');
+assert.equal(M.shopItems().find(x => x.id === 'sandTank').maxed, true);
+assert.equal(M.shopItems().find(x => x.id === 'startSand').cost, 3);
+assert.equal(M.buyRogueShop('bogus'), null);
+const S = await import('../src/systems/sandRewind.js');
+const st = S.createSandState({ maxSand: 4, sand: 5 }); assert.equal(st.maxSand, 4); assert.equal(st.sand, 4);
+assert.equal(S.createSandState().sand, S.SAND_MAX);
+console.log('rogueMeta shop ok');
