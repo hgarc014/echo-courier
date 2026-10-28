@@ -16,6 +16,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
+import { createSandState, tickSand, resetHistory, SAND_MAX } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -1112,6 +1113,7 @@ export function resetRun() {
         state.loopNumber = displayedLoopNumber(state.loopNumber) + 1;
     }
     state.currentRun = []; state.currentTick = 0; state.failTimer=0; state.failMessage=""; state.alarmState = false;
+    if (state.sand) resetHistory(state.sand);
     clearLoopFx();
     const loopLevel = state.currentLevelMeta || LEVELS[state.currentLevelIndex];
     // rogue meta already folds echoSlotBonus into maxGhosts, so read it raw.
@@ -1283,6 +1285,7 @@ export function startRogueRun(seed) {
     const floor = generateFloor(seed);
     const layout = floor.layout;
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
+    state.sand = createSandState();
     state.editorReturnLayout = layout;
     state.customLayout = layout;
     state.playtesting = true;
@@ -1383,6 +1386,20 @@ export function returnToEditor() {
     window.startEditorMode(json);
 }
 
+function updateSandHud() {
+    const box = document.getElementById('sand-box');
+    if (!box) return;
+    const on = !!(state.rogueRun?.active && state.sand);
+    box.classList.toggle('hidden', !on);
+    if (!on) return;
+    const pct = Math.max(0, Math.min(100, (state.sand.sand / SAND_MAX) * 100));
+    const fill = document.getElementById('sand-fill');
+    if (fill) fill.style.width = pct.toFixed(1) + '%';
+    box.classList.toggle('sand-rewinding', !!state.sandRewinding);
+    const label = document.getElementById('sand-text');
+    if (label) label.textContent = state.sand.sand.toFixed(1) + 's';
+}
+
 function update() {
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
@@ -1417,6 +1434,14 @@ function update() {
         return;
     }
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
+
+    // Sand rewind (Rogue Run only): while E held with sand, move player back and freeze the world.
+    if (state.rogueRun?.active && state.sand && state.failTimer === 0) {
+        const rewound = tickSand(state.sand, { holding: !!keys.e, player: state.player, packages: state.packages, tick: state.currentTick });
+        state.sandRewinding = rewound;
+        updateSandHud();
+        if (rewound) { updatePrevKeys(); return; }
+    } else { state.sandRewinding = false; updateSandHud(); }
 
     recordFrame(keys);
     tickLoopFx();
