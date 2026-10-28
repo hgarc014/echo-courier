@@ -1,6 +1,7 @@
 // After-chamber Aspect picker. Three hardcoded boons. Selection is a callback
-// only — this module does not write rogue meta. Call showAspectPick(onPick)
+// only — this module does not write rogue meta. Call showAspectPick(onPick, kicker)
 // with onPick(id) for 'sand-tank' | 'start-sand' | 'echo-slot'.
+// kicker is the cleared chamber hall. A blank kicker leaves the markup fallback.
 
 export const ASPECTS = Object.freeze([
     Object.freeze({ id: 'sand-tank', label: '+Sand Tank', detail: '+1s max sand' }),
@@ -14,10 +15,20 @@ function rootEl() {
     return typeof document === 'undefined' ? null : document.getElementById('aspect-pick');
 }
 
-export function showAspectPick(onPick) {
+function applyKicker(root, kicker) {
+    if (!root || typeof kicker !== 'string') return;
+    const label = kicker.trim();
+    if (!label || typeof root.querySelector !== 'function') return;
+    const kick = root.querySelector('.aspect-pick-kicker');
+    if (kick) kick.textContent = label;
+}
+
+export function showAspectPick(onPick, kicker) {
     pending = typeof onPick === 'function' ? onPick : null;
     const root = rootEl();
-    if (root) root.classList.remove('hidden');
+    if (!root) return;
+    applyKicker(root, kicker);
+    root.classList.remove('hidden');
 }
 
 export function hideAspectPick() {
