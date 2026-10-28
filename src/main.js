@@ -5,7 +5,7 @@ import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing
 import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
-import { generateFloor } from './rogue/floorGenStub.js';
+import { generateFloor } from './data/floorGen.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
@@ -1274,7 +1274,8 @@ export function startPlaytestFromEditor() {
 export function startRogueRun(seed) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
     const meta = loadRogueMeta();
-    const layout = generateFloor(seed);
+    const floor = generateFloor(seed);
+    const layout = floor.layout;
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false };
     state.editorReturnLayout = layout;
     state.customLayout = layout;
@@ -1287,10 +1288,11 @@ export function startRogueRun(seed) {
     document.getElementById('mobile-controls')?.classList.remove('hidden');
     setPlaytestReturnVisible(false);
     state.currentLevelMeta = {
-        name: `Rogue Floor #${seed % 10000}`,
-        obj: 'Deliver the package. One death ends the run.',
+        name: `Rogue ${floor.meta?.name || 'Floor'}`,
+        obj: `${floor.meta?.obj || 'Deliver the package.'} One death ends the run.`,
+        par: floor.meta?.par,
         challenge: { desc: 'Rogue run', check: () => false },
-        maxGhosts: rogueMaxGhosts(meta),
+        maxGhosts: (floor.meta?.maxGhosts ?? 2) + meta.echoSlotBonus,
         loopTime: rogueLoopTime(meta),
         crackSpeed: 'normal',
         grants: ['dash', 'toss', 'cloak', 'ghostShield'],

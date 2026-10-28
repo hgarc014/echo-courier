@@ -1,7 +1,7 @@
 // Roguelike meta progression. Persists across runs in localStorage; NOT in PROGRESS_KEYS,
 // so "Wipe progress" / Dev Mode / Unlock All leave it alone.
 // Unlock rule: first unlock = +1 echo slot. Every later unlock = "longer record" (+30s loopTime),
-// capped at MAX_RECORD_BONUS_S.
+// capped at MAX_RECORD_BONUS_S. Base echo slots (2) match floorGen floorMeta.maxGhosts.
 export const ROGUE_META_KEY = 'echoCourier_rogueMeta';
 export const BASE_ECHO_SLOTS = 2;
 export const BASE_LOOP_TIME_S = 60;
