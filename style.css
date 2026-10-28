@@ -776,7 +776,8 @@ body.touch-ui #gameCanvas {
 }
 body.touch-ui .game-area:has(.dialog-overlay:not(.hidden)),
 body.touch-ui .game-area:has(#level-complete:not(.hidden)),
-body.touch-ui .game-area:has(#game-over:not(.hidden)) {
+body.touch-ui .game-area:has(#game-over:not(.hidden)),
+body.touch-ui .game-area:has(#aspect-pick:not(.hidden)) {
     z-index: 6;
 }
 body.touch-ui .bottom-hud {
@@ -816,7 +817,8 @@ body.touch-ui .dialog-continue-btn { display: block; }
 }
 body.touch-ui:has(#dialog-overlay:not(.hidden)) #mobile-controls,
 body.touch-ui:has(#level-complete:not(.hidden)) #mobile-controls,
-body.touch-ui:has(#game-over:not(.hidden)) #mobile-controls {
+body.touch-ui:has(#game-over:not(.hidden)) #mobile-controls,
+body.touch-ui:has(#aspect-pick:not(.hidden)) #mobile-controls {
     opacity: 0.18;
     pointer-events: none;
 }
@@ -1120,6 +1122,107 @@ body.touch-ui .demo-caption {
 body.touch-ui .demo-skip-btn {
     padding: 10px 14px;
     font-size: 0.8rem;
+}
+
+/* After-chamber 3-pick. Hidden until showAspectPick(onPick). */
+#aspect-pick.aspect-pick {
+    z-index: 30;
+    box-sizing: border-box;
+    padding: 28px 20px;
+    background: rgba(5, 7, 10, 0.84);
+}
+.aspect-pick-kicker {
+    margin: 0 0 6px;
+    color: var(--accent-interact);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+#aspect-pick h2 {
+    margin: 0 0 8px;
+    color: var(--accent-ghost);
+    font-size: 1.8rem;
+    letter-spacing: 2px;
+}
+.aspect-pick-sub {
+    margin: 0 0 18px;
+    max-width: 440px;
+    color: var(--text-dim);
+    font-size: 0.95rem;
+}
+.aspect-pick-row {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    justify-content: center;
+}
+.aspect-card {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 210px;
+    margin: 0;
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent-ghost);
+    background: rgba(0, 243, 255, 0.08);
+    border: 1px solid rgba(0, 243, 255, 0.5);
+    border-radius: 6px;
+}
+.aspect-card-name { font-weight: 700; font-size: 1rem; }
+.aspect-card-detail {
+    font-size: 0.78rem;
+    letter-spacing: 0.3px;
+    text-transform: none;
+    opacity: 0.88;
+}
+.aspect-card[data-aspect="start-sand"] {
+    color: var(--accent-interact);
+    border-color: rgba(255, 221, 0, 0.55);
+    background: rgba(255, 221, 0, 0.06);
+}
+.aspect-card[data-aspect="echo-slot"] {
+    color: var(--accent-safe);
+    border-color: rgba(57, 255, 20, 0.5);
+    background: rgba(57, 255, 20, 0.06);
+}
+.aspect-card:hover,
+.aspect-card:focus-visible {
+    background: var(--accent-ghost);
+    color: var(--bg-color);
+    outline: none;
+}
+.aspect-card[data-aspect="start-sand"]:hover,
+.aspect-card[data-aspect="start-sand"]:focus-visible {
+    background: var(--accent-interact);
+    color: #14180f;
+}
+.aspect-card[data-aspect="echo-slot"]:hover,
+.aspect-card[data-aspect="echo-slot"]:focus-visible {
+    background: var(--accent-safe);
+    color: #14180f;
+}
+body.touch-ui #aspect-pick.aspect-pick {
+    padding: 16px 12px;
+    overflow: auto;
+}
+body.touch-ui .aspect-pick-row {
+    flex-direction: column;
+    align-items: stretch;
+}
+body.touch-ui .aspect-card { max-width: none; }
+@media (max-width: 700px) {
+    .aspect-pick-row { flex-direction: column; align-items: stretch; }
+    .aspect-card { max-width: none; }
+    #aspect-pick h2 { font-size: 1.4rem; }
 }
 
 
