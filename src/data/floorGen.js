@@ -79,7 +79,7 @@ export function generateFloor(seed, roomCount) {
         walls, doors, plates,
         packages: [],
         pickups: placePickups(seed, n),
-        lasers: [], guards: placeGuards(seed, n), cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], hints: []
+        lasers: [], guards: placeGuards(seed, n), cameras: placeCameras(seed, n), drones: [], winds: [], statics: [], cracks: [], robots: [], hints: []
     };
     const meta = floorMeta(seed, n);
     return { layout, meta, info: { seed, roomCount: n, echoRoom, airlock } };
@@ -120,6 +120,27 @@ export function placeGuards(seed, n) {
         const x0 = left + pick(rng, 20, 22) * 20;
         const x1 = x0 + pick(rng, 3, 5) * 20;
         out.push({ points: [{ x: x0, y }, { x: x1, y }] });
+    }
+    return out;
+}
+
+// 1-2 ceiling cameras, each {x, y:40, baseAngle, sweepRange}. Separate RNG stream so
+// walls/doors/plates/pickups/guards stay stable. Non-exit rooms only (i < n-1), like guards,
+// so the exit delivery zone (x = W-180, w = 120) is unused; two cameras use different rooms.
+// x = left+400..480 stays clear of corner plates (through x=160, 40 wide), lane plates
+// (from x=570), and the airlock doorway (40 wide from x=580).
+export function placeCameras(seed, n) {
+    const rng = makeRng(((Number(seed) >>> 0) ^ 0x3C7E) || 7);
+    const count = pick(rng, 1, 2);
+    const rooms = [];
+    for (let i = 0; i < n - 1; i++) rooms.push(i);
+    const out = [];
+    for (let k = 0; k < count; k++) {
+        const room = rooms.splice(pick(rng, 0, rooms.length - 1), 1)[0];
+        const left = room * ROOM_W;
+        const x = left + pick(rng, 20, 24) * 20;
+        const sweepRange = Math.PI / 4 + rng() * (Math.PI / 3 - Math.PI / 4);
+        out.push({ x, y: 40, baseAngle: Math.PI / 2, sweepRange });
     }
     return out;
 }

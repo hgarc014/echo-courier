@@ -81,10 +81,34 @@ check('room count is 3-5 (default and clamped)', () => {
     assert.equal(generateFloor(9, 9).info.roomCount, 5);
 });
 
+check('floor has 1-2 sweep cameras with a finite ceiling pose', () => {
+    for (let s = 1; s <= 200; s++) {
+        const { layout, info } = generateFloor(s);
+        const cs = layout.cameras;
+        assert.ok(Array.isArray(cs) && cs.length >= 1 && cs.length <= 2, `seed ${s} count`);
+        const rooms = [];
+        for (const c of cs) {
+            assert.ok(Number.isFinite(c.x) && Number.isFinite(c.y) && Number.isFinite(c.baseAngle) && Number.isFinite(c.sweepRange), `seed ${s} pose`);
+            assert.equal(c.y, 40);
+            assert.equal(c.baseAngle, Math.PI / 2);
+            assert.ok(c.sweepRange >= Math.PI / 4 && c.sweepRange <= Math.PI / 3, `seed ${s} sweep ${c.sweepRange}`);
+            const room = Math.floor(c.x / ROOM_W);
+            rooms.push(room);
+            assert.ok(room < info.roomCount - 1, `seed ${s} camera in exit room`);
+        }
+        if (cs.length === 2) assert.notEqual(rooms[0], rooms[1], `seed ${s} both cameras in one room`);
+    }
+});
+
 check('schema: every door has a plate, no timers, no packages, exit zone in last room', () => {
     for (let s = 1; s <= 50; s++) {
         const { layout: L, info } = generateFloor(s);
-        for (const k of ['lasers', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'hints']) assert.deepEqual(L[k], []);
+        for (const k of ['lasers', 'drones', 'winds', 'statics', 'cracks', 'robots', 'hints']) assert.deepEqual(L[k], []);
+        assert.ok(L.cameras.length >= 1 && L.cameras.length <= 2, `seed ${s} cameras`);
+        for (const c of L.cameras) {
+            assert.ok(Number.isFinite(c.x) && Number.isFinite(c.y) && Number.isFinite(c.baseAngle) && Number.isFinite(c.sweepRange));
+            assert.ok(c.sweepRange >= Math.PI / 4 && c.sweepRange <= Math.PI / 3);
+        }
         assert.equal(L.doors.length, info.roomCount); // n-2 plain + 2 airlock
         for (const d of L.doors) {
             assert.equal(d.type, 'standard');
