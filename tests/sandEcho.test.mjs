@@ -14,11 +14,14 @@ assert.ok(S.rogueZoneClear([], { x: 2, y: 2, w: 4, h: 4 }, z));
 assert.ok(!S.rogueZoneClear([{}], { x: 2, y: 2, w: 4, h: 4 }, z));
 assert.ok(!S.rogueZoneClear([], { x: 50, y: 2, w: 4, h: 4 }, z));
 
-const shortPast = [];
-const short = Array.from({ length: S.MIN_ECHO_SEGMENT - 1 }, (_, i) => ({ x: i, y: 0 }));
-assert.equal(S.pushEchoRun(shortPast, short, 3, null, { minLength: S.MIN_ECHO_SEGMENT }), false);
-assert.equal(shortPast.length, 0);
-const ok = Array.from({ length: S.MIN_ECHO_SEGMENT }, (_, i) => ({ x: i, y: 0 }));
-assert.equal(S.pushEchoRun(shortPast, ok, 3, null, { minLength: S.MIN_ECHO_SEGMENT }), true);
-assert.equal(shortPast.length, 1);
+// Short tap (hold < MIN) never commits a ghost — even if pending has many frames.
+const tapPast = [];
+const longBuf = Array.from({ length: 60 }, (_, i) => ({ x: i, y: 0 }));
+assert.equal(S.commitSandEcho(tapPast, longBuf, 3, 5), false, '3-frame tap must not spawn');
+assert.equal(tapPast.length, 0);
+assert.equal(S.commitSandEcho(tapPast, longBuf.slice(0, 14), 14, 5), false, '14-frame hold must not spawn');
+assert.equal(S.commitSandEcho(tapPast, longBuf.slice(0, 15), 15, 5), true, '15-frame hold spawns');
+assert.equal(tapPast.length, 1);
+assert.equal(S.commitSandEcho(tapPast, longBuf.slice(0, 20), 20, 5), true);
+assert.equal(tapPast.length, 2);
 console.log('sandEcho ok');

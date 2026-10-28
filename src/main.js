@@ -1,4 +1,4 @@
-import { pushEchoRun, rogueZoneClear, MIN_ECHO_SEGMENT } from './systems/sandEcho.js';
+import { pushEchoRun, rogueZoneClear, commitSandEcho } from './systems/sandEcho.js';
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
@@ -1436,20 +1436,43 @@ function update() {
     if (state.gameState !== 'PLAYING') { updatePrevKeys(); return; }
 
     // Sand rewind (Rogue Run only): while E held with sand, move player back and freeze the world.
+    // Echoes commit on RELEASE (or sand empty) only if the hold lasted ≥ MIN_ECHO_SEGMENT frames.
     if (state.rogueRun?.active && state.sand && state.failTimer === 0) {
-        if (keys.e && !state.sandRewinding && canRewind(state.sand)) {
-            // Rewind START: the path about to be undone becomes a past-self echo playing forward.
-            const n = Math.min(state.sand.history.length, state.currentRun.length);
-            const segment = n > 0 ? state.currentRun.slice(-n) : null;
-            if (segment && pushEchoRun(state.pastRuns, segment, state.currentLevelMeta?.maxGhosts, null, { minLength: MIN_ECHO_SEGMENT })) {
-                state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
-            }
+        const wasRewinding = !!state.sandRewinding;
+        if (keys.e && !wasRewinding && canRewind(state.sand)) {
+            // Rewind START: arm collector — do not spawn a ghost yet (short taps must create none).
+            state.sandEchoPending = [];
+            state.sandHoldTicks = 0;
         }
         const rewound = tickSand(state.sand, { holding: !!keys.e, player: state.player, packages: state.packages, tick: state.currentTick });
-        state.sandRewinding = rewound;
+        if (rewound) {
+            if (state.currentRun.length) {
+                const frame = state.currentRun.pop();
+                if (!state.sandEchoPending) state.sandEchoPending = [];
+                state.sandEchoPending.unshift(frame); // chronological: oldest undone first
+                state.sandHoldTicks = (state.sandHoldTicks || 0) + 1;
+            }
+            state.sandRewinding = true;
+            updateSandHud();
+            updatePrevKeys();
+            return;
+        }
+        if (wasRewinding) {
+            // Hold ended (key up or sand empty): commit only if held long enough.
+            if (commitSandEcho(state.pastRuns, state.sandEchoPending, state.sandHoldTicks, state.currentLevelMeta?.maxGhosts)) {
+                state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
+            }
+            state.sandEchoPending = null;
+            state.sandHoldTicks = 0;
+        }
+        state.sandRewinding = false;
         updateSandHud();
-        if (rewound) { if (state.currentRun.length) state.currentRun.pop(); updatePrevKeys(); return; }
-    } else { state.sandRewinding = false; updateSandHud(); }
+    } else {
+        state.sandRewinding = false;
+        state.sandEchoPending = null;
+        state.sandHoldTicks = 0;
+        updateSandHud();
+    }
 
     recordFrame(keys);
     tickLoopFx();

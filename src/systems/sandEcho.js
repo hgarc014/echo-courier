@@ -1,12 +1,11 @@
 // Past-self echoes on rewind (Super Time Force style).
 // Campaign loops: every finished loop becomes an echo replayed from loop start.
-// Sand rewind: the abandoned segment becomes an echo too, replayed FORWARD from
-// its own start with the normal Ghost playback. Both paths go through
-// pushEchoRun so the cap (drop oldest) is enforced in one place.
-// Hook for E-hold / sand meter: call pushEchoRun(state.pastRuns, segment, cap)
-// at rewind start, then rebuild activeGhosts (see resetRun / sand tick in main.js).
+// Sand rewind: frames undone while E is held are collected, then on RELEASE
+// (or sand empty) pushEchoRun commits them as a forward-playing Ghost — only if
+// the hold lasted ≥ MIN_ECHO_SEGMENT frames. Short taps never create ghosts.
+// Cap (drop oldest) is enforced in pushEchoRun.
 
-/** Ignore shorter segments on sand rewind start (junk from a 1-frame E tap). */
+/** Minimum E-hold rewind frames before a sand echo is committed. */
 export const MIN_ECHO_SEGMENT = 15;
 
 export function recordSandSample(buffer, frame) {
@@ -25,14 +24,21 @@ export function maxSandGhosts(meta) {
 }
 
 // Appends run, trims oldest past cap. Returns true if added.
-// opts.minLength: if set, refuse buffers shorter than this (sand E-tap filter).
-export function pushEchoRun(pastRuns, buffer, cap = null, recordCap = null, opts = null) {
-    const min = opts?.minLength;
-    if (min != null && (!Array.isArray(buffer) || buffer.length < min)) return false;
+export function pushEchoRun(pastRuns, buffer, cap = null, recordCap = null) {
     const run = spawnEchoFromBuffer(buffer, recordCap);
     if (run) pastRuns.push(run);
     if (cap != null) while (pastRuns.length > cap) pastRuns.shift();
     return !!run;
+}
+
+/**
+ * Commit a sand-rewind echo after the hold ends.
+ * Only pushes when holdTicks >= MIN_ECHO_SEGMENT (short taps → no ghost).
+ * pending frames must be in chronological order (oldest first).
+ */
+export function commitSandEcho(pastRuns, pending, holdTicks, cap = null) {
+    if ((holdTicks | 0) < MIN_ECHO_SEGMENT) return false;
+    return pushEchoRun(pastRuns, pending, cap);
 }
 
 // Rogue slice: empty-package floor clears when the player stands in the zone.
