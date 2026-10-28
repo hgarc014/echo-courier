@@ -1312,7 +1312,7 @@ export function startRogueRun(seed) {
     setPlaytestReturnVisible(false);
     state.currentLevelMeta = {
         name: `Rogue ${floor.meta?.name || 'Floor'}`,
-        obj: `${floor.meta?.obj || 'Deliver the package.'} One death ends the run.`,
+        obj: `${floor.meta?.obj || 'Reach the exit zone.'} One death ends the run.`,
         par: floor.meta?.par,
         challenge: { desc: 'Rogue run', check: () => false },
         maxGhosts: (floor.meta?.maxGhosts ?? 2) + meta.echoSlotBonus,

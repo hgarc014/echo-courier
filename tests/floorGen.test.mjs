@@ -50,7 +50,7 @@ check('room count is 3-5 (default and clamped)', () => {
     assert.equal(generateFloor(9, 9).info.roomCount, 5);
 });
 
-check('schema: every door has a plate, no timers, package in room 0, zone in last room', () => {
+check('schema: every door has a plate, no timers, no packages, exit zone in last room', () => {
     for (let s = 1; s <= 50; s++) {
         const { layout: L, info } = generateFloor(s);
         for (const k of ['lasers', 'guards', 'cameras', 'drones', 'winds', 'statics', 'cracks', 'robots', 'hints']) assert.deepEqual(L[k], []);
@@ -60,7 +60,8 @@ check('schema: every door has a plate, no timers, package in room 0, zone in las
             assert.ok(L.plates.some(p => p.linkedIds.includes(d.id)), `door ${d.id} unlinked`);
         }
         for (const p of L.plates) assert.equal(p.type, 'standard');
-        assert.ok(L.packages[0].x < ROOM_W);
+        assert.equal(L.packages.length, 0);
+        assert.ok(L.deliveryZone);
         assert.ok(L.deliveryZone.x >= (info.roomCount - 1) * ROOM_W);
         const [a, b] = info.airlock.doors.map(id => L.doors.find(d => d.id === id));
         assert.equal(b.x - a.x, 20, 'airlock doors back to back');
@@ -87,7 +88,7 @@ check('tests/solutions/floor-seed2.json matches the generator and replays', () =
     const sol = JSON.parse(readFileSync(join(dir, 'floor-seed2.json'), 'utf8'));
     assert.equal(sol.level, null);
     const gen = generateFloor(2).layout;
-    for (const k of ['width', 'height', 'deliveryZone', 'walls', 'doors']) assert.deepEqual(sol.layout[k], gen[k], k);
+    for (const k of ['width', 'height', 'deliveryZone', 'walls', 'doors', 'packages']) assert.deepEqual(sol.layout[k], gen[k], k);
     assert.deepEqual(sol.layout.plates.map(p => [p.id, p.x, p.y, p.linkedIds]), gen.plates.map(p => [p.id, p.x, p.y, p.linkedIds]));
     const r = replaySolution(sol);
     assert.ok(r.completed);

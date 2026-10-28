@@ -71,14 +71,13 @@ export function generateFloor(seed, roomCount) {
             plates.push({ x: gx - 10, y: 280, linkedIds: [id], id: `p${i}`, type: 'standard' });
         }
     }
-    const pkgY = pick(rng, 5, 23) * 20;
     const zoneY = pick(rng, 3, 17) * 20;
     const layout = {
         width: W, height: H, mapWidth: W, mapHeight: H,
         player: { x: 100, y: LANE_Y },
         deliveryZone: { x: W - 180, y: zoneY, w: 120, h: 120 },
         walls, doors, plates,
-        packages: [{ x: 300, y: pkgY, id: 'pkg1', packageType: 'standard', requiredForDelivery: true }],
+        packages: [],
         pickups: placePickups(seed, n),
         lasers: [], guards: [], cameras: [], drones: [], winds: [], statics: [], cracks: [], robots: [], hints: []
     };
@@ -108,7 +107,7 @@ export function placePickups(seed, n) {
 export function floorMeta(seed, roomCount) {
     return {
         name: `Floor ${seed}`,
-        obj: `Cross ${roomCount} rooms. One airlock needs an echo on a plate.`,
+        obj: `Cross ${roomCount} rooms and reach the exit zone. One airlock needs an echo on a plate.`,
         maxGhosts: 2,
         par: 3,
         loopTime: null
