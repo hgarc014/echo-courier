@@ -4,7 +4,10 @@
 // its own start with the normal Ghost playback. Both paths go through
 // pushEchoRun so the cap (drop oldest) is enforced in one place.
 // Hook for E-hold / sand meter: call pushEchoRun(state.pastRuns, segment, cap)
-// at rewind start, then rebuild activeGhosts (see resetRun in main.js).
+// at rewind start, then rebuild activeGhosts (see resetRun / sand tick in main.js).
+
+/** Ignore shorter segments on sand rewind start (junk from a 1-frame E tap). */
+export const MIN_ECHO_SEGMENT = 15;
 
 export function recordSandSample(buffer, frame) {
     buffer.push(frame && typeof frame === 'object' ? { ...frame } : frame);
@@ -22,7 +25,10 @@ export function maxSandGhosts(meta) {
 }
 
 // Appends run, trims oldest past cap. Returns true if added.
-export function pushEchoRun(pastRuns, buffer, cap = null, recordCap = null) {
+// opts.minLength: if set, refuse buffers shorter than this (sand E-tap filter).
+export function pushEchoRun(pastRuns, buffer, cap = null, recordCap = null, opts = null) {
+    const min = opts?.minLength;
+    if (min != null && (!Array.isArray(buffer) || buffer.length < min)) return false;
     const run = spawnEchoFromBuffer(buffer, recordCap);
     if (run) pastRuns.push(run);
     if (cap != null) while (pastRuns.length > cap) pastRuns.shift();

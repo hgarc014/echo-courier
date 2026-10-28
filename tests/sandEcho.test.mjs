@@ -13,4 +13,12 @@ const z = { x: 0, y: 0, w: 10, h: 10 };
 assert.ok(S.rogueZoneClear([], { x: 2, y: 2, w: 4, h: 4 }, z));
 assert.ok(!S.rogueZoneClear([{}], { x: 2, y: 2, w: 4, h: 4 }, z));
 assert.ok(!S.rogueZoneClear([], { x: 50, y: 2, w: 4, h: 4 }, z));
+
+const shortPast = [];
+const short = Array.from({ length: S.MIN_ECHO_SEGMENT - 1 }, (_, i) => ({ x: i, y: 0 }));
+assert.equal(S.pushEchoRun(shortPast, short, 3, null, { minLength: S.MIN_ECHO_SEGMENT }), false);
+assert.equal(shortPast.length, 0);
+const ok = Array.from({ length: S.MIN_ECHO_SEGMENT }, (_, i) => ({ x: i, y: 0 }));
+assert.equal(S.pushEchoRun(shortPast, ok, 3, null, { minLength: S.MIN_ECHO_SEGMENT }), true);
+assert.equal(shortPast.length, 1);
 console.log('sandEcho ok');

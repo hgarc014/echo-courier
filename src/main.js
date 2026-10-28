@@ -1,4 +1,4 @@
-import { pushEchoRun, rogueZoneClear } from './systems/sandEcho.js';
+import { pushEchoRun, rogueZoneClear, MIN_ECHO_SEGMENT } from './systems/sandEcho.js';
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
 import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
@@ -1441,7 +1441,7 @@ function update() {
             // Rewind START: the path about to be undone becomes a past-self echo playing forward.
             const n = Math.min(state.sand.history.length, state.currentRun.length);
             const segment = n > 0 ? state.currentRun.slice(-n) : null;
-            if (segment && pushEchoRun(state.pastRuns, segment, state.currentLevelMeta?.maxGhosts)) {
+            if (segment && pushEchoRun(state.pastRuns, segment, state.currentLevelMeta?.maxGhosts, null, { minLength: MIN_ECHO_SEGMENT })) {
                 state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
             }
         }
