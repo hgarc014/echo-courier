@@ -13,7 +13,7 @@
   },
   "deliveryZone": {
    "x": 2820,
-   "y": 200,
+   "y": 240,
    "w": 120,
    "h": 120
   },
@@ -181,15 +181,7 @@
    }
   ],
   "hints": [],
-  "packages": [
-   {
-    "x": 300,
-    "y": 320,
-    "id": "pkg1",
-    "packageType": "standard",
-    "requiredForDelivery": true
-   }
-  ],
+  "packages": [],
   "lasers": [],
   "guards": [],
   "cameras": [],
@@ -208,7 +200,7 @@
     "speaker": "",
     "text": ""
    },
-   "obj": "Cross 5 rooms. One airlock needs an echo on a plate.",
+   "obj": "Cross 5 rooms and reach the exit zone. One airlock needs an echo on a plate.",
    "grants": [],
    "maxGhosts": 2,
    "crackSpeed": "normal",
@@ -235,14 +227,7 @@
    ["r", 1]
   ],
   [
-   ["d", 66],
-   ["s", 9],
-   ["space", 1],
-   ["", 1],
-   ["w", 9],
-   ["d", 635],
-   ["w", 11],
-   ["space", 1]
+   ["d", 689]
   ]
  ],
  "completedLoops": 3

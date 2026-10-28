@@ -32,6 +32,16 @@ function setKeys(frameKey) {
     for (const k of RECORDED_KEYS) keys[k] = on.has(k);
 }
 
+/** Package-free layout (rogue floor): clear is the player standing in the exit zone. */
+export function isZoneClearLayout(solution) {
+    return !!(solution && solution.layout && (solution.layout.packages || []).length === 0);
+}
+
+/** Campaign levels finish as LEVEL_COMPLETE. Rogue floors finish as a cleared run. */
+export function runCleared() {
+    return state.gameState === 'LEVEL_COMPLETE' || state.rogueRun?.outcome === 'cleared';
+}
+
 /** Load the solution's level and advance through story / boss-intro dialogs. */
 export function loadLevel(solution) {
     for (const k of Object.keys(keys)) keys[k] = false;
@@ -43,6 +53,10 @@ export function loadLevel(solution) {
     } else {
         main.startGame(levelIndexForSolution(solution));
     }
+    // Empty cargo uses rogueZoneClear (player in the delivery zone). Campaign loads stay package delivery.
+    state.rogueRun = isZoneClearLayout(solution)
+        ? { active: true, seed: null, outcome: null, unlockTaken: false }
+        : null;
     for (let guard = 0; guard < 10 && state.gameState !== 'PLAYING'; guard++) {
         if (state.gameState !== 'DIALOG' && state.gameState !== 'BOSS_INTRO') break;
         keys.enter = true; main.stepSimulation();
@@ -65,7 +79,7 @@ export function replaySolution(solution, { extraTicks = 600 } = {}) {
     outer: for (const loop of solution.loops) {
         for (const [frameKey, count] of loop) {
             for (let i = 0; i < count; i++) {
-                if (state.gameState === 'LEVEL_COMPLETE') break outer;
+                if (runCleared()) break outer;
                 setKeys(frameKey);
                 main.stepSimulation(); ticks++; observe();
             }
@@ -75,7 +89,7 @@ export function replaySolution(solution, { extraTicks = 600 } = {}) {
     for (let i = 0; i < extraTicks && state.gameState === 'PLAYING'; i++) { main.stepSimulation(); ticks++; observe(); }
     const level = solution.layout ? null : LEVELS[levelIndexForSolution(solution)];
     return {
-        completed: state.gameState === 'LEVEL_COMPLETE',
+        completed: runCleared(),
         loopsUsed: displayedLoopNumber(state.loopNumber),
         ticks,
         failMessages,
