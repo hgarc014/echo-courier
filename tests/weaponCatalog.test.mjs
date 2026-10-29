@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { trainingMetrics, validateWeaponCatalog, WEAPON_FAMILIES, WEAPON_INPUTS, weaponMove, weaponHudState } from '../src/rogue/weapons.js';
+import { trainingMetrics, validateWeaponCatalog, WEAPON_FAMILIES, WEAPON_INPUTS, weaponMove, weaponComboLength, weaponHudState } from '../src/rogue/weapons.js';
 
 assert.deepEqual(Object.keys(WEAPON_FAMILIES), ['chrono-baton', 'parcel-driver', 'route-cutter']);
 assert.deepEqual(validateWeaponCatalog(), []);
@@ -7,6 +7,8 @@ for (const weapon of Object.values(WEAPON_FAMILIES)) {
     assert.deepEqual(Object.keys(weapon.moves), ['quick', 'heavy', 'special']);
     assert.ok(weapon.rewindInteraction.length > 20);
     assert.equal(weapon.builds.length, 2);
+    assert.ok(weaponComboLength(weapon.id) >= 2);
+    assert.notEqual(weaponMove(weapon.id, 'quick', 0).id, weaponMove(weapon.id, 'quick', 1).id);
     for (const build of weapon.builds) assert.equal(build.aspects.length, 2);
     const metrics = trainingMetrics(weapon.id);
     assert.ok(metrics.quickDps > 0);
@@ -16,7 +18,7 @@ for (const weapon of Object.values(WEAPON_FAMILIES)) {
 assert.equal(weaponMove('parcel-driver', 'heavy').effect, 'projectile-heavy');
 assert.equal(weaponMove('route-cutter', 'special').effect, 'temporal-crosscut');
 assert.deepEqual(weaponHudState('chrono-baton', 0), {
-    name: 'Chrono Baton', quick: 'Baton Snap · 48px', heavy: 'Baton Reversal · 66px',
+    name: 'Chrono Baton', quick: '3-hit Baton Snap · 48px', heavy: 'Baton Reversal · 66px',
     special: 'Baton Sync', specialReady: true, specialSeconds: 0
 });
 assert.equal(weaponHudState('parcel-driver', 61).specialSeconds, 2);

@@ -11,8 +11,13 @@ function move(id, values) {
 export const WEAPON_FAMILIES = Object.freeze({
     'chrono-baton': Object.freeze({
         id: 'chrono-baton', name: 'Chrono Baton', fantasy: 'Fast close-range tempo and synchronized Echo pressure.',
+        quickCombo: Object.freeze([
+            move('baton-snap', { windup: 5, active: 6, recovery: 7, damage: 1, range: 48, width: 40, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            move('baton-backbeat', { windup: 4, active: 6, recovery: 7, damage: 1, range: 52, width: 54, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            move('baton-downbeat', { windup: 7, active: 7, recovery: 14, damage: 2, range: 60, width: 64, cooldown: 0, sandCost: 0, effect: 'melee-knockback' })
+        ]),
         moves: Object.freeze({
-            quick: move('baton-snap', { windup: 5, active: 6, recovery: 9, damage: 1, range: 48, width: 46, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            quick: move('baton-snap', { windup: 5, active: 6, recovery: 7, damage: 1, range: 48, width: 40, cooldown: 0, sandCost: 0, effect: 'melee' }),
             heavy: move('baton-reversal', { windup: 18, active: 8, recovery: 22, damage: 3, range: 66, width: 58, cooldown: 0, sandCost: 0, effect: 'melee-knockback' }),
             special: move('baton-sync', { windup: 10, active: 1, recovery: 20, damage: 0, range: 180, width: 180, cooldown: 180, sandCost: 0.5, effect: 'echo-sync' })
         }),
@@ -24,8 +29,12 @@ export const WEAPON_FAMILIES = Object.freeze({
     }),
     'parcel-driver': Object.freeze({
         id: 'parcel-driver', name: 'Parcel Driver', fantasy: 'Launch temporal cargo as dangerous ammunition.',
+        quickCombo: Object.freeze([
+            move('driver-tap', { windup: 8, active: 5, recovery: 10, damage: 1, range: 54, width: 38, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            move('driver-piston', { windup: 13, active: 6, recovery: 18, damage: 2, range: 74, width: 32, cooldown: 0, sandCost: 0, effect: 'melee-knockback' })
+        ]),
         moves: Object.freeze({
-            quick: move('driver-tap', { windup: 8, active: 5, recovery: 12, damage: 1, range: 54, width: 42, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            quick: move('driver-tap', { windup: 8, active: 5, recovery: 10, damage: 1, range: 54, width: 38, cooldown: 0, sandCost: 0, effect: 'melee' }),
             heavy: move('heavy-parcel', { windup: 24, active: 24, recovery: 26, damage: 4, range: 320, width: 34, cooldown: 0, sandCost: 0, effect: 'projectile-heavy' }),
             special: move('decoy-parcel', { windup: 12, active: 1, recovery: 18, damage: 0, range: 240, width: 40, cooldown: 150, sandCost: 0.75, effect: 'projectile-decoy' })
         }),
@@ -37,8 +46,13 @@ export const WEAPON_FAMILIES = Object.freeze({
     }),
     'route-cutter': Object.freeze({
         id: 'route-cutter', name: 'Route Cutter', fantasy: 'Cut delayed hazards into space and make timelines cross them.',
+        quickCombo: Object.freeze([
+            move('cutter-slice', { windup: 7, active: 6, recovery: 9, damage: 1, range: 58, width: 34, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            move('cutter-sweep', { windup: 9, active: 7, recovery: 12, damage: 1, range: 62, width: 78, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            move('cutter-rift', { windup: 11, active: 8, recovery: 17, damage: 2, range: 82, width: 48, cooldown: 0, sandCost: 0, effect: 'melee-knockback' })
+        ]),
         moves: Object.freeze({
-            quick: move('cutter-slice', { windup: 7, active: 6, recovery: 12, damage: 1, range: 58, width: 38, cooldown: 0, sandCost: 0, effect: 'melee' }),
+            quick: move('cutter-slice', { windup: 7, active: 6, recovery: 9, damage: 1, range: 58, width: 34, cooldown: 0, sandCost: 0, effect: 'melee' }),
             heavy: move('route-sever', { windup: 20, active: 1, recovery: 24, damage: 3, range: 130, width: 12, cooldown: 0, sandCost: 0, effect: 'temporal-cut' }),
             special: move('crosscut', { windup: 14, active: 1, recovery: 22, damage: 2, range: 170, width: 12, cooldown: 180, sandCost: 0.75, effect: 'temporal-crosscut' })
         }),
@@ -54,8 +68,16 @@ export function weaponDefinition(id) {
     return WEAPON_FAMILIES[id] || WEAPON_FAMILIES['chrono-baton'];
 }
 
-export function weaponMove(weaponId, action) {
-    return weaponDefinition(weaponId).moves[action] || null;
+export function weaponMove(weaponId, action, comboStep = 0) {
+    const weapon = weaponDefinition(weaponId);
+    if (action === 'quick' && weapon.quickCombo?.length) {
+        return weapon.quickCombo[Math.abs(comboStep | 0) % weapon.quickCombo.length];
+    }
+    return weapon.moves[action] || null;
+}
+
+export function weaponComboLength(weaponId) {
+    return weaponDefinition(weaponId).quickCombo?.length || 1;
 }
 
 function moveLabel(id) {
@@ -67,7 +89,7 @@ export function weaponHudState(weaponId, specialCooldown = 0) {
     const cooldown = Math.max(0, specialCooldown | 0);
     return {
         name: weapon.name,
-        quick: `${moveLabel(weapon.moves.quick.id)} · ${weapon.moves.quick.range}px`,
+        quick: `${weapon.quickCombo.length}-hit ${moveLabel(weapon.moves.quick.id)} · ${weapon.moves.quick.range}px`,
         heavy: `${moveLabel(weapon.moves.heavy.id)} · ${weapon.moves.heavy.range}px`,
         special: moveLabel(weapon.moves.special.id),
         specialReady: cooldown === 0,
@@ -98,6 +120,7 @@ export function validateWeaponCatalog() {
             if (!entry) errors.push(`${weapon.id}: missing ${action}`);
             else if (entry.windup < 1 || entry.recovery < 1 || entry.damage < 0 || entry.range <= 0) errors.push(`${weapon.id}/${action}: invalid timings`);
         }
+        if (!weapon.quickCombo?.length || weapon.quickCombo.some(entry => entry.windup < 1 || entry.recovery < 1 || entry.range <= 0)) errors.push(`${weapon.id}: invalid quick combo`);
         if (!weapon.rewindInteraction) errors.push(`${weapon.id}: missing rewind interaction`);
         if (weapon.builds.length < 2 || weapon.builds.some(build => build.aspects.length < 2)) errors.push(`${weapon.id}: needs two builds`);
     }

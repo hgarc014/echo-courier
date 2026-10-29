@@ -37,7 +37,7 @@ import { CombatBurrower, CombatGatekeeper, CombatPrism, CombatStillkeeper, comba
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
 import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
-import { WEAPON_FAMILIES, weaponMove, weaponHudState } from './rogue/weapons.js';
+import { WEAPON_FAMILIES, weaponMove, weaponComboLength, weaponHudState } from './rogue/weapons.js';
 import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
 import { commandEchoAssault, recallEchoes, ECHO_ASSAULT_COOLDOWN, ECHO_RECALL_COOLDOWN } from './rogue/echoCommands.js';
 import { RELICS, relicSlots, relicModifiers } from './rogue/relics.js';
@@ -1236,6 +1236,10 @@ function hitRogueEnemy(enemy, attackId, damage = 1, impulse = null) {
     if (!enemy || enemy.dead) return false;
     const wasDead = !!enemy.dead;
     const hit = enemy.hitByAttack?.(attackId, damage, impulse) || false;
+    if (hit && state.rogueRun?.active) {
+        state.rogueHitStopTicks = Math.max(state.rogueHitStopTicks | 0, damage >= 2 ? 4 : 2);
+        startShake(damage >= 2 ? 5 : 3, damage >= 2 ? 3.4 : 1.8);
+    }
     if (hit && !wasDead && enemy.dead) {
         const amount = aspectModifiers(state.rogueRun).sandOnKill;
         if (amount > 0 && state.sand) {
@@ -1984,6 +1988,10 @@ function update() {
         return;
     }
 
+    // Hit-stop is presentation-only: keep the deterministic world clock moving
+    // while holding the attacker silhouette and strengthening screen shake.
+    if ((state.rogueHitStopTicks | 0) > 0) state.rogueHitStopTicks--;
+
     if (state.rogueRun?.active && state.player && state.player.invulnTicks > 0) state.player.invulnTicks--;
 
     // Sand rewind (Rogue Run only): while E held with sand, move player back and freeze the world.
@@ -2176,19 +2184,33 @@ function update() {
     }
     let interactJustPressed = isKeyJustPressed('space');
     if (state.rogueRun?.weaponSpecialCooldown > 0) state.rogueRun.weaponSpecialCooldown--;
+    if (state.rogueRun?.quickComboWindow > 0) state.rogueRun.quickComboWindow--;
     if (rogueCombatActive()) updateRogueWeaponHud();
     const quickPressed = interactJustPressed || isKeyJustPressed('j');
     const heavyPressed = isKeyJustPressed('k');
     const specialPressed = isKeyJustPressed('l');
     const attackJustPressed = rogueCombatActive() && (quickPressed || heavyPressed || specialPressed);
     let weaponAction = specialPressed ? 'special' : (heavyPressed ? 'heavy' : 'quick');
+    let weaponComboStep = 0;
     if (attackJustPressed) {
         const mods = aspectModifiers(state.rogueRun);
-        const move = weaponMove(state.rogueRun.weapon, weaponAction);
+        const comboLength = weaponComboLength(state.rogueRun.weapon);
+        const comboStep = weaponAction === 'quick'
+            ? ((state.rogueRun.quickComboWindow | 0) > 0 ? ((state.rogueRun.quickComboStep | 0) + 1) % comboLength : 0)
+            : 0;
+        weaponComboStep = comboStep;
+        const move = weaponMove(state.rogueRun.weapon, weaponAction, comboStep);
         const specialReady = weaponAction !== 'special' || ((state.rogueRun.weaponSpecialCooldown | 0) <= 0 && (state.sand?.sand || 0) >= move.sandCost);
         const started = specialReady && beginAttack(state.player, move);
         if (started) {
             state.player.weaponAction = weaponAction;
+            if (weaponAction === 'quick') {
+                state.rogueRun.quickComboStep = comboStep;
+                state.rogueRun.quickComboWindow = move.windup + move.active + move.recovery + 24;
+            } else {
+                state.rogueRun.quickComboStep = 0;
+                state.rogueRun.quickComboWindow = 0;
+            }
             if (move.sandCost > 0) state.sand.sand = Math.max(0, state.sand.sand - move.sandCost);
             if (weaponAction === 'special') state.rogueRun.weaponSpecialCooldown = move.cooldown;
             const empowered = mods.stillstepDamage > 1 && (state.player.stillstepTicks | 0) >= 60;
@@ -2623,6 +2645,7 @@ function update() {
             interact: interactJustPressed,
             attack: attackJustPressed,
             weaponAction: attackJustPressed ? weaponAction : null,
+            weaponComboStep: attackJustPressed ? weaponComboStep : 0,
             toss: tossFired,
             dash: dashFired,
             heavy: !!(carried && carried.type === 'heavy')
@@ -3080,10 +3103,13 @@ function drawCombatArc(target, actor, color, alpha = 1) {
     const cx = actor.x + actor.w / 2;
     const cy = actor.y + actor.h / 2;
     const angle = Math.atan2(actor.facingY || 0, actor.facingX || 1);
-    const active = attackIsActive(actor);
+    const active = attackIsActive(actor) || (actor === state.player && (state.rogueHitStopTicks | 0) > 0);
     const isEcho = actor !== state.player;
+    const range = actor.attackRange || 48;
+    const width = actor.attackWidth || 46;
+    const halfSweep = Math.max(.34, Math.min(1.08, Math.atan2(width, range) * 1.35));
     if (active && drawVfx(target, isEcho ? state.vfxAtlas?.echoSwing : state.vfxAtlas?.playerSwing, cx, cy, (actor.attackRange || 48) * 2.35, {
-        rotation: angle, alpha: alpha * (isEcho ? .68 : .9)
+        rotation: angle, alpha: alpha * (isEcho ? .68 : .9), scaleY: Math.max(.68, Math.min(1.55, width / 46))
     })) return;
     target.save();
     target.globalAlpha = alpha * (active ? .95 : .38);
@@ -3093,21 +3119,21 @@ function drawCombatArc(target, actor, color, alpha = 1) {
     target.shadowColor = color;
     target.shadowBlur = active ? 16 : 6;
     target.beginPath();
-    target.arc(cx, cy, (actor.attackRange || 48) * .82, angle - .72, angle + .72);
+    target.arc(cx, cy, range * .82, angle - halfSweep, angle + halfSweep);
     target.stroke();
     if (active) {
         target.globalAlpha *= .52;
         target.strokeStyle = '#fff4cf';
         target.lineWidth = 3;
         target.beginPath();
-        target.arc(cx, cy, (actor.attackRange || 48) * .76, angle - .62, angle + .62);
+        target.arc(cx, cy, range * .76, angle - halfSweep * .86, angle + halfSweep * .86);
         target.stroke();
         target.fillStyle = color;
         target.globalAlpha *= .7;
         target.beginPath();
-        target.moveTo(cx + Math.cos(angle + .72) * (actor.attackRange || 48) * .82, cy + Math.sin(angle + .72) * (actor.attackRange || 48) * .82);
-        target.lineTo(cx + Math.cos(angle + .92) * (actor.attackRange || 48) * .64, cy + Math.sin(angle + .92) * (actor.attackRange || 48) * .64);
-        target.lineTo(cx + Math.cos(angle + .55) * (actor.attackRange || 48) * .62, cy + Math.sin(angle + .55) * (actor.attackRange || 48) * .62);
+        target.moveTo(cx + Math.cos(angle + halfSweep) * range * .82, cy + Math.sin(angle + halfSweep) * range * .82);
+        target.lineTo(cx + Math.cos(angle + halfSweep + .2) * range * .64, cy + Math.sin(angle + halfSweep + .2) * range * .64);
+        target.lineTo(cx + Math.cos(angle + halfSweep - .17) * range * .62, cy + Math.sin(angle + halfSweep - .17) * range * .62);
         target.closePath(); target.fill();
     }
     target.restore();
