@@ -32,7 +32,7 @@ import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, 
 import { createEncounterDirector, createPressureDirector, encounterRemaining, tickEncounterDirector, tickPressureDirector } from './rogue/encounterDirector.js';
 import { authoredShellWalls, composeEncounter } from './rogue/encounterComposition.js';
 import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/encounterTelemetry.js';
-import { CombatBurrower, CombatGatekeeper, combatBossHud } from './rogue/combatBosses.js';
+import { CombatBurrower, CombatGatekeeper, CombatPrism, combatBossHud } from './rogue/combatBosses.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1427,7 +1427,7 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         riftOpen: clear === 'rift',
         isBoss: !!bossId,
         bossId,
-        bossPending: !bossId && ['second-hand-halls', 'hourglass-warrens'].includes(biome.id),
+        bossPending: !bossId && ['second-hand-halls', 'hourglass-warrens', 'echo-courts'].includes(biome.id),
         encounter,
         // Chamber setup resets currentTick below, so every room telemetry clock starts at zero.
         telemetry: beginEncounterTelemetry(encounter, 0),
@@ -1454,10 +1454,12 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     const baseGhosts = (cmeta.maxGhosts ?? 2) + meta.echoSlotBonus;
     const carriedGhosts = !fresh && state.currentLevelMeta ? Number(state.currentLevelMeta.maxGhosts) || 0 : 0;
     state.currentLevelMeta = {
-        name: bossId === 'burrower' ? 'Burrower Den' : (bossId ? 'Gatekeeper Audit' : cmeta.name),
-        obj: bossId === 'burrower'
+        name: bossId === 'prism' ? 'Prism Court' : (bossId === 'burrower' ? 'Burrower Den' : (bossId ? 'Gatekeeper Audit' : cmeta.name)),
+        obj: bossId === 'prism'
+            ? 'Use Echoes to bend the Prism beam away, then shatter its core.'
+            : (bossId === 'burrower'
             ? 'Lure the Burrower with Echoes, dodge its eruption, and strike while surfaced.'
-            : (bossId ? 'Defeat the Gatekeeper with attacks, Echoes, and time verbs.' : cmeta.obj),
+            : (bossId ? 'Defeat the Gatekeeper with attacks, Echoes, and time verbs.' : cmeta.obj)),
         par: cmeta.par,
         hall: cmeta.hall,
         biome: biome.id,
@@ -1489,9 +1491,9 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         ];
         const spot = candidates.find(point => !(layout.walls || []).some(wall =>
             AABB(point.x, point.y, 60, 60, wall.x, wall.y, wall.w, wall.h))) || candidates[0];
-        state.guards.push(bossId === 'burrower'
-            ? new CombatBurrower(spot.x, spot.y)
-            : new CombatGatekeeper(spot.x, spot.y));
+        state.guards.push(bossId === 'prism'
+            ? new CombatPrism(spot.x, spot.y)
+            : (bossId === 'burrower' ? new CombatBurrower(spot.x, spot.y) : new CombatGatekeeper(spot.x, spot.y)));
     }
     state.plates = []; state.doors = []; state.cameras = []; state.lasers = []; state.drones = []; state.packages = [];
     state.player.hp = carriedHp;
@@ -1548,7 +1550,7 @@ function enterRogueBossChamber() {
     const run = state.rogueRun;
     if (!run?.active) return false;
     const biome = BIOME_ORDER[run.biomeIndex ?? 0] || BIOME_ORDER[0];
-    const bossId = biome.id === 'hourglass-warrens' ? 'burrower' : 'gatekeeper';
+    const bossId = biome.id === 'echo-courts' ? 'prism' : (biome.id === 'hourglass-warrens' ? 'burrower' : 'gatekeeper');
     enterRogueChamber(run.biomeIndex ?? 0, false, bossId);
     return true;
 }
@@ -1599,7 +1601,8 @@ function tickRogueChamber() {
             chamber.type = 'rift';
             chamber.riftOpen = true;
             const objective = document.getElementById('objective-text');
-            if (objective) objective.innerText = `${chamber.bossId === 'burrower' ? 'Burrower' : 'Gatekeeper'} defeated — enter the open rift.`;
+            const bossName = chamber.bossId === 'prism' ? 'Prism' : (chamber.bossId === 'burrower' ? 'Burrower' : 'Gatekeeper');
+            if (objective) objective.innerText = `${bossName} defeated — enter the open rift.`;
         }
     }
 }
