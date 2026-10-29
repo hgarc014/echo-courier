@@ -6,10 +6,15 @@ import { SFX } from '../core/audio.js';
 import { drawSprite, drawTiled } from '../core/sprites.js';
 import { resolveSprite } from '../core/atlas.js';
 import { normalizeTimeline, pickTemporalActor, TEMPORAL_GLYPH, TEMPORAL_COLOR } from '../systems/temporalPlate.js';
+import { drawArenaWall } from '../rogue/arenaVisuals.js';
 
 export class Wall extends Entity {
     constructor(x, y, w, h) { super(x, y, w, h, 'wall'); }
     render(ctx) {
+        if (state.currentLevelMeta?.isRogue) {
+            drawArenaWall(ctx, this, state.currentLevelMeta?.biome);
+            return;
+        }
         const img = resolveSprite(state, 'wall');
         if (img) {
             const pulse = 0.92 + 0.08 * Math.sin(state.currentTick * 0.06);

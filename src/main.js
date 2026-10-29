@@ -8,6 +8,7 @@ import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
 import { AABB, checkWallCollision, checkCourierCollision, getDashDestination, PLAYER_MOVE_SPEED, HEAVY_SPEED_MULT } from './core/physics.js';
 import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT } from './core/camera.js';
 import { ROOM_W } from './data/floorGen.js';
+import { drawArenaBackdrop } from './rogue/arenaVisuals.js';
 import { BIOME_ORDER, nextBiomeIndex } from './rogue/biomes.js';
 import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems, selectRogueWeapon, buyRogueRelic, equipRogueRelic } from './rogue/rogueMeta.js';
@@ -2946,35 +2947,7 @@ function drawPreviewScrubber(target) {
 }
 
 function drawRogueArenaBackdrop(target, map) {
-    const biome = state.currentLevelMeta?.biome;
-    const palette = biome === 'hourglass-warrens'
-        ? { base: '#17120d', seam: 'rgba(255,159,67,.16)', glow: 'rgba(255,132,45,.11)' }
-        : biome === 'echo-courts'
-            ? { base: '#100d1b', seam: 'rgba(200,108,255,.18)', glow: 'rgba(140,90,255,.12)' }
-            : { base: '#0b1117', seam: 'rgba(0,243,255,.14)', glow: 'rgba(0,200,255,.10)' };
-    target.fillStyle = palette.base;
-    target.fillRect(0, 0, map.w, map.h);
-    target.save();
-    target.lineWidth = 1;
-    for (let y = 0; y < map.h; y += 80) {
-        for (let x = 0; x < map.w; x += 80) {
-            const inset = ((x / 80 + y / 80) % 3) * 2;
-            target.fillStyle = ((x / 80 + y / 80) % 2) ? 'rgba(255,255,255,.012)' : 'rgba(0,0,0,.07)';
-            target.fillRect(x + 2 + inset, y + 2, 76 - inset, 76);
-            target.strokeStyle = palette.seam;
-            target.strokeRect(x + 1.5, y + 1.5, 77, 77);
-            target.fillStyle = 'rgba(210,225,235,.14)';
-            target.fillRect(x + 8, y + 8, 3, 3);
-            target.fillRect(x + 69, y + 69, 3, 3);
-        }
-    }
-    const light = target.createRadialGradient(map.w * .5, map.h * .48, 20, map.w * .5, map.h * .48, Math.max(map.w, map.h) * .58);
-    light.addColorStop(0, palette.glow);
-    light.addColorStop(.6, 'rgba(0,0,0,0)');
-    light.addColorStop(1, 'rgba(0,0,0,.48)');
-    target.fillStyle = light;
-    target.fillRect(0, 0, map.w, map.h);
-    target.restore();
+    drawArenaBackdrop(target, map, state.currentLevelMeta?.biome);
 }
 
 function drawRogueWallDepth(target) {
@@ -3042,15 +3015,30 @@ function drawCombatArc(target, actor, color, alpha = 1) {
     const angle = Math.atan2(actor.facingY || 0, actor.facingX || 1);
     const active = attackIsActive(actor);
     target.save();
-    target.globalAlpha = alpha * (active ? .9 : .38);
+    target.globalAlpha = alpha * (active ? .95 : .38);
     target.strokeStyle = color;
-    target.lineWidth = active ? 8 : 3;
+    target.lineWidth = active ? 11 : 3;
     target.lineCap = 'round';
     target.shadowColor = color;
     target.shadowBlur = active ? 16 : 6;
     target.beginPath();
     target.arc(cx, cy, (actor.attackRange || 48) * .82, angle - .72, angle + .72);
     target.stroke();
+    if (active) {
+        target.globalAlpha *= .52;
+        target.strokeStyle = '#fff4cf';
+        target.lineWidth = 3;
+        target.beginPath();
+        target.arc(cx, cy, (actor.attackRange || 48) * .76, angle - .62, angle + .62);
+        target.stroke();
+        target.fillStyle = color;
+        target.globalAlpha *= .7;
+        target.beginPath();
+        target.moveTo(cx + Math.cos(angle + .72) * (actor.attackRange || 48) * .82, cy + Math.sin(angle + .72) * (actor.attackRange || 48) * .82);
+        target.lineTo(cx + Math.cos(angle + .92) * (actor.attackRange || 48) * .64, cy + Math.sin(angle + .92) * (actor.attackRange || 48) * .64);
+        target.lineTo(cx + Math.cos(angle + .55) * (actor.attackRange || 48) * .62, cy + Math.sin(angle + .55) * (actor.attackRange || 48) * .62);
+        target.closePath(); target.fill();
+    }
     target.restore();
 }
 
