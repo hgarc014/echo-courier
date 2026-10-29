@@ -6,9 +6,34 @@ import { main, state, keys } from './harness/replay.mjs';
 import { prevKeys } from '../src/core/input.js';
 import { BLINK_COST, BLINK_FRAMES, BLINK_IFRAMES } from '../src/systems/sandRewind.js';
 import { MIN_ECHO_SEGMENT } from '../src/systems/sandEcho.js';
+import { Guard } from '../src/entities/hazards.js';
 
 function release() {
     for (const k of Object.keys(keys)) keys[k] = false;
+}
+
+// Blink leaves a 20-tick origin afterimage that damages each hound once.
+{
+    release();
+    main.startRogueRun(1);
+    disarmWave();
+    const p = state.player;
+    const originX = 400;
+    const originY = p.y;
+    const hound = new Guard([{ x: originX, y: originY }, { x: originX + 1, y: originY }]);
+    state.guards = [hound];
+    state.sand.history.length = 0;
+    for (let i = 0; i < 30; i++) state.sand.history.push({ x: 20, y: originY, facingX: 1, facingY: 0, tick: i });
+    p.x = originX;
+    keys.b = true;
+    prevKeys.b = false;
+    main.stepSimulation();
+    release();
+    assert.equal(state.blinkAfterimages.length, 1);
+    assert.equal(state.blinkAfterimages[0].ticks, 19);
+    assert.equal(hound.hp, 2, 'origin afterimage deals one damage');
+    main.stepSimulation();
+    assert.equal(hound.hp, 2, 'lingering afterimage cannot multi-hit the same hound');
 }
 
 // The opening room is a kill wave. Dropping its guards would clear the chamber
