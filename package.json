@@ -1,11 +1,15 @@
 {
   "name": "echo-courier",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "test": "node tests/run.mjs",
-    "stamp": "node scripts/stamp-build.mjs"
+    "stamp": "node scripts/stamp-build.mjs",
+    "release:patch": "node scripts/bump-version.mjs patch",
+    "release:minor": "node scripts/bump-version.mjs minor",
+    "release:major": "node scripts/bump-version.mjs major",
+    "release:check": "node scripts/check-release-version.mjs"
   },
   "devDependencies": {
     "acorn": "^8.15.0"

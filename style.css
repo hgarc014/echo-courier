@@ -52,6 +52,14 @@ body {
     align-items: center;
     min-height: 52px;
 }
+.build-version-chip {
+    margin-left: auto;
+    color: rgba(166,225,235,.72);
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    white-space: nowrap;
+}
 .hud-center {
     display: flex;
     flex-direction: column;

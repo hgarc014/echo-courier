@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const infoPath = join(root, 'src', 'buildInfo.js');
 const original = readFileSync(infoPath, 'utf8');
+const packageVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
 
 function stamp(env) {
     const r = spawnSync(process.execPath, ['scripts/stamp-build.mjs'], {
@@ -32,7 +33,7 @@ try {
         GITHUB_SHA: '1111111111111111111111111111111111111111',
     });
     assert.equal(field(stamped, 'gitSha'), 'deadbee');
-    assert.equal(field(stamped, 'version'), '0.1.0');
+    assert.equal(field(stamped, 'version'), packageVersion);
     assert.match(field(stamped, 'builtAt'), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/);
 
     const fromGithub = stamp({
