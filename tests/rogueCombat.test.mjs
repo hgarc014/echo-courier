@@ -249,6 +249,8 @@ assert.equal(GUARD_STUN_TICKS, 45);
     state.activeGhosts = [new Ghost(7, run)];
     for (let i = 0; i < 7; i++) main.stepSimulation();
     assert.equal(g.dead, true, 'the replayed swing deals the finishing damage');
+    assert.equal(g.x, 452, 'the replayed swing knocks the hound away from the echo');
+    assert.ok(g.hurtTicks > 0, 'impact flash remains active for rendering');
 }
 
 console.log('rogueCombat ok');
