@@ -14,6 +14,48 @@ export function visualHash(x, y, salt = 0) {
     return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
 }
 
+const BIOME_SCENERY_KEYS = Object.freeze({
+    'second-hand-halls': Object.freeze(['hallsRack', 'hallsGearColumn', 'hallsRelay', 'hallsBarrier']),
+    'hourglass-warrens': Object.freeze(['warrensHourglass', 'warrensDebris', 'warrensVent', 'warrensObelisk']),
+    'echo-courts': Object.freeze(['courtsPlinth', 'courtsShards', 'courtsArch', 'courtsTimeBloom'])
+});
+
+export function arenaSceneryLayout(map, biome = 'second-hand-halls') {
+    const keys = BIOME_SCENERY_KEYS[biome] || BIOME_SCENERY_KEYS['second-hand-halls'];
+    const marginX = Math.max(62, Math.min(108, map.w * .075));
+    const marginY = Math.max(64, Math.min(104, map.h * .09));
+    const spots = [
+        [marginX, marginY], [map.w - marginX, marginY],
+        [marginX, map.h - marginY], [map.w - marginX, map.h - marginY],
+        [map.w * .25, marginY], [map.w * .75, map.h - marginY],
+        [marginX, map.h * .54], [map.w - marginX, map.h * .46]
+    ];
+    return spots.map(([x, y], index) => ({
+        x, y,
+        key: keys[index % keys.length],
+        size: 72 + Math.round(visualHash(index, keys.length, 31) * 30),
+        alpha: .62 + visualHash(index, keys.length, 47) * .18,
+        flipX: visualHash(index, keys.length, 59) > .5
+    }));
+}
+
+function drawScenery(ctx, map, biome, atlas) {
+    if (!atlas?.ready) return;
+    for (const item of arenaSceneryLayout(map, biome)) {
+        const img = atlas[item.key];
+        if (!img) continue;
+        const aspect = (img.width || 1) / (img.height || 1);
+        const h = item.size;
+        const w = h * aspect;
+        ctx.save();
+        ctx.globalAlpha = item.alpha;
+        ctx.translate(item.x, item.y);
+        if (item.flipX) ctx.scale(-1, 1);
+        ctx.drawImage(img, -w / 2, -h * .72, w, h);
+        ctx.restore();
+    }
+}
+
 function roundedRect(ctx, x, y, w, h, r = 8) {
     const radius = Math.max(0, Math.min(r, w / 2, h / 2));
     ctx.beginPath();
@@ -25,7 +67,7 @@ function roundedRect(ctx, x, y, w, h, r = 8) {
     ctx.closePath();
 }
 
-export function drawArenaBackdrop(ctx, map, biome = 'second-hand-halls') {
+export function drawArenaBackdrop(ctx, map, biome = 'second-hand-halls', sceneryAtlas = null) {
     const p = arenaPalette(biome);
     ctx.save();
     ctx.fillStyle = p.base;
@@ -83,6 +125,7 @@ export function drawArenaBackdrop(ctx, map, biome = 'second-hand-halls') {
     light.addColorStop(1, 'rgba(0,0,0,.54)');
     ctx.fillStyle = light;
     ctx.fillRect(0, 0, map.w, map.h);
+    drawScenery(ctx, map, biome, sceneryAtlas);
     ctx.restore();
 }
 
