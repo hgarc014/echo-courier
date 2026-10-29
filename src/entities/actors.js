@@ -2,7 +2,7 @@ import { state, getPlayerRank, getUnlockedAbilities } from '../core/state.js';
 import { Entity } from './base.js';
 import { AABB, resolveDashFacing } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
-import { pickCourierFrame } from '../core/atlas.js';
+import { pickCourierFrame, pickCourierActionFrame } from '../core/atlas.js';
 import { dominantFacing, shieldSlab } from '../systems/laserShield.js';
 import { PLAYER_MAX_HP, beginAttack, tickAttack } from '../rogue/combat.js';
 import { weaponMove } from '../rogue/weapons.js';
@@ -56,7 +56,7 @@ function drawCourier(ctx, entity, opts) {
         cloaking, dashing, carrying, moving, tick,
         tint, tintAlpha, alpha, scanlines, extraScale = 1
     } = opts;
-    const picked = pickCourierFrame(state.playerAtlas, {
+    const picked = pickCourierActionFrame(state.courierActionAtlas, entity) || pickCourierFrame(state.playerAtlas, {
         cloaking, dashing, carrying, moving,
         facingX: entity.facingX, facingY: entity.facingY, tick
     });
@@ -69,8 +69,9 @@ function drawCourier(ctx, entity, opts) {
     const bob = useAtlas ? (moving ? 0 : pose.bob) : pose.bob;
     const applyTint = !(useAtlas && picked.kind === 'cloak');
 
-    const visualW = useAtlas ? 70 : entity.w;
-    const visualH = useAtlas ? 86 : entity.h;
+    const actionPose = !!(picked?.img && Object.values(state.courierActionAtlas || {}).includes(picked.img));
+    const visualW = useAtlas ? (actionPose ? 94 : 70) : entity.w;
+    const visualH = useAtlas ? (actionPose ? 94 : 86) : entity.h;
     const visualX = entity.x + entity.w / 2 - visualW / 2;
     const visualY = entity.y + entity.h - visualH;
     if (useAtlas) {
