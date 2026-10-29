@@ -2134,11 +2134,11 @@ function update() {
         if (state.rogueRun.echoRecallCooldown > 0) state.rogueRun.echoRecallCooldown--;
         if (!isDemoActive() && isKeyJustPressed('q') && (state.rogueRun.echoAssaultCooldown | 0) <= 0) {
             const count = commandEchoAssault(state.activeGhosts, state.guards, state.rogueRun.weapon);
-            if (count > 0) state.rogueRun.echoAssaultCooldown = ECHO_ASSAULT_COOLDOWN;
+            if (count > 0) { state.rogueRun.echoAssaultCooldown = ECHO_ASSAULT_COOLDOWN; SFX.echoAssault(); }
         }
         if (isKeyJustPressed('r') && (state.rogueRun.echoRecallCooldown | 0) <= 0) {
             const count = recallEchoes(state.activeGhosts, state.player, state.walls);
-            if (count > 0) state.rogueRun.echoRecallCooldown = ECHO_RECALL_COOLDOWN;
+            if (count > 0) { state.rogueRun.echoRecallCooldown = ECHO_RECALL_COOLDOWN; SFX.echoRecall(); }
         }
     } else {
         if (!isDemoActive() && isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }

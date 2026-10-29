@@ -1227,6 +1227,7 @@ export class ChronoSentry extends Guard {
             }
         } else if (--this.fireCooldown <= 0 && distance < 520) {
             this.chargeTicks = 45;
+            SFX.sentryCharge();
         }
         return null;
     }
@@ -1311,7 +1312,7 @@ export class EchoLeech extends Guard {
             } else if (this.chargeTicks > 0) {
                 this.chargeTicks--;
                 if (this.chargeTicks === 0) this.siphonTicks = 90;
-            } else this.chargeTicks = 30;
+            } else { this.chargeTicks = 30; SFX.leechTether(); }
             return null;
         }
         const speed = this.siphonTarget ? 2.45 : 2.05;
