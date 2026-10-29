@@ -10,7 +10,7 @@ import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAU
 import { ROOM_W } from './data/floorGen.js';
 import { BIOME_ORDER, nextBiomeIndex } from './rogue/biomes.js';
 import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
-import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems, selectRogueWeapon } from './rogue/rogueMeta.js';
+import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems, selectRogueWeapon, buyRogueRelic, equipRogueRelic } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { EliteTickHound, TickHound, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
@@ -38,6 +38,7 @@ import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rog
 import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
 import { WEAPON_FAMILIES, weaponMove } from './rogue/weapons.js';
 import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
+import { RELICS, relicSlots } from './rogue/relics.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1737,6 +1738,31 @@ export function syncRogueHub() {
             button.onclick = () => { selectRogueWeapon(weapon.id); syncRogueHub(); };
             weapons.appendChild(button);
         }
+    }
+    const relics = document.getElementById('rogue-relic-list');
+    if (relics) {
+        relics.innerHTML = '';
+        const equipped = new Set(m.relicsEquipped || []);
+        const owned = new Set(m.relicsOwned || []);
+        for (const relic of RELICS) {
+            const button = document.createElement('button');
+            button.className = equipped.has(relic.id) ? 'primary-btn' : 'secondary-btn';
+            button.innerText = owned.has(relic.id)
+                ? `${relic.name.toUpperCase()} — ${equipped.has(relic.id) ? 'EQUIPPED' : 'EQUIP'}`
+                : `${relic.name.toUpperCase()} — COST ${relic.cost}`;
+            button.title = relic.detail;
+            button.disabled = !owned.has(relic.id) && m.shopPoints < relic.cost;
+            button.onclick = () => {
+                if (owned.has(relic.id)) equipRogueRelic(relic.id);
+                else buyRogueRelic(relic.id);
+                syncRogueHub();
+            };
+            relics.appendChild(button);
+        }
+        const label = document.createElement('div');
+        label.style.cssText = 'width:100%;font-size:.75rem;color:#aaa;';
+        label.innerText = `RELIC SLOTS ${equipped.size}/${relicSlots(m)} · second slot at 10 runs`;
+        relics.appendChild(label);
     }
     syncRogueShop();
 }
