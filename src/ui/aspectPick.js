@@ -24,6 +24,8 @@ function renderChoices(root, choices) {
     if (!row) return;
     row.innerHTML = choices.map(aspect => `
         <button type="button" class="aspect-card" data-aspect="${aspect.id}">
+            <span class="aspect-card-icon" aria-hidden="true"></span>
+            <span class="aspect-card-family">${aspect.family}</span>
             <span class="aspect-card-name">${aspect.label}</span>
             <span class="aspect-card-detail">${aspect.detail}</span>
         </button>`).join('');

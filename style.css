@@ -1270,7 +1270,10 @@ body.touch-ui .demo-skip-btn {
     z-index: 30;
     box-sizing: border-box;
     padding: 28px 20px;
-    background: rgba(5, 7, 10, 0.84);
+    background:
+        radial-gradient(circle at 50% 18%, rgba(35, 100, 122, .38), transparent 38%),
+        linear-gradient(180deg, rgba(5, 10, 16, .92), rgba(3, 5, 10, .97));
+    backdrop-filter: blur(10px);
 }
 .aspect-pick-kicker {
     margin: 0 0 6px;
@@ -1317,12 +1320,12 @@ body.touch-ui .demo-skip-btn {
 .aspect-card {
     flex: 1 1 0;
     min-width: 0;
-    max-width: 210px;
+    max-width: 240px;
     margin: 0;
-    padding: 16px 12px;
+    padding: 12px 12px 18px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
     align-items: center;
     text-align: center;
     cursor: pointer;
@@ -1330,17 +1333,40 @@ body.touch-ui .demo-skip-btn {
     text-transform: uppercase;
     letter-spacing: 1px;
     color: var(--accent-ghost);
-    background: rgba(0, 243, 255, 0.08);
-    border: 1px solid rgba(0, 243, 255, 0.5);
-    border-radius: 6px;
+    background: linear-gradient(160deg, rgba(19, 38, 48, .96), rgba(7, 12, 19, .98));
+    border: 1px solid rgba(48, 231, 255, .42);
+    border-radius: 12px;
+    box-shadow: inset 0 1px rgba(255,255,255,.06), 0 14px 34px rgba(0,0,0,.35);
+    overflow: hidden;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
-.aspect-card-name { font-weight: 700; font-size: 1rem; }
+.aspect-card-icon {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1.16;
+    background-image: url('assets/ui/aspect-icons-v2.png');
+    background-repeat: no-repeat;
+    background-size: 400% 200%;
+    filter: drop-shadow(0 8px 12px rgba(0, 8, 14, .72));
+}
+.aspect-card-family { color: #7c9baa; font-size: .62rem; font-weight: 800; letter-spacing: .22em; }
+.aspect-card-name { color: #f4fbff; font-weight: 800; font-size: 1rem; }
 .aspect-card-detail {
     font-size: 0.78rem;
     letter-spacing: 0.3px;
     text-transform: none;
     opacity: 0.88;
+    color: #adc1cb;
+    line-height: 1.35;
 }
+.aspect-card[data-aspect="recoil-echo"] .aspect-card-icon { background-position: 0 0; }
+.aspect-card[data-aspect="second-strike"] .aspect-card-icon { background-position: 33.333% 0; }
+.aspect-card[data-aspect="afterimage-blade"] .aspect-card-icon { background-position: 66.666% 0; }
+.aspect-card[data-aspect="wide-rupture"] .aspect-card-icon { background-position: 100% 0; }
+.aspect-card[data-aspect="hourglass-heart"] .aspect-card-icon { background-position: 0 100%; }
+.aspect-card[data-aspect="sand-leech"] .aspect-card-icon { background-position: 33.333% 100%; }
+.aspect-card[data-aspect="echo-chorus"] .aspect-card-icon { background-position: 66.666% 100%; }
+.aspect-card[data-aspect="stillstep"] .aspect-card-icon { background-position: 100% 100%; }
 .aspect-card[data-aspect="start-sand"] {
     color: var(--accent-interact);
     border-color: rgba(255, 221, 0, 0.55);
@@ -1353,8 +1379,9 @@ body.touch-ui .demo-skip-btn {
 }
 .aspect-card:hover,
 .aspect-card:focus-visible {
-    background: var(--accent-ghost);
-    color: var(--bg-color);
+    transform: translateY(-6px);
+    border-color: #30e7ff;
+    box-shadow: inset 0 1px rgba(255,255,255,.09), 0 18px 44px rgba(0, 208, 224, .22);
     outline: none;
 }
 .aspect-card[data-aspect="start-sand"]:hover,
