@@ -132,9 +132,28 @@ export function applyBlinkRewind(sand, player, packages) {
     return n;
 }
 
-/** When true, a blink may rupture the timeline. Off for this slice. */
-export const TIME_RUPTURE_ENABLED = false;
+export const TIME_RUPTURE_ENABLED = true;
+export const TIME_RUPTURE_COST = 2.0;
+export const TIME_RUPTURE_COOLDOWN = 360;
+export const TIME_RUPTURE_RADIUS = 160;
+export const TIME_RUPTURE_FREEZE = 90;
 
-export function timeRupture() {
-    // TODO: time rupture — split the timeline when a blink crosses a sealed moment.
+export function canTimeRupture(sand, cooldown = 0) {
+    return TIME_RUPTURE_ENABLED && !!sand && sand.sand >= TIME_RUPTURE_COST && cooldown <= 0;
+}
+
+export function timeRupture(sand, origin, enemies, cooldown = 0, ruptureId = 0) {
+    if (!canTimeRupture(sand, cooldown) || !origin) return { ok: false, affected: 0 };
+    sand.sand = Math.max(0, sand.sand - TIME_RUPTURE_COST);
+    let affected = 0;
+    for (const enemy of enemies || []) {
+        if (!enemy || enemy.dead) continue;
+        const dx = enemy.x + (enemy.w || 0) / 2 - origin.x;
+        const dy = enemy.y + (enemy.h || 0) / 2 - origin.y;
+        if (Math.hypot(dx, dy) > TIME_RUPTURE_RADIUS) continue;
+        enemy.ruptureTicks = Math.max(enemy.ruptureTicks || 0, TIME_RUPTURE_FREEZE);
+        enemy.rupturePendingId = ruptureId;
+        affected++;
+    }
+    return { ok: true, affected };
 }

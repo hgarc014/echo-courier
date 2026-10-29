@@ -56,14 +56,11 @@ console.log('sandRewind ok');
 }
 
 // blink rewind — pops history like death-undo and returns frames popped
-{ const { canBlinkRewind, applyBlinkRewind, timeRupture, BLINK_COST, BLINK_FRAMES, BLINK_IFRAMES, TIME_RUPTURE_ENABLED } = await import('../src/systems/sandRewind.js');
+{ const { canBlinkRewind, applyBlinkRewind, BLINK_COST, BLINK_FRAMES, BLINK_IFRAMES, TIME_RUPTURE_ENABLED } = await import('../src/systems/sandRewind.js');
   assert.equal(BLINK_FRAMES, 24);
   assert.equal(BLINK_COST, 0.6);
   assert.equal(BLINK_IFRAMES, 30);
-  assert.equal(TIME_RUPTURE_ENABLED, false);
-  assert.equal(timeRupture(), undefined);
-  const { readFileSync } = await import('node:fs');
-  assert.match(readFileSync(new URL('../src/systems/sandRewind.js', import.meta.url), 'utf8'), /function timeRupture\([\s\S]*TODO/);
+  assert.equal(TIME_RUPTURE_ENABLED, true);
 
   const s = createSandState(); const p = mkPlayer();
   for (let t = 0; t < 120; t++) { p.x = t; tickSand(s, { holding: false, player: p, packages: [], tick: t }); }
