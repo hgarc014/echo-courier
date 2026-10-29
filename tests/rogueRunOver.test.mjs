@@ -28,6 +28,14 @@ function release() {
     for (const k of Object.keys(keys)) keys[k] = false;
 }
 
+function finishBossIfNeeded() {
+    if (!state.rogueChamber?.isBoss || state.rogueChamber.aspectPending) return;
+    state.guards.forEach(enemy => { enemy.dead = true; });
+    main.stepSimulation();
+    state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+    main.stepSimulation();
+}
+
 function pumpToRunOver() {
     for (let i = 0; i < 200 && state.gameState !== 'RUN_OVER'; i++) main.stepSimulation();
     assert.equal(state.gameState, 'RUN_OVER');
@@ -67,6 +75,7 @@ if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
     state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
     main.stepSimulation();
 }
+finishBossIfNeeded();
 assert.equal(state.rogueChamber.aspectPending, true);
 assert.equal(state.gameState, 'PLAYING');
 chooseAspect('echo-slot');
