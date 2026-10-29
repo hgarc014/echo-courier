@@ -304,9 +304,12 @@ export class CombatPrism extends Prism {
         if (this.dead) return;
         const cx = this.x + this.w / 2;
         const cy = this.y + this.h / 2;
-        const art = this.hurtTicks > 0 ? state.rogueBossAtlas?.prismHurt
-            : (this.beamWindupTicks > 0 ? state.rogueBossAtlas?.prismCharge : state.rogueBossAtlas?.prismIdle);
-        if (!drawBossSprite(ctx, this, art, 116, 122)) {
+        const stillkeeper = this instanceof CombatStillkeeper;
+        const atlas = stillkeeper ? state.stillAtlas : state.rogueBossAtlas;
+        const art = stillkeeper
+            ? (this.hurtTicks > 0 ? atlas?.stillkeeperHurt : (this.beamWindupTicks > 0 ? atlas?.stillkeeperCharge : atlas?.stillkeeperIdle))
+            : (this.hurtTicks > 0 ? atlas?.prismHurt : (this.beamWindupTicks > 0 ? atlas?.prismCharge : atlas?.prismIdle));
+        if (!drawBossSprite(ctx, this, art, stillkeeper ? 172 : 116, stillkeeper ? 180 : 122)) {
             ctx.save(); ctx.translate(cx, cy); ctx.rotate((state.currentTick || 0) * 0.012);
             ctx.fillStyle = this.hurtTicks > 0 ? '#ffffff' : '#201a38'; ctx.strokeStyle = '#c86cff'; ctx.lineWidth = 4;
             ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(25, 0); ctx.lineTo(0, 30); ctx.lineTo(-25, 0); ctx.closePath(); ctx.fill(); ctx.stroke();

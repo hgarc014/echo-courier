@@ -7,6 +7,7 @@ const { BIOME_ORDER, editorChamberOptions, generateForBiome, nextBiomeIndex, rog
 const { CombatStillkeeper, STILLKEEPER_COMBAT_HP, combatBossHud } = await import('../src/rogue/combatBosses.js');
 const { state } = await import('../src/core/state.js');
 const { Ghost } = await import('../src/entities/actors.js');
+const { main } = await import('./harness/replay.mjs');
 
 assert.equal(STILL_NAME, 'The Still');
 assert.deepEqual(CHAMBER_TYPES.map(type => type.clear).sort(), CLEAR_KINDS.slice().sort());
@@ -46,5 +47,10 @@ const ghost = new Ghost(1, [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 30, y: 10 }
 ghost.spawnTtl = 0;
 ghost.update([], [], [], 0.5);
 assert.equal(ghost.localTick, 0.5, 'The Still playback rate advances Echoes at half speed');
+
+main.startRogueRun(99, false, 3);
+assert.equal(state.rogueRun.biomeIndex, 3);
+assert.equal(state.currentLevelMeta.biome, 'the-still');
+assert.equal(state.currentLevelMeta.hall, STILL_NAME);
 
 console.log('the still ok');

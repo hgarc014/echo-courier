@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, STILL_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, buildStillAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -56,6 +56,7 @@ export const state = {
     courierActionAtlas: null,
     rogueBossAtlas: null,
     biomeSceneryAtlas: null,
+    stillAtlas: null,
     worldAtlas: null,
     
     pastRuns: [],
@@ -171,6 +172,14 @@ biomeScenerySheet.onload = () => {
     catch { state.biomeSceneryAtlas = null; }
 };
 biomeScenerySheet.onerror = () => { state.biomeSceneryAtlas = null; };
+
+const stillSheet = new Image();
+stillSheet.src = STILL_SHEET_PATH;
+stillSheet.onload = () => {
+    try { state.stillAtlas = buildStillAtlas(stillSheet); }
+    catch { state.stillAtlas = null; }
+};
+stillSheet.onerror = () => { state.stillAtlas = null; };
 
 const propsSheet = new Image();
 const envSheet = new Image();
