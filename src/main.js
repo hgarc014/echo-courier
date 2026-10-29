@@ -33,6 +33,7 @@ import { createEncounterDirector, createPressureDirector, encounterRemaining, ti
 import { authoredShellWalls, composeEncounter } from './rogue/encounterComposition.js';
 import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/encounterTelemetry.js';
 import { CombatBurrower, CombatGatekeeper, CombatPrism, combatBossHud } from './rogue/combatBosses.js';
+import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1520,7 +1521,8 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
 export function startRogueRun(seed) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
     hideAspectPick();
-    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0, ruptureCooldown: 0, ruptureSeq: 0 };
+    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0, ruptureCooldown: 0, ruptureSeq: 0,
+        weapon: 'chrono-baton', aspects: [], lastBossReached: null, echoesDeployed: 0 };
     state.sandRewinding = false;
     enterRogueChamber(0, true);
 }
@@ -1551,6 +1553,7 @@ function enterRogueBossChamber() {
     if (!run?.active) return false;
     const biome = BIOME_ORDER[run.biomeIndex ?? 0] || BIOME_ORDER[0];
     const bossId = biome.id === 'echo-courts' ? 'prism' : (biome.id === 'hourglass-warrens' ? 'burrower' : 'gatekeeper');
+    run.lastBossReached = bossId;
     enterRogueChamber(run.biomeIndex ?? 0, false, bossId);
     return true;
 }
@@ -1610,6 +1613,8 @@ function tickRogueChamber() {
 /** Run-only boons from the aspect picker. Does not write rogue meta. */
 export function applyAspect(id) {
     if (!state.rogueRun?.active) return;
+    if (!state.rogueRun.aspects) state.rogueRun.aspects = [];
+    state.rogueRun.aspects.push(id);
     if (id === 'sand-tank') {
         if (state.sand) bumpMaxSand(state.sand, 1);
     } else if (id === 'start-sand') {
@@ -1624,14 +1629,37 @@ function showRunOver(cleared) {
     hideAspectPick();
     state.rogueRun.active = false;
     state.rogueRun.outcome = cleared ? 'cleared' : 'failed';
+    state.rogueRun.echoesDeployed = Math.max(state.rogueRun.echoesDeployed | 0, state.activeGhosts?.length || 0, state.pastRuns?.length || 0);
+    const summary = buildRunSummary({
+        cleared,
+        deathCause: state.failMessage,
+        rogueRun: state.rogueRun,
+        runStats: state.runStats
+    });
+    const meta = loadRogueMeta();
+    const narrative = nextNarrativeState(meta, summary);
+    state.rogueRun.summary = summary;
+    state.rogueRun.reaction = narrative.reaction;
     state.sand = null; state.roguePickups = []; // run-only sand bonuses never leak
     state.failTimer = 0;
     state.gameState = 'RUN_OVER';
-    recordRunEnd(cleared);
+    recordRunEnd(cleared, meta, {
+        lastRunSummary: summary,
+        lastReaction: narrative.reaction,
+        recentDialogueIds: narrative.recentDialogueIds,
+        auditorTrust: narrative.auditorTrust,
+        relationshipUnlocked: narrative.relationshipUnlocked
+    });
     const el = document.getElementById('run-over');
     if (!el) return;
     const title = document.getElementById('run-over-title');
     if (title) { title.innerText = cleared ? 'FLOOR CLEARED' : 'RUN FAILED'; title.style.color = cleared ? '#00f3ff' : '#ff3366'; }
+    const summaryEl = document.getElementById('run-over-summary');
+    if (summaryEl) summaryEl.innerText = cleared
+        ? `Route cleared · ${summary.weapon.replace('-', ' ')} · deepest boss ${summary.bossReached || 'none'}`
+        : `${summary.deathCause} · deepest boss ${summary.bossReached || 'none'}`;
+    const reactionEl = document.getElementById('run-over-reaction');
+    if (reactionEl) reactionEl.innerText = narrative.reaction.text;
     syncRunOverUnlock();
     syncRogueShop();
     el.classList.remove('hidden');
@@ -1658,6 +1686,10 @@ export function syncRogueHub() {
     const m = loadRogueMeta();
     const el = document.getElementById('rogue-meta-info');
     if (el) el.innerText = `Echo slots: ${rogueMaxGhosts(m)}  |  Record length: ${rogueLoopTime(m)}s  |  Runs: ${m.runs} (cleared ${m.clears})`;
+    const reaction = document.getElementById('rogue-hub-reaction');
+    if (reaction) reaction.innerText = m.lastReaction
+        ? `${m.lastReaction.text}${m.relationshipUnlocked ? ' · Auditor relationship unlocked.' : ''}`
+        : 'The temporal depot is quiet. For now.';
     syncRogueShop();
 }
 
