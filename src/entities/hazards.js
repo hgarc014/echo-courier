@@ -201,6 +201,41 @@ export class LaserProjectile {
     }
 }
 
+export class ChronoBolt {
+    constructor(x, y, vx, vy) {
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.w = 12; this.h = 12; this.active = true; this.life = 180;
+    }
+    update(_walls, activeGhosts, player) {
+        if (!this.active) return null;
+        this.x += this.vx; this.y += this.vy; this.life--;
+        if (this.life <= 0 || checkWallCollision(this.x, this.y, this.w, this.h)) this.active = false;
+        if (!this.active) return null;
+        if (AABB(this.x, this.y, this.w, this.h, player.x, player.y, player.w, player.h)) {
+            this.active = false;
+            return { combatDamage: 1, reason: 'Struck by a Chrono Sentry bolt!' };
+        }
+        for (const ghost of activeGhosts || []) {
+            if (!ghost?.isActive || !AABB(this.x, this.y, this.w, this.h, ghost.x, ghost.y, ghost.w, ghost.h)) continue;
+            ghost.commandLockTicks = Math.max(ghost.commandLockTicks | 0, 30);
+            ghost.commandFxTicks = Math.max(ghost.commandFxTicks | 0, 30);
+            this.active = false;
+            break;
+        }
+        return null;
+    }
+    render(ctx) {
+        if (!this.active) return;
+        const cx = this.x + this.w / 2, cy = this.y + this.h / 2;
+        ctx.save();
+        ctx.fillStyle = '#d8ffff'; ctx.shadowColor = '#00eaff'; ctx.shadowBlur = 18;
+        ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,234,255,.8)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - this.vx * 5, cy - this.vy * 5); ctx.stroke();
+        ctx.restore();
+    }
+}
+
 const BOSS_HIT_STUN = 30;
 const BOSS_PHASE_FLASH = 36;
 const BOSS_SPREAD = 0.4;
@@ -1141,6 +1176,82 @@ export class TickHound extends Guard {
             const pct = Math.max(0, this.hp / this.maxHp);
             ctx.fillStyle = 'rgba(8, 5, 12, 0.84)'; ctx.fillRect(this.x - 8, y - 7, this.w + 16, 4);
             ctx.fillStyle = this.roleColor || '#ff3f75'; ctx.fillRect(this.x - 8, y - 7, (this.w + 16) * pct, 4);
+        }
+    }
+}
+
+export class ChronoSentry extends Guard {
+    constructor(points) {
+        super(points);
+        this.role = 'sentry';
+        this.hp = 3; this.maxHp = 3;
+        this.roleColor = '#00eaff';
+        this.fireCooldown = 80;
+        this.chargeTicks = 0;
+        this.fireFlash = 0;
+        this.facingX = -1; this.facingY = 0;
+    }
+    reset() {
+        super.reset();
+        this.hp = 3; this.maxHp = 3; this.dead = false;
+        this.fireCooldown = 80; this.chargeTicks = 0; this.fireFlash = 0;
+    }
+    update(player, ghosts) {
+        if (this.dead) return null;
+        if (this.hurtTicks > 0) this.hurtTicks--;
+        if (this.fireFlash > 0) this.fireFlash--;
+        if (this.stunTicks > 0) { this.stunTicks--; return null; }
+        const decoy = (ghosts || []).filter(g => g?.isActive && g.isDecoy)
+            .sort((a, b) => Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y))[0];
+        const target = decoy || player;
+        const dx = target.x + target.w / 2 - (this.x + this.w / 2);
+        const dy = target.y + target.h / 2 - (this.y + this.h / 2);
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        this.facingAngle = Math.atan2(dy, dx);
+        this.facingX = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
+        this.facingY = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+        if (distance < 150) {
+            const step = 1.25;
+            const nx = this.x - dx / distance * step;
+            const ny = this.y - dy / distance * step;
+            if (!checkWallCollision(nx, this.y, this.w, this.h)) this.x = nx;
+            if (!checkWallCollision(this.x, ny, this.w, this.h)) this.y = ny;
+        }
+        if (this.chargeTicks > 0) {
+            this.chargeTicks--;
+            if (this.chargeTicks === 0) {
+                state.projectiles.push(new ChronoBolt(this.x + 9, this.y + 9, dx / distance * 4.2, dy / distance * 4.2));
+                this.fireCooldown = 105;
+                this.fireFlash = 10;
+                SFX.robotShoot();
+            }
+        } else if (--this.fireCooldown <= 0 && distance < 520) {
+            this.chargeTicks = 45;
+        }
+        return null;
+    }
+    render(ctx) {
+        const atlas = state.chronoSentryAtlas;
+        if (!atlas?.ready) return super.render(ctx);
+        let img = this.dead ? atlas.dead : (this.hurtTicks > 0 ? atlas.hit : (this.fireFlash > 0 ? atlas.fire : (this.chargeTicks > 0 ? atlas.charge : (this.facingX < 0 ? atlas.aimLeft : (this.facingX > 0 ? atlas.aimRight : (this.facingY < 0 ? atlas.idleBack : atlas.idleFront))))));
+        const visualW = 82, visualH = 82;
+        const x = this.x + this.w / 2 - visualW / 2;
+        const y = this.y + this.h - visualH - 4;
+        const pulse = 0.5 + Math.sin((state.currentTick || 0) * .12) * .5;
+        ctx.save();
+        ctx.fillStyle = `rgba(0,234,255,${.12 + pulse * .12})`;
+        ctx.beginPath(); ctx.ellipse(this.x + 15, this.y + 28, 28, 8, 0, 0, Math.PI * 2); ctx.fill();
+        if (this.chargeTicks > 0) {
+            ctx.strokeStyle = `rgba(0,234,255,${.45 + pulse * .45})`; ctx.lineWidth = 2;
+            ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 15);
+            ctx.lineTo(this.x + 15 + Math.cos(this.facingAngle) * 420, this.y + 15 + Math.sin(this.facingAngle) * 420); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        ctx.restore();
+        drawSprite(ctx, img, x, y, visualW, visualH, { alpha: this.dead ? .55 : 1, tint: this.ruptureTicks > 0 ? '#8c7dff' : null, tintAlpha: .38, valign: 'bottom' });
+        if (!this.dead) {
+            ctx.fillStyle = 'rgba(5,10,16,.88)'; ctx.fillRect(this.x - 8, y - 7, this.w + 16, 4);
+            ctx.fillStyle = this.roleColor; ctx.fillRect(this.x - 8, y - 7, (this.w + 16) * Math.max(0, this.hp / this.maxHp), 4);
         }
     }
 }

@@ -4,6 +4,7 @@ export const PLAYER_SHEET_PATH = 'assets/sprite-sheets/echo-courier-characters.p
 export const PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-hazards.png';
 export const ENV_SHEET_PATH = 'assets/sprite-sheets/echo-courier-environment-effects.png';
 export const TICK_HOUND_SHEET_PATH = 'assets/sprite-sheets/tick-hound-v2.png';
+export const CHRONO_SENTRY_SHEET_PATH = 'assets/sprite-sheets/chrono-sentry-v1.png';
 export const VFX_SHEET_PATH = 'assets/sprite-sheets/echo-courier-vfx-v2.png';
 export const MODERN_PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-v2.png';
 export const COURIER_ACTIONS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-actions-v2.png';
@@ -154,6 +155,20 @@ export function buildTickHoundAtlas(sheet) {
         idleFront: frame(0, 0), idleBack: frame(1, 0), idleRight: frame(2, 0), idleLeft: frame(3, 0),
         runRight: [0, 1, 2, 3].map(column => frame(column, 1)),
         windup: frame(0, 2), lunge: frame(1, 2), hit: frame(2, 2), dead: frame(3, 2)
+    };
+}
+
+export function buildChronoSentryAtlas(sheet) {
+    const iw = sheet?.naturalWidth || sheet?.width || 0;
+    const ih = sheet?.naturalHeight || sheet?.height || 0;
+    if (!iw || !ih) return null;
+    const cellW = Math.floor(iw / 4);
+    const cellH = Math.floor(ih / 2);
+    const frame = (column, row) => sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
+    return {
+        ready: true,
+        idleFront: frame(0, 0), idleBack: frame(1, 0), aimLeft: frame(2, 0), aimRight: frame(3, 0),
+        charge: frame(0, 1), fire: frame(1, 1), hit: frame(2, 1), dead: frame(3, 1)
     };
 }
 
