@@ -331,8 +331,8 @@ let clipboard = null;
 function canvasPoint(canvas, e) {
     const rect = canvas.getBoundingClientRect();
     return {
-        sx: (e.clientX - rect.left) * (canvas.width / rect.width),
-        sy: (e.clientY - rect.top) * (canvas.height / rect.height)
+        sx: (e.clientX - rect.left) * (VIEW_WIDTH / rect.width),
+        sy: (e.clientY - rect.top) * (VIEW_HEIGHT / rect.height)
     };
 }
 

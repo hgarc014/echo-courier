@@ -41,6 +41,7 @@ import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/
 import { RELICS, relicSlots, relicModifiers } from './rogue/relics.js';
 import { createRouteLedger, ledgerChoices } from './rogue/runRoute.js';
 import { installLayoutFit } from './ui/fitLayout.js';
+import { syncCanvasResolution } from './core/canvasResolution.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -74,7 +75,7 @@ function deathSite(reason) {
     }
     const p = state.player;
     if (p) return { x: p.x + p.w / 2, y: p.y + p.h / 2 };
-    return { x: canvas.width / 2, y: canvas.height / 2 };
+    return { x: VIEW_WIDTH / 2, y: VIEW_HEIGHT / 2 };
 }
 
 function failPalette(kind) {
@@ -199,8 +200,8 @@ function spawnFailFx(reason) {
 
 function spawnRewindFx() {
     const p = state.player;
-    const cx = p ? p.x + p.w / 2 : canvas.width / 2;
-    const cy = p ? p.y + p.h / 2 : canvas.height / 2;
+    const cx = p ? p.x + p.w / 2 : VIEW_WIDTH / 2;
+    const cy = p ? p.y + p.h / 2 : VIEW_HEIGHT / 2;
     state.rewindFx = spawnBurst(cx, cy, {
         count: 16,
         speedMin: 2.0,
@@ -2605,7 +2606,7 @@ function drawAbilityCooldowns(target) {
     target.textAlign = 'center';
     target.textBaseline = 'middle';
     const width = target.measureText(text).width + 28;
-    const x = canvas.width / 2;
+    const x = VIEW_WIDTH / 2;
     const y = 22;
     target.fillStyle = 'rgba(5, 7, 10, 0.72)';
     target.fillRect(x - width / 2, y - 14, width, 28);
@@ -2857,7 +2858,7 @@ function scrubberVisible() {
 }
 function scrubEventToCanvas(e) {
     const r = canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (canvas.width / (r.width || 1)), y: (e.clientY - r.top) * (canvas.height / (r.height || 1)) };
+    return { x: (e.clientX - r.left) * (VIEW_WIDTH / (r.width || 1)), y: (e.clientY - r.top) * (VIEW_HEIGHT / (r.height || 1)) };
 }
 function scrubSet(e) {
     const p = scrubEventToCanvas(e);
@@ -3025,13 +3026,13 @@ function drawRogueWorldLighting(target, map) {
 }
 
 function drawRogueScreenVignette(target) {
-    const vignette = target.createRadialGradient(canvas.width / 2, canvas.height / 2, canvas.height * .18, canvas.width / 2, canvas.height / 2, canvas.width * .62);
+    const vignette = target.createRadialGradient(VIEW_WIDTH / 2, VIEW_HEIGHT / 2, VIEW_HEIGHT * .18, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, VIEW_WIDTH * .62);
     vignette.addColorStop(0, 'rgba(0,0,0,0)');
     vignette.addColorStop(.72, 'rgba(0,0,0,.08)');
     vignette.addColorStop(1, 'rgba(0,2,7,.52)');
     target.save();
     target.fillStyle = vignette;
-    target.fillRect(0, 0, canvas.width, canvas.height);
+    target.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
     target.restore();
 }
 
@@ -3055,7 +3056,8 @@ function drawCombatArc(target, actor, color, alpha = 1) {
 
 function draw() {
     // Popup demos no longer freeze the main canvas — live world always draws.
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    syncCanvasResolution(canvas, ctx, VIEW_WIDTH, VIEW_HEIGHT);
+    ctx.clearRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
     if (state.gameState !== 'PLAYING' && state.gameState !== 'LEVEL_COMPLETE' && state.gameState !== 'EDITOR' && state.gameState !== 'BOSS_INTRO' && state.gameState !== 'DIALOG') return;
     if (state.assetsLoaded < state.assetNames.length) { ctx.fillStyle = '#fff'; ctx.fillText("Loading Assets...", 400, 300); return; }
 
@@ -3256,11 +3258,11 @@ function draw() {
     drawAbilityCooldowns(ctx);
 
     if (state.alarmState && state.currentTick % 60 === 0) SFX.alarm();
-    if (state.alarmState) { ctx.fillStyle = 'rgba(255, 0, 0, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    if (state.alarmState) { ctx.fillStyle = 'rgba(255, 0, 0, 0.15)'; ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT); }
     if (state.rewindFx && state.rewindFx.ttl > 0) {
         const u = state.rewindFx.ttl / state.rewindFx.max;
         ctx.fillStyle = `rgba(0, 243, 255, ${0.2 * u})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
     }
     if (state.failTimer > 0) {
         const impact = state.failTimer > FAIL_HOLD_FRAMES - 8;
@@ -3268,10 +3270,10 @@ function draw() {
         if (impact) {
             const flash = (state.failTimer - (FAIL_HOLD_FRAMES - 8)) / 8;
             ctx.fillStyle = `rgba(255, 220, 220, ${0.28 * flash})`;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
         }
         ctx.fillStyle = showText ? 'rgba(255, 0, 0, 0.4)' : 'rgba(255, 40, 40, 0.16)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
         if (showText) {
             ctx.fillStyle = '#fff'; ctx.font = 'bold 36px "Space Grotesk"'; ctx.textAlign = 'center'; ctx.fillText("LOOP FAILED", 400, 250);
             ctx.font = '20px "Space Grotesk"'; ctx.fillText(state.failMessage, 400, 300);
