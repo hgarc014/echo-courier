@@ -70,6 +70,10 @@ function armClear() {
     else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
     release();
     main.stepSimulation();
+    if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
+        state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+        main.stepSimulation();
+    }
 }
 
 check('chamber types cover kill, rift, and timer with guard pressure only', () => {
