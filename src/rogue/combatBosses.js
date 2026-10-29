@@ -2,6 +2,7 @@ import { Gatekeeper, wallRayDistance } from '../entities/bosses/gatekeeper.js';
 import { Burrower } from '../entities/bosses/Burrower.js';
 import { Prism } from '../entities/bosses/Prism.js';
 import { state } from '../core/state.js';
+import { drawSprite } from '../core/sprites.js';
 
 export const GATEKEEPER_COMBAT_HP = 12;
 export const GATEKEEPER_BEAM_WINDUP = 60;
@@ -18,6 +19,17 @@ function distanceToSegment(px, py, ax, ay, bx, by) {
     if (lengthSq <= 0) return Math.hypot(px - ax, py - ay);
     const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
     return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+function drawBossSprite(ctx, boss, image, width, height) {
+    if (!image) return false;
+    const x = boss.x + boss.w / 2 - width / 2;
+    const y = boss.y + boss.h - height;
+    return drawSprite(ctx, image, x, y, width, height, {
+        valign: 'bottom',
+        tint: boss.hurtTicks > 0 ? '#ffffff' : null,
+        tintAlpha: boss.hurtTicks > 0 ? .72 : 0
+    });
 }
 
 export class CombatGatekeeper extends Gatekeeper {
@@ -86,7 +98,9 @@ export class CombatGatekeeper extends Gatekeeper {
 
     render(ctx) {
         if (this.dead) return;
-        super.render(ctx);
+        const art = this.hurtTicks > 0 ? state.rogueBossAtlas?.gatekeeperHurt
+            : (this.beamWindupTicks > 0 ? state.rogueBossAtlas?.gatekeeperCharge : state.rogueBossAtlas?.gatekeeperIdle);
+        if (!drawBossSprite(ctx, this, art, 132, 124)) super.render(ctx);
         const cx = this.x + this.w / 2;
         const cy = this.y + this.h / 2;
         if (this.beamWindupTicks > 0 && this.beamTarget) {
@@ -199,21 +213,14 @@ export class CombatBurrower extends Burrower {
             ctx.restore();
             return;
         }
-        ctx.save();
-        ctx.globalAlpha = this.hurtTicks > 0 ? 0.65 : 1;
-        ctx.fillStyle = '#241b35';
-        ctx.strokeStyle = '#ff9f43';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 23, Math.PI, 0);
-        ctx.lineTo(cx + 23, cy + 16);
-        ctx.lineTo(cx - 23, cy + 16);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = '#00f3ff';
-        ctx.fillRect(cx - 10, cy - 5, 20, 7);
-        ctx.restore();
+        const art = this.hurtTicks > 0 ? state.rogueBossAtlas?.burrowerHurt : state.rogueBossAtlas?.burrowerIdle;
+        if (!drawBossSprite(ctx, this, art, 126, 104)) {
+            ctx.save();
+            ctx.globalAlpha = this.hurtTicks > 0 ? 0.65 : 1;
+            ctx.fillStyle = '#241b35'; ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(cx, cy, 23, Math.PI, 0); ctx.lineTo(cx + 23, cy + 16); ctx.lineTo(cx - 23, cy + 16); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#00f3ff'; ctx.fillRect(cx - 10, cy - 5, 20, 7); ctx.restore();
+        }
     }
 }
 
@@ -296,18 +303,14 @@ export class CombatPrism extends Prism {
         if (this.dead) return;
         const cx = this.x + this.w / 2;
         const cy = this.y + this.h / 2;
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate((state.currentTick || 0) * 0.012);
-        ctx.fillStyle = this.hurtTicks > 0 ? '#ffffff' : '#201a38';
-        ctx.strokeStyle = '#c86cff';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(0, -30); ctx.lineTo(25, 0); ctx.lineTo(0, 30); ctx.lineTo(-25, 0); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#00f3ff';
-        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
+        const art = this.hurtTicks > 0 ? state.rogueBossAtlas?.prismHurt
+            : (this.beamWindupTicks > 0 ? state.rogueBossAtlas?.prismCharge : state.rogueBossAtlas?.prismIdle);
+        if (!drawBossSprite(ctx, this, art, 116, 122)) {
+            ctx.save(); ctx.translate(cx, cy); ctx.rotate((state.currentTick || 0) * 0.012);
+            ctx.fillStyle = this.hurtTicks > 0 ? '#ffffff' : '#201a38'; ctx.strokeStyle = '#c86cff'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(25, 0); ctx.lineTo(0, 30); ctx.lineTo(-25, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#00f3ff'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        }
         if (this.beamWindupTicks > 0 && this.beamTarget) {
             const pulse = 1 - this.beamWindupTicks / PRISM_BEAM_WINDUP;
             ctx.save();

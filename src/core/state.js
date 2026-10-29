@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -54,6 +54,7 @@ export const state = {
     vfxAtlas: null,
     modernPropsAtlas: null,
     courierActionAtlas: null,
+    rogueBossAtlas: null,
     worldAtlas: null,
     
     pastRuns: [],
@@ -153,6 +154,14 @@ courierActionsSheet.onload = () => {
     catch { state.courierActionAtlas = null; }
 };
 courierActionsSheet.onerror = () => { state.courierActionAtlas = null; };
+
+const rogueBossesSheet = new Image();
+rogueBossesSheet.src = ROGUE_BOSSES_SHEET_PATH;
+rogueBossesSheet.onload = () => {
+    try { state.rogueBossAtlas = buildRogueBossAtlas(rogueBossesSheet); }
+    catch { state.rogueBossAtlas = null; }
+};
+rogueBossesSheet.onerror = () => { state.rogueBossAtlas = null; };
 
 const propsSheet = new Image();
 const envSheet = new Image();
