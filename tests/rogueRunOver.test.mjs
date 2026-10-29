@@ -124,6 +124,26 @@ if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
 finishBossIfNeeded();
 assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('echo-slot');
+assert.equal(state.gameState, 'PLAYING', 'Courts clear advances into The Still');
+assert.equal(state.rogueRun.biomeIndex, 3);
+state.guards = [];
+state.rogueChamber.director = null;
+state.lasers = [];
+state.cameras = [];
+state.drones = [];
+state.rogueChamber.aspectPending = false;
+if (state.rogueChamber.type === 'timer') state.rogueChamber.ticksLeft = 0;
+else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
+else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+release();
+main.stepSimulation();
+if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
+    state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+    main.stepSimulation();
+}
+finishBossIfNeeded();
+assert.equal(state.rogueChamber.aspectPending, true);
+chooseAspect('wide-rupture');
 assert.equal(state.gameState, 'RUN_OVER');
 assert.equal(state.rogueRun.outcome, 'cleared');
 assert.equal(loadRogueMeta().shopPoints, 3, 'clear grants +2 Chrono Dust');

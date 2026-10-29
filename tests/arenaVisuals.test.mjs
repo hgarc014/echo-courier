@@ -4,10 +4,12 @@ import { arenaPalette, arenaSceneryLayout, visualHash } from '../src/rogue/arena
 const halls = arenaPalette('second-hand-halls');
 const warrens = arenaPalette('hourglass-warrens');
 const courts = arenaPalette('echo-courts');
+const still = arenaPalette('the-still');
 
 assert.equal(halls.accent, '#00d8e6');
 assert.notEqual(halls.base, warrens.base);
 assert.notEqual(warrens.accent, courts.accent);
+assert.notEqual(courts.base, still.base);
 assert.equal(arenaPalette('unknown'), halls, 'unknown biomes use the primary art direction');
 assert.equal(visualHash(4, 9, 2), visualHash(4, 9, 2), 'decor layout must be deterministic');
 assert.ok(visualHash(4, 9, 2) >= 0 && visualHash(4, 9, 2) <= 1);

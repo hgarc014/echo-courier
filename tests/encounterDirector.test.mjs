@@ -4,6 +4,7 @@ import { createEncounterDirector, createPressureDirector, encounterRemaining, MA
 assert.deepEqual(waveCountsFor('second-hand-halls'), [3, 4]);
 assert.deepEqual(waveCountsFor('hourglass-warrens'), [3, 4, 5]);
 assert.deepEqual(waveCountsFor('echo-courts'), [4, 5, 6]);
+assert.deepEqual(waveCountsFor('the-still'), [5, 6, 6]);
 const points = Array.from({ length: 6 }, (_, i) => ({ x: 220 + i * 60, y: 50 + i * 40 }));
 const tenOrders = new Set(Array.from({ length: 10 }, (_, i) => JSON.stringify(createEncounterDirector({ biome: 'second-hand-halls', seed: i + 1, spawnPoints: points }).spawnPoints)));
 assert.equal(tenOrders.size, 10, 'ten seeds produce ten distinct spawn orders');

@@ -1,9 +1,10 @@
 // Locked rogue-run biome order. Campaign LEVELS are not part of this list.
 // startRogueRun begins at index 0. Clearing a chamber advances one step.
-// The Still follows Echo Courts. No chambers until that biome is designed — do not append it here.
+// The Still follows Echo Courts and closes the playable run spine.
 import { generateChamber as generateHalls, HALL_NAME, CHAMBER_TYPES as HALL_TYPES } from '../data/secondHandHalls.js';
 import { generateChamber as generateWarrens, WARREN_NAME, CHAMBER_TYPES as WARREN_TYPES } from '../data/hourglassWarrens.js';
 import { generateChamber as generateCourts, COURT_NAME, CHAMBER_TYPES as COURT_TYPES } from '../data/echoCourts.js';
+import { generateChamber as generateStill, STILL_NAME, CHAMBER_TYPES as STILL_TYPES } from '../data/theStill.js';
 
 export const BIOME_ORDER = Object.freeze([
     Object.freeze({
@@ -23,6 +24,12 @@ export const BIOME_ORDER = Object.freeze([
         name: COURT_NAME,
         generateChamber: generateCourts,
         chamberTypes: COURT_TYPES
+    }),
+    Object.freeze({
+        id: 'the-still',
+        name: STILL_NAME,
+        generateChamber: generateStill,
+        chamberTypes: STILL_TYPES
     })
 ]);
 

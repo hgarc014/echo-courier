@@ -1,7 +1,8 @@
 const BIOME_PALETTES = Object.freeze({
     'second-hand-halls': Object.freeze({ base: '#071016', panel: '#0c1a21', panelAlt: '#0a151c', seam: '#17404a', accent: '#00d8e6', warm: '#ff8a2a' }),
     'hourglass-warrens': Object.freeze({ base: '#17110b', panel: '#24180f', panelAlt: '#1d140d', seam: '#5b361d', accent: '#ff9f43', warm: '#ffd166' }),
-    'echo-courts': Object.freeze({ base: '#0e0b18', panel: '#171126', panelAlt: '#120f20', seam: '#43295f', accent: '#bb72ff', warm: '#ff5c8a' })
+    'echo-courts': Object.freeze({ base: '#0e0b18', panel: '#171126', panelAlt: '#120f20', seam: '#43295f', accent: '#bb72ff', warm: '#ff5c8a' }),
+    'the-still': Object.freeze({ base: '#070a12', panel: '#101522', panelAlt: '#0b101b', seam: '#27314a', accent: '#d7e6ff', warm: '#8d79ff' })
 });
 
 export function arenaPalette(biome = 'second-hand-halls') {
@@ -17,7 +18,8 @@ export function visualHash(x, y, salt = 0) {
 const BIOME_SCENERY_KEYS = Object.freeze({
     'second-hand-halls': Object.freeze(['hallsRack', 'hallsGearColumn', 'hallsRelay', 'hallsBarrier']),
     'hourglass-warrens': Object.freeze(['warrensHourglass', 'warrensDebris', 'warrensVent', 'warrensObelisk']),
-    'echo-courts': Object.freeze(['courtsPlinth', 'courtsShards', 'courtsArch', 'courtsTimeBloom'])
+    'echo-courts': Object.freeze(['courtsPlinth', 'courtsShards', 'courtsArch', 'courtsTimeBloom']),
+    'the-still': Object.freeze(['courtsArch', 'courtsShards', 'courtsPlinth', 'courtsTimeBloom'])
 });
 
 export function arenaSceneryLayout(map, biome = 'second-hand-halls') {

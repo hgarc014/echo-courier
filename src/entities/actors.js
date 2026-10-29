@@ -163,7 +163,7 @@ export class Ghost extends Entity {
         this.spawnTtl = 24;
         this.dashCooldown = 0;
     }
-    update(pkgs, staticZones, winds) {
+    update(pkgs, staticZones, winds, playbackRate = 1) {
         if (this.vaporized) { this.isActive = false; this.moving = false; return; }
         this.isActive = true;
         if (this.spawnTtl > 0) this.spawnTtl--;
@@ -228,7 +228,8 @@ export class Ghost extends Entity {
         if (!isPastEnd) {
             let inStatic = false;
             for (let z of staticZones) if (AABB(this.x, this.y, this.w, this.h, z.x, z.y, z.w, z.h)) { inStatic = true; break; }
-            this.localTick += inStatic ? 0.5 : 1.0;
+            const rate = Math.max(0.1, Math.min(1, Number(playbackRate) || 1));
+            this.localTick += (inStatic ? 0.5 : 1.0) * rate;
         }
     }
     render(ctx) {

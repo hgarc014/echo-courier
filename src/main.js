@@ -33,7 +33,7 @@ import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, 
 import { createEncounterDirector, createPressureDirector, encounterRemaining, tickEncounterDirector, tickPressureDirector } from './rogue/encounterDirector.js';
 import { authoredShellWalls, composeEncounter } from './rogue/encounterComposition.js';
 import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/encounterTelemetry.js';
-import { CombatBurrower, CombatGatekeeper, CombatPrism, combatBossHud } from './rogue/combatBosses.js';
+import { CombatBurrower, CombatGatekeeper, CombatPrism, CombatStillkeeper, combatBossHud } from './rogue/combatBosses.js';
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
 import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
@@ -1375,8 +1375,8 @@ export function startPlaytestFromEditor() {
 }
 
 // ---- Roguelike run loop (hand-edit) ----
-// A run walks BIOME_ORDER (Second-hand Halls, Hourglass Warrens, Echo Courts).
-// The Still is not in the order yet. Campaign LEVELS stay off this path
+// A run walks BIOME_ORDER (Second-hand Halls, Hourglass Warrens, Echo Courts, The Still).
+// Campaign LEVELS stay off this path
 // (playtest path / customLayout).
 // Clear opens the aspect picker, then the next biome. The last biome ends at Run Over.
 // Any death / ESC ends the run. Aspect bonuses are run-only and carry across biomes.
@@ -1466,7 +1466,7 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         bossId,
         bossPending: !bossId && (state.rogueRun.ledgerEnabled
             ? (state.rogueRun.routeDepth | 0) >= 2
-            : ['second-hand-halls', 'hourglass-warrens', 'echo-courts'].includes(biome.id)),
+            : ['second-hand-halls', 'hourglass-warrens', 'echo-courts', 'the-still'].includes(biome.id)),
         encounter,
         // Chamber setup resets currentTick below, so every room telemetry clock starts at zero.
         telemetry: beginEncounterTelemetry(encounter, 0),
@@ -1494,12 +1494,14 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     const baseGhosts = (cmeta.maxGhosts ?? 2) + meta.echoSlotBonus;
     const carriedGhosts = !fresh && state.currentLevelMeta ? Number(state.currentLevelMeta.maxGhosts) || 0 : 0;
     state.currentLevelMeta = {
-        name: bossId === 'prism' ? 'Prism Court' : (bossId === 'burrower' ? 'Burrower Den' : (bossId ? 'Gatekeeper Audit' : cmeta.name)),
-        obj: bossId === 'prism'
+        name: bossId === 'stillkeeper' ? 'The Perfect Route' : (bossId === 'prism' ? 'Prism Court' : (bossId === 'burrower' ? 'Burrower Den' : (bossId ? 'Gatekeeper Audit' : cmeta.name))),
+        obj: bossId === 'stillkeeper'
+            ? 'Break the Stillkeeper’s perfect route with Echoes, then restart time.'
+            : (bossId === 'prism'
             ? 'Use Echoes to bend the Prism beam away, then shatter its core.'
             : (bossId === 'burrower'
             ? 'Lure the Burrower with Echoes, dodge its eruption, and strike while surfaced.'
-            : (bossId ? 'Defeat the Gatekeeper with attacks, Echoes, and time verbs.' : cmeta.obj)),
+            : (bossId ? 'Defeat the Gatekeeper with attacks, Echoes, and time verbs.' : cmeta.obj))),
         par: cmeta.par,
         hall: cmeta.hall,
         biome: biome.id,
@@ -1531,9 +1533,10 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         ];
         const spot = candidates.find(point => !(layout.walls || []).some(wall =>
             AABB(point.x, point.y, 60, 60, wall.x, wall.y, wall.w, wall.h))) || candidates[0];
-        state.guards.push(bossId === 'prism'
-            ? new CombatPrism(spot.x, spot.y)
-            : (bossId === 'burrower' ? new CombatBurrower(spot.x, spot.y) : new CombatGatekeeper(spot.x, spot.y)));
+        state.guards.push(bossId === 'stillkeeper'
+            ? new CombatStillkeeper(spot.x, spot.y)
+            : (bossId === 'prism' ? new CombatPrism(spot.x, spot.y)
+            : (bossId === 'burrower' ? new CombatBurrower(spot.x, spot.y) : new CombatGatekeeper(spot.x, spot.y))));
         const boss = state.guards[0];
         state.rogueChamber.bossTelemetry = beginBossTelemetry(bossId, boss.maxHp, 0, {
             dashes: 0, cloaks: 0, tosses: 0,
@@ -1649,7 +1652,7 @@ function enterRogueBossChamber() {
     const run = state.rogueRun;
     if (!run?.active) return false;
     const biome = BIOME_ORDER[run.biomeIndex ?? 0] || BIOME_ORDER[0];
-    const bossId = biome.id === 'echo-courts' ? 'prism' : (biome.id === 'hourglass-warrens' ? 'burrower' : 'gatekeeper');
+    const bossId = biome.id === 'the-still' ? 'stillkeeper' : (biome.id === 'echo-courts' ? 'prism' : (biome.id === 'hourglass-warrens' ? 'burrower' : 'gatekeeper'));
     run.lastBossReached = bossId;
     enterRogueChamber(run.biomeIndex ?? 0, false, bossId);
     return true;
@@ -1716,7 +1719,7 @@ function tickRogueChamber() {
                 state.rogueRun.bossTelemetry = state.rogueRun.bossTelemetry || [];
                 state.rogueRun.bossTelemetry.push({ ...chamber.bossTelemetry });
             }
-            const bossName = chamber.bossId === 'prism' ? 'Prism' : (chamber.bossId === 'burrower' ? 'Burrower' : 'Gatekeeper');
+            const bossName = chamber.bossId === 'stillkeeper' ? 'Stillkeeper' : (chamber.bossId === 'prism' ? 'Prism' : (chamber.bossId === 'burrower' ? 'Burrower' : 'Gatekeeper'));
             openClearedRift(`${bossName} defeated — enter the open rift.`);
         }
     }
@@ -1972,7 +1975,13 @@ function update() {
             state.sandEchoPending = [];
             state.sandHoldTicks = 0;
         }
-        const rewound = tickSand(state.sand, { holding: !!keys.e, player: state.player, packages: state.packages, tick: state.currentTick });
+        const rewound = tickSand(state.sand, {
+            holding: !!keys.e,
+            player: state.player,
+            packages: state.packages,
+            tick: state.currentTick,
+            costMultiplier: state.currentLevelMeta?.biome === 'the-still' ? 2 : 1
+        });
         if (rewound) {
             if (state.currentRun.length) {
                 const frame = state.currentRun.pop();
@@ -2110,7 +2119,7 @@ function update() {
 
     let allActors = [state.player];
     for (let ghost of state.activeGhosts) {
-        ghost.update(state.packages, state.statics, state.winds);
+        ghost.update(state.packages, state.statics, state.winds, state.currentLevelMeta?.biome === 'the-still' ? 0.5 : 1);
         if (ghost.isActive) allActors.push(ghost);
     }
 

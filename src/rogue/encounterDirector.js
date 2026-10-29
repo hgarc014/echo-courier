@@ -6,7 +6,8 @@ export const PRESSURE_INTERVAL_TICKS = 180;
 const WAVE_COUNTS = {
     'second-hand-halls': [3, 4],
     'hourglass-warrens': [3, 4, 5],
-    'echo-courts': [4, 5, 6]
+    'echo-courts': [4, 5, 6],
+    'the-still': [5, 6, 6]
 };
 
 export function waveCountsFor(biome) {
