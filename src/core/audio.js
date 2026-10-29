@@ -55,6 +55,21 @@ export const SFX = {
         setTimeout(() => playTone(220, 'triangle', 0.18, 0.26, 640), 60);
         setTimeout(() => playTone(540, 'sine', 0.22, 0.2, 980), 130);
     },
+    echoAssault: () => {
+        playTone(880, 'square', 0.1, 0.22, 520);
+        setTimeout(() => playTone(660, 'triangle', 0.14, 0.2, 330), 55);
+        setTimeout(() => playTone(330, 'sawtooth', 0.12, 0.16, 180), 115);
+    },
+    echoRecall: () => {
+        playTone(140, 'sine', 0.16, 0.24, 520);
+        setTimeout(() => playTone(420, 'triangle', 0.16, 0.2, 960), 70);
+        setTimeout(() => playTone(920, 'sine', 0.12, 0.16, 1320), 135);
+    },
+    sentryCharge: () => playTone(260, 'triangle', 0.45, 0.15, 920),
+    leechTether: () => {
+        playTone(180, 'sawtooth', 0.3, 0.14, 90);
+        setTimeout(() => playTone(520, 'sine', 0.22, 0.12, 240), 80);
+    },
     win: () => { playTone(400, 'sine', 0.2, 0.3); setTimeout(()=>playTone(500, 'sine', 0.2, 0.3), 200); setTimeout(()=>playTone(600, 'sine', 0.4, 0.3), 400); },
     door: () => playTone(100, 'square', 0.1, 0.2, 50),
     droneAlert: () => {
