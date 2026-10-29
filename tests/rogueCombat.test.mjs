@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { main, state, keys } from './harness/replay.mjs';
 import { prevKeys } from '../src/core/input.js';
 import { Guard, GUARD_STUN_TICKS } from '../src/entities/hazards.js';
+import { Ghost } from '../src/entities/actors.js';
 
 function release() {
     for (const k of Object.keys(keys)) keys[k] = false;
@@ -178,7 +179,7 @@ assert.equal(GUARD_STUN_TICKS, 45);
     assert.equal(state.gameState, 'PLAYING');
 }
 
-// An active echo stuns on the first overlap and kills on the next.
+// An active echo body applies one short stun; lingering overlap never kills.
 {
     begin();
     const g = new Guard([{ x: 400, y: 300 }, { x: 560, y: 300 }]);
@@ -194,21 +195,15 @@ assert.equal(GUARD_STUN_TICKS, 45);
     release();
     main.stepSimulation();
     assert.equal(g.dead, false);
-    assert.equal(g.stunTicks, GUARD_STUN_TICKS - 1);
+    assert.equal(g.stunTicks, 29);
     assert.equal(state.rogueChamber.enemiesLeft, 1);
     main.stepSimulation();
-    assert.equal(g.dead, true);
-    assert.equal(state.rogueChamber.enemiesLeft, 0, 'a dead guard is not left in the wave');
-    assert.equal(state.rogueChamber.type, 'rift', 'the cleared wave opens the exit rift');
-    assert.equal(state.rogueChamber.aspectPending, false, 'the player must still enter the rift');
-    state.player.x = state.deliveryZone.x;
-    state.player.y = state.deliveryZone.y;
-    release();
-    main.stepSimulation();
-    assert.equal(state.rogueChamber.aspectPending, true);
+    assert.equal(g.dead, false);
+    assert.equal(g.stunTicks, 28, 'the same echo does not refresh its body stun every tick');
+    assert.equal(state.rogueChamber.enemiesLeft, 1);
 }
 
-// Dash-stun, then one echo touch, kills. A dead guard on the player does not catch.
+// Dash-stun plus an echo body remains crowd control, not a free kill.
 {
     begin();
     const g = new Guard([{ x: 460, y: 300 }, { x: 640, y: 300 }]);
@@ -226,7 +221,7 @@ assert.equal(GUARD_STUN_TICKS, 45);
     release();
     state.activeGhosts = [echoAt(g.x, g.y)];
     main.stepSimulation();
-    assert.equal(g.dead, true);
+    assert.equal(g.dead, false);
     assert.equal(state.failTimer, 0);
 
     begin();
@@ -239,6 +234,21 @@ assert.equal(GUARD_STUN_TICKS, 45);
     main.stepSimulation();
     assert.equal(state.failTimer, 0, 'a dead guard does not catch');
     assert.equal(state.gameState, 'PLAYING');
+}
+
+// Echoes replay recorded attack inputs and can finish a weakened hound.
+{
+    begin();
+    const g = new Guard([{ x: 440, y: 300 }, { x: 560, y: 300 }]);
+    g.hp = 1;
+    g.stunTicks = 20;
+    state.guards = [g];
+    state.player.x = 48;
+    state.player.y = 270;
+    const run = Array.from({ length: 12 }, (_, i) => ({ x: 400, y: 300, facingX: 1, facingY: 0, attack: i === 0 }));
+    state.activeGhosts = [new Ghost(7, run)];
+    for (let i = 0; i < 7; i++) main.stepSimulation();
+    assert.equal(g.dead, true, 'the replayed swing deals the finishing damage');
 }
 
 console.log('rogueCombat ok');

@@ -1867,7 +1867,16 @@ function update() {
     if (rogueCombatActive() && attackIsActive(state.player)) {
         const box = attackBox(state.player);
         for (const enemy of state.guards) {
-            if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) enemy.hitByAttack?.(state.player.attackId);
+            if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) enemy.hitByAttack?.(`player:${state.player.attackId}`);
+        }
+    }
+    if (rogueCombatActive()) {
+        for (const ghost of state.activeGhosts) {
+            if (!ghost?.isActive || !attackIsActive(ghost)) continue;
+            const box = attackBox(ghost);
+            for (const enemy of state.guards) {
+                if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) enemy.hitByAttack?.(`echo:${ghost.id}:${ghost.attackId}`);
+            }
         }
     }
     for(let g of state.guards) {
@@ -2560,7 +2569,20 @@ function draw() {
     // Plates draw over beams so a plate under a laser column (W5-L4) stays readable.
     state.lasers.forEach(l => l.render(ctx)); drawShieldShadows(ctx); drawBeamFixtures(ctx); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
-    state.packages.forEach(p => p.render(ctx)); state.activeGhosts.forEach(g => g.render(ctx));
+    state.packages.forEach(p => p.render(ctx));
+    state.activeGhosts.forEach(g => {
+        g.render(ctx);
+        if (rogueCombatActive() && attackIsActive(g)) {
+            const box = attackBox(g);
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,243,255,.2)';
+            ctx.strokeStyle = 'rgba(190,255,255,.8)';
+            ctx.lineWidth = 2;
+            ctx.fillRect(box.x, box.y, box.w, box.h);
+            ctx.strokeRect(box.x, box.y, box.w, box.h);
+            ctx.restore();
+        }
+    });
 
     if (state.gameState === 'PLAYING' && state.currentRun.length > 0) {
         const projectedEcho = buildProjectedEchoPath(state.currentRun);

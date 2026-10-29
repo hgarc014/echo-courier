@@ -36,6 +36,7 @@ function pumpToRunOver() {
 release();
 main.startRogueRun(1);
 state.guards = [];
+state.rogueChamber.director = null;
 assert.equal(state.gameState, 'PLAYING');
 assert.equal(state.rogueRun.active, true);
 assert.equal(state.sand.history.length, 0);
@@ -53,6 +54,7 @@ assert.equal(state.gameState, 'PLAYING');
 assert.equal(state.rogueRun.active, true);
 assert.equal(state.rogueRun.outcome, null);
 state.guards = [];
+state.rogueChamber.director = null;
 state.lasers = [];
 state.cameras = [];
 state.drones = [];
@@ -61,6 +63,10 @@ state.rogueChamber.ticksLeft = 0;
 state.rogueChamber.aspectPending = false;
 release();
 main.stepSimulation();
+if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
+    state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+    main.stepSimulation();
+}
 assert.equal(state.rogueChamber.aspectPending, true);
 assert.equal(state.gameState, 'PLAYING');
 chooseAspect('echo-slot');
@@ -69,6 +75,7 @@ assert.equal(state.rogueRun.outcome, null);
 assert.equal(state.rogueRun.biomeIndex, 1);
 assert.equal(state.rogueRun.active, true);
 state.guards = [];
+state.rogueChamber.director = null;
 state.lasers = [];
 state.cameras = [];
 state.drones = [];
@@ -78,6 +85,10 @@ else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
 else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
 release();
 main.stepSimulation();
+if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
+    state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+    main.stepSimulation();
+}
 assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('sand-tank');
 assert.equal(state.gameState, 'PLAYING', 'Warrens clear advances into Echo Courts');
@@ -86,6 +97,7 @@ assert.equal(state.rogueRun.biomeIndex, 2);
 assert.equal(state.rogueRun.active, true);
 assert.equal(state.currentLevelMeta.hall, 'Echo Courts');
 state.guards = [];
+state.rogueChamber.director = null;
 state.lasers = [];
 state.cameras = [];
 state.drones = [];
@@ -95,6 +107,10 @@ else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
 else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
 release();
 main.stepSimulation();
+if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
+    state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+    main.stepSimulation();
+}
 assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('echo-slot');
 assert.equal(state.gameState, 'RUN_OVER');

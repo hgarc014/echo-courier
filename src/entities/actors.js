@@ -4,7 +4,7 @@ import { AABB, resolveDashFacing } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
 import { pickCourierFrame } from '../core/atlas.js';
 import { dominantFacing, shieldSlab } from '../systems/laserShield.js';
-import { PLAYER_MAX_HP } from '../rogue/combat.js';
+import { PLAYER_MAX_HP, beginAttack, tickAttack } from '../rogue/combat.js';
 
 function drawGhostShield(ctx, actor) {
     if (!getUnlockedAbilities().includes('ghostShield')) return;
@@ -108,6 +108,8 @@ export class PlayerEntity extends Entity {
         this.facingY = 0;
         this.cloakTimer = 0;
         this.dashCooldown = 0;
+        this.attackTicks = 0;
+        this.attackId = 0;
         this.tossCooldown = 0;
         this.invulnTicks = 0;
         this.maxHp = PLAYER_MAX_HP;
@@ -176,7 +178,11 @@ export class Ghost extends Entity {
 
         let interactJustPressed = !isPastEnd && step.interact && this.lastStateIndex !== stateIndex;
         let tossJustPressed = !isPastEnd && step.toss && this.lastStateIndex !== stateIndex;
+        let attackJustPressed = !isPastEnd && step.attack && this.lastStateIndex !== stateIndex;
         this.lastStateIndex = stateIndex;
+
+        if (attackJustPressed) beginAttack(this);
+        tickAttack(this);
 
         this.trail.push({ x: this.x, y: this.y });
         if (this.trail.length > 24) this.trail.shift();
