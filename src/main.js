@@ -37,7 +37,7 @@ import { CombatBurrower, CombatGatekeeper, CombatPrism, CombatStillkeeper, comba
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
 import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
-import { WEAPON_FAMILIES, weaponMove } from './rogue/weapons.js';
+import { WEAPON_FAMILIES, weaponMove, weaponHudState } from './rogue/weapons.js';
 import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
 import { commandEchoAssault, recallEchoes, ECHO_ASSAULT_COOLDOWN, ECHO_RECALL_COOLDOWN } from './rogue/echoCommands.js';
 import { RELICS, relicSlots, relicModifiers } from './rogue/relics.js';
@@ -1564,6 +1564,7 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     Object.assign(prevKeys, keys);
     syncTouchUi();
     updateRogueHealthHud();
+    updateRogueWeaponHud();
 }
 
 export function startRogueRun(seed, ledgerEnabled = false, startBiomeIndex = 0) {
@@ -1924,6 +1925,23 @@ function updateRogueHealthHud() {
     }));
 }
 
+function updateRogueWeaponHud() {
+    const box = document.getElementById('rogue-weapon');
+    const on = !!state.rogueRun?.active;
+    box?.classList.toggle('hidden', !on);
+    if (!on || !box) return;
+    const hud = weaponHudState(state.rogueRun.weapon, state.rogueRun.weaponSpecialCooldown);
+    const name = document.getElementById('rogue-weapon-name');
+    const moves = document.getElementById('rogue-weapon-moves');
+    const special = document.getElementById('rogue-weapon-special');
+    if (name) name.textContent = hud.name;
+    if (moves) moves.textContent = `J ${hud.quick}  ·  K ${hud.heavy}`;
+    if (special) {
+        special.textContent = hud.specialReady ? `L ${hud.special} READY` : `L ${hud.special} ${hud.specialSeconds}s`;
+        special.classList.toggle('is-cooling', !hud.specialReady);
+    }
+}
+
 function update() {
     pollGamepad();
     scheduleMusic();
@@ -2158,6 +2176,7 @@ function update() {
     }
     let interactJustPressed = isKeyJustPressed('space');
     if (state.rogueRun?.weaponSpecialCooldown > 0) state.rogueRun.weaponSpecialCooldown--;
+    if (rogueCombatActive()) updateRogueWeaponHud();
     const quickPressed = interactJustPressed || isKeyJustPressed('j');
     const heavyPressed = isKeyJustPressed('k');
     const specialPressed = isKeyJustPressed('l');

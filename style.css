@@ -102,6 +102,16 @@ body {
     letter-spacing: 0.02em;
     word-spacing: 0.12em;
 }
+#rogue-weapon { gap: 9px; border-color: rgba(255, 221, 0, .22); }
+.weapon-name { color: #fff3b0; font-weight: 800; letter-spacing: .045em; text-transform: uppercase; white-space: nowrap; }
+.weapon-moves { color: #b9c6d2; font-size: .78em; white-space: nowrap; }
+.weapon-special { margin-left: auto; color: #39ff14; font-size: .72em; font-weight: 800; letter-spacing: .06em; white-space: nowrap; }
+.weapon-special.is-cooling { color: #ffb13b; }
+@media (max-width: 620px) {
+    #rogue-weapon { justify-content: space-between; gap: 6px; }
+    .weapon-moves { display: none; }
+    .weapon-special { margin-left: 0; }
+}
 .hud-audio-btn {
     width: 46px;
     height: 46px;
@@ -911,7 +921,7 @@ body.touch-ui #mobile-controls {
     .logo { font-size: .92rem; line-height: 1.05; letter-spacing: .08em; }
     .hud-center {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 6px;
         align-items: start;
     }
@@ -924,6 +934,7 @@ body.touch-ui #mobile-controls {
         backdrop-filter: blur(10px);
         font-size: .78rem;
     }
+    #rogue-weapon { grid-column: span 4; justify-self: center; min-width: min(620px, 80vw); }
     .hud-center .objective,
     .hud-center .level-hint,
     .hud-center .boss-progress,
