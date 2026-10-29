@@ -39,6 +39,7 @@ import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
 import { WEAPON_FAMILIES, weaponMove } from './rogue/weapons.js';
 import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
 import { RELICS, relicSlots, relicModifiers } from './rogue/relics.js';
+import { createRouteLedger, ledgerChoices } from './rogue/runRoute.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1397,7 +1398,8 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     const bossId = bossMode === true ? 'gatekeeper' : (bossMode || null);
     // Opening room is the Halls kill wave so the run starts under guard pressure.
     const opening = fresh && biome.id === 'second-hand-halls';
-    const chamber = biome.generateChamber(state.rogueRun.seed, opening ? 'patrol-corridor' : undefined);
+    const selectedType = state.rogueRun.ledgerEnabled ? state.rogueRun.selectedRouteNode?.chamberType : null;
+    const chamber = biome.generateChamber(state.rogueRun.seed + (state.rogueRun.routeDepth | 0) * 313, selectedType || (opening ? 'patrol-corridor' : undefined));
     const layout = chamber.layout;
     const cmeta = chamber.meta;
     const clear = bossMode ? 'boss' : cmeta.clear;
@@ -1449,7 +1451,9 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         riftOpen: clear === 'rift',
         isBoss: !!bossId,
         bossId,
-        bossPending: !bossId && ['second-hand-halls', 'hourglass-warrens', 'echo-courts'].includes(biome.id),
+        bossPending: !bossId && (state.rogueRun.ledgerEnabled
+            ? (state.rogueRun.routeDepth | 0) >= 2
+            : ['second-hand-halls', 'hourglass-warrens', 'echo-courts'].includes(biome.id)),
         encounter,
         // Chamber setup resets currentTick below, so every room telemetry clock starts at zero.
         telemetry: beginEncounterTelemetry(encounter, 0),
@@ -1545,16 +1549,26 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     updateRogueHealthHud();
 }
 
-export function startRogueRun(seed) {
+export function startRogueRun(seed, ledgerEnabled = false) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
     hideAspectPick();
     const meta = loadRogueMeta();
     const relics = relicModifiers(meta);
+    const ledger = ledgerEnabled ? createRouteLedger(BIOME_ORDER, seed) : null;
+    const firstNode = ledgerEnabled ? ledgerChoices(ledger, 0, 0)[0] : null;
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0, ruptureCooldown: 0, ruptureSeq: 0,
         weapon: meta.selectedWeapon, aspects: [], lastBossReached: null, echoesDeployed: 0,
-        echoCharges: relics.echoCharges, riftOpenTicks: relics.riftOpenTicks, reachMultiplier: relics.reachMultiplier };
+        echoCharges: relics.echoCharges, riftOpenTicks: relics.riftOpenTicks, reachMultiplier: relics.reachMultiplier,
+        ledgerEnabled, ledger, routeDepth: 0, selectedRouteNode: firstNode, routeHistory: firstNode ? [firstNode.id] : [] };
     state.sandRewinding = false;
     enterRogueChamber(0, true);
+}
+
+export function startRogueLedgerRun(seed) {
+    startRogueRun(seed, true);
+    state.rogueRun.selectedRouteNode = null;
+    state.rogueRun.routeHistory = [];
+    showRouteLedger();
 }
 
 // Hall from the chamber just cleared (meta.hall). Biome registry if that is missing.
@@ -1569,12 +1583,52 @@ function clearedBiomeKicker() {
 function advanceRogueBiome() {
     const run = state.rogueRun;
     if (!run?.active) return false;
+    if (run.ledgerEnabled && !state.rogueChamber?.isBoss && (run.routeDepth | 0) < 2) {
+        run.routeDepth++;
+        showRouteLedger();
+        return true;
+    }
     const next = nextBiomeIndex(run.biomeIndex ?? 0);
     if (next == null) return false;
     run.biomeIndex = next;
+    run.routeDepth = 0;
     run.outcome = null;
     state.sandRewinding = false;
-    enterRogueChamber(next, false);
+    if (run.ledgerEnabled) showRouteLedger();
+    else enterRogueChamber(next, false);
+    return true;
+}
+
+function showRouteLedger() {
+    const run = state.rogueRun;
+    const root = document.getElementById('route-ledger');
+    const choicesRoot = document.getElementById('route-ledger-choices');
+    if (!run?.ledgerEnabled || !root || !choicesRoot) return;
+    const biome = BIOME_ORDER[run.biomeIndex] || BIOME_ORDER[0];
+    const choices = ledgerChoices(run.ledger, run.biomeIndex, run.routeDepth);
+    const progress = document.getElementById('route-ledger-progress');
+    if (progress) progress.innerText = `${biome.name} · route ${run.routeDepth + 1} of 3`;
+    choicesRoot.innerHTML = '';
+    for (const node of choices) {
+        const button = document.createElement('button');
+        button.className = 'route-node';
+        const room = biome.chamberTypes.find(type => type.id === node.chamberType)?.name || node.chamberType;
+        button.innerHTML = `<span class="route-node-type">${node.label}</span><span class="route-node-room">${room}</span><span class="route-node-reward">${node.reward}</span><span class="route-node-risk">RISK ${'◆'.repeat(node.risk || 1)}</span>`;
+        button.onclick = () => chooseRouteNode(node.id);
+        choicesRoot.appendChild(button);
+    }
+    state.gameState = 'ROUTE_LEDGER';
+    root.classList.remove('hidden');
+}
+
+export function chooseRouteNode(id) {
+    const run = state.rogueRun;
+    const node = ledgerChoices(run?.ledger, run?.biomeIndex, run?.routeDepth).find(choice => choice.id === id);
+    if (!run?.active || !node) return false;
+    run.selectedRouteNode = node;
+    run.routeHistory.push(node.id);
+    document.getElementById('route-ledger')?.classList.add('hidden');
+    enterRogueChamber(run.biomeIndex, false);
     return true;
 }
 
@@ -3379,7 +3433,8 @@ window.onload = () => {
     if (exportBtn) exportBtn.hidden = !isDevUrlEnabled();
     window.returnToEditor = returnToEditor;
     window.startRogueRun = () => startRogueRun();
-    window.restartRogueRun = () => startRogueRun();
+    window.startRogueLedgerRun = () => startRogueLedgerRun();
+    window.restartRogueRun = () => state.rogueRun?.ledgerEnabled ? startRogueLedgerRun() : startRogueRun();
     window.claimRogueUnlock = claimRogueUnlock;
     window.rogueShopItems = () => shopItems();
     window.syncRogueShop = syncRogueShop;

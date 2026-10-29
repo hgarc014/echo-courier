@@ -36,4 +36,24 @@ for (const biome of ledger) {
 assert.equal(ledgerChoices(ledger, 0, 0).length, 2);
 assert.deepEqual(ledgerChoices(ledger, 99, 0), []);
 
+const { main, state } = await import('./harness/replay.mjs');
+main.startRogueRun(42, true);
+assert.equal(state.rogueRun.ledgerEnabled, true);
+assert.equal(state.rogueRun.routeDepth, 0);
+assert.equal(state.rogueRun.routeHistory.length, 1);
+state.rogueRun.routeDepth = 1;
+const nextChoice = ledgerChoices(state.rogueRun.ledger, 0, 1)[1];
+assert.equal(main.chooseRouteNode(nextChoice.id), true);
+assert.equal(state.rogueRun.selectedRouteNode.id, nextChoice.id);
+assert.equal(state.currentLevelMeta.chamberType, undefined, 'runtime metadata stays campaign-editor compatible');
+assert.equal(state.rogueRun.routeHistory.at(-1), nextChoice.id);
+
+main.startRogueLedgerRun(99);
+assert.equal(state.gameState, 'ROUTE_LEDGER');
+assert.equal(state.rogueRun.routeHistory.length, 0, 'the player chooses the opening future');
+const openingChoice = ledgerChoices(state.rogueRun.ledger, 0, 0)[0];
+assert.equal(main.chooseRouteNode(openingChoice.id), true);
+assert.equal(state.gameState, 'PLAYING');
+assert.deepEqual(state.rogueRun.routeHistory, [openingChoice.id]);
+
 console.log('run route ok');
