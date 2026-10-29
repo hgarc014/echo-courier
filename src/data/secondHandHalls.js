@@ -114,7 +114,7 @@ function patrolCorridor(rng) {
             ],
             guards
         }),
-        obj: 'Defeat every Tick Hound, then enter the rift.'
+        obj: 'Defeat every hostile, then enter the rift.'
     };
 }
 

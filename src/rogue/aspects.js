@@ -1,5 +1,5 @@
 export const COMBAT_ASPECTS = Object.freeze([
-    Object.freeze({ id: 'recoil-echo', family: 'echo', label: 'Recoil Echo', detail: 'Echo strikes launch hounds farther.' }),
+    Object.freeze({ id: 'recoil-echo', family: 'echo', label: 'Recoil Echo', detail: 'Echo strikes launch enemies farther.' }),
     Object.freeze({ id: 'second-strike', family: 'attack', label: 'Second Strike', detail: 'Your melee swing repeats once after a short delay.' }),
     Object.freeze({ id: 'afterimage-blade', family: 'blink', label: 'Afterimage Blade', detail: 'Blink afterimages deal double damage.' }),
     Object.freeze({ id: 'wide-rupture', family: 'rupture', label: 'Wide Rupture', detail: 'Time Rupture catches a wider area.' }),
