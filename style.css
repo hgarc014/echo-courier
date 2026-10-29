@@ -821,6 +821,115 @@ body.touch-ui #mobile-controls {
     pointer-events: none;
     touch-action: none;
 }
+
+/* Desktop play is viewport-first: the arena owns the screen and HUD chrome floats over it. */
+@media (min-width: 901px) and (min-height: 650px) and (hover: hover) {
+    #app-layout {
+        position: relative;
+        width: 100vw;
+        height: 100dvh;
+        padding: 0;
+        border-radius: 0;
+        background: #030609;
+        box-shadow: none;
+        transform: none;
+        overflow: hidden;
+        justify-content: center;
+    }
+    .play-stage,
+    .game-area {
+        width: min(100vw, 133.333dvh);
+        height: min(100dvh, 75vw);
+    }
+    .play-stage { position: relative; flex: 0 0 auto; }
+    .game-area { position: absolute; inset: 0; }
+    #gameCanvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        border-radius: 0;
+        box-shadow: 0 0 90px rgba(0,0,0,.95);
+    }
+    .top-hud {
+        position: absolute;
+        z-index: 30;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(1180px, calc(100vw - 40px));
+        padding: 0;
+        grid-template-columns: 112px minmax(0, 1fr) 56px;
+        gap: 12px;
+        align-items: start;
+        pointer-events: none;
+    }
+    .hud-brand {
+        min-height: 38px;
+        padding: 8px 10px;
+        border: 1px solid rgba(0,243,255,.18);
+        border-radius: 10px;
+        background: rgba(4,9,14,.72);
+        backdrop-filter: blur(10px);
+    }
+    .logo { font-size: .92rem; line-height: 1.05; letter-spacing: .08em; }
+    .hud-center {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        align-items: start;
+    }
+    .hud-center .stat-box {
+        min-height: 38px;
+        padding: 6px 10px;
+        justify-content: center;
+        border-color: rgba(255,255,255,.1);
+        background: rgba(4,9,14,.72);
+        backdrop-filter: blur(10px);
+        font-size: .78rem;
+    }
+    .hud-center .objective,
+    .hud-center .level-hint,
+    .hud-center .boss-progress,
+    .hud-center .challenge-hud,
+    #playtest-return-btn {
+        grid-column: 1 / -1;
+        justify-self: center;
+        width: auto;
+        max-width: min(760px, 90%);
+        margin: 0;
+        padding: 5px 12px;
+        font-size: .76rem;
+        border-radius: 8px;
+        background: rgba(4,9,14,.78);
+        backdrop-filter: blur(10px);
+    }
+    .hud-center .level-hint { opacity: .72; }
+    .hud-center .challenge-hud { display: none; }
+    .hud-actions { min-height: 0; pointer-events: auto; }
+    .hud-audio-btn { width: 40px; height: 40px; background-color: rgba(4,9,14,.76); backdrop-filter: blur(10px); }
+    .bottom-hud {
+        position: absolute;
+        z-index: 31;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        max-width: calc(100vw - 32px);
+        padding: 7px 12px;
+        border: 1px solid rgba(255,255,255,.08);
+        border-radius: 9px;
+        background: rgba(4,9,14,.7);
+        backdrop-filter: blur(10px);
+        opacity: .22;
+        transition: opacity .18s ease;
+        white-space: nowrap;
+    }
+    .bottom-hud:hover,
+    .bottom-hud:focus-within { opacity: .95; }
+    .controls-hint { font-size: .7rem; }
+    .controls-hint kbd { padding: 2px 5px; }
+}
 body.touch-ui #mobile-controls.hidden {
     display: none !important;
 }
