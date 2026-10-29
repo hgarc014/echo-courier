@@ -218,10 +218,10 @@ check('deserializeLevel accepts every chamber and loads no required package', ()
 check('aspect panel markup has three boon buttons', () => {
     assert.ok(html.includes('id="aspect-pick"'));
     assert.ok(html.includes('aspect-pick hidden') || html.includes('hidden overlay panel aspect-pick') || /id="aspect-pick"[^>]*hidden/.test(html));
-    for (const id of ['sand-tank', 'start-sand', 'echo-slot']) {
+    for (const id of ['recoil-echo', 'second-strike', 'afterimage-blade']) {
         assert.ok(html.includes(`data-aspect="${id}"`), id);
     }
-    assert.ok(html.includes('+Sand Tank') && html.includes('+Start Sand') && html.includes('+Echo Slot'));
+    assert.ok(html.includes('Recoil Echo') && html.includes('Second Strike') && html.includes('Afterimage Blade'));
     assert.ok(css.includes('#aspect-pick') && css.includes('.aspect-card'));
     assert.ok(html.includes('class="aspect-pick-kicker"'));
     const aspectSrc = readFileSync(join(root, 'src/ui/aspectPick.js'), 'utf8');
@@ -255,7 +255,7 @@ check('showAspectPick / hideAspectPick and a button call onPick(id) once', async
     const aspectRoot = makeAspectRoot();
     document.getElementById = (id) => (id === 'aspect-pick' ? aspectRoot : null);
     const { showAspectPick, hideAspectPick, ASPECTS } = await import('../src/ui/aspectPick.js');
-    assert.deepEqual(ASPECTS.map(a => a.id), ['sand-tank', 'start-sand', 'echo-slot']);
+    assert.deepEqual(ASPECTS.map(a => a.id), ['recoil-echo', 'second-strike', 'afterimage-blade', 'wide-rupture', 'hourglass-heart', 'sand-leech', 'echo-chorus', 'stillstep']);
     assert.equal(typeof showAspectPick, 'function');
     assert.equal(globalThis.showAspectPick, showAspectPick);
     assert.equal(globalThis.hideAspectPick, hideAspectPick);

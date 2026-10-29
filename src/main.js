@@ -35,6 +35,7 @@ import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/enc
 import { CombatBurrower, CombatGatekeeper, CombatPrism, combatBossHud } from './rogue/combatBosses.js';
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
+import { pickAspectChoices } from './rogue/aspects.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1629,6 +1630,7 @@ function tickRogueChamber() {
 export function applyAspect(id) {
     if (!state.rogueRun?.active) return;
     if (!state.rogueRun.aspects) state.rogueRun.aspects = [];
+    if (state.rogueRun.aspects.includes(id)) return;
     state.rogueRun.aspects.push(id);
     if (id === 'sand-tank') {
         if (state.sand) bumpMaxSand(state.sand, 1);
@@ -2296,7 +2298,11 @@ function update() {
                     applyAspect(id);
                     hideAspectPick();
                     if (!advanceRogueBiome()) showRunOver(true);
-                }, clearedBiomeKicker());
+                }, clearedBiomeKicker(), pickAspectChoices(
+                    state.rogueRun.seed + (state.rogueRun.aspects?.length || 0) * 7919 + (state.rogueRun.biomeIndex || 0) * 101,
+                    state.rogueRun.aspects,
+                    3
+                ));
                 updatePrevKeys();
                 return;
             }
