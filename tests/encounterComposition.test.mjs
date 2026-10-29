@@ -16,6 +16,7 @@ assert.equal(sweep.encounters.length, 20);
 assert.equal(sweep.invalidCount, 0, '20-seed sweep contains no invalid encounter');
 assert.equal(sweep.adjacentRepeatCount, 0, 'room and squad families do not repeat back-to-back');
 assert.ok(sweep.uniqueSignatures >= 12, `expected varied encounters, got ${sweep.uniqueSignatures}`);
+assert.ok(sweep.encounters.some(encounter => encounter.squad.roles.includes('elite')), 'late-biome sweep can produce the elite squad');
 for (const shell of ROOM_SHELLS) {
     const walls = authoredShellWalls(shell.id);
     assert.ok(walls.length >= 2, `${shell.id} has authored cover`);

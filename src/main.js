@@ -13,7 +13,7 @@ import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
-import { TickHound, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
+import { EliteTickHound, TickHound, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
@@ -1531,7 +1531,10 @@ function tickRogueChamber() {
     const alive = (state.guards || []).filter(g => g && !g.dead).length;
     const playerCenter = state.player ? { x: state.player.x + state.player.w / 2, y: state.player.y + state.player.h / 2 } : null;
     const spawnHounds = points => {
-        for (const point of points) state.guards.push(new TickHound([{ ...point }, { x: point.x + 1, y: point.y }], point.role));
+        for (const point of points) {
+            const path = [{ ...point }, { x: point.x + 1, y: point.y }];
+            state.guards.push(point.role === 'elite' ? new EliteTickHound(path) : new TickHound(path, point.role));
+        }
     };
     if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') {
         chamber.ticksLeft -= 1;

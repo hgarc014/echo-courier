@@ -1106,6 +1106,67 @@ export class TickHound extends Guard {
     }
 }
 
+export class EliteTickHound extends TickHound {
+    constructor(points) {
+        super(points, 'bruiser');
+        this.role = 'elite';
+        this.hp = 8;
+        this.maxHp = 8;
+        this.chaseSpeed = 1.65;
+        this.roleColor = '#b56cff';
+        this.lungeTelegraphTicks = 0;
+        this.lungeCooldownTicks = 45;
+    }
+    reset() {
+        super.reset();
+        this.hp = 8;
+        this.maxHp = 8;
+        this.lungeTelegraphTicks = 0;
+        this.lungeCooldownTicks = 45;
+    }
+    update(player, ghosts) {
+        if (this.dead || this.stunTicks > 0 || !rogueCombatActive()) return super.update(player, ghosts);
+        if (this.lungeCooldownTicks > 0) this.lungeCooldownTicks--;
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const distance = Math.hypot(dx, dy);
+        if (this.lungeTelegraphTicks > 0) {
+            this.lungeTelegraphTicks--;
+            this._faceToward(player.x, player.y);
+            if (this.lungeTelegraphTicks === 0 && distance > 0) {
+                const travel = Math.min(72, distance);
+                const nx = this.x + dx / distance * travel;
+                const ny = this.y + dy / distance * travel;
+                if (!checkWallCollision(nx, this.y, this.w, this.h)) this.x = nx;
+                if (!checkWallCollision(this.x, ny, this.w, this.h)) this.y = ny;
+                this.lungeCooldownTicks = 120;
+                if (AABB(this.x - 8, this.y - 8, this.w + 16, this.h + 16, player.x, player.y, player.w, player.h)) {
+                    return { combatDamage: 2, reason: 'Crushed by an Elite Tick Hound!' };
+                }
+            }
+            return null;
+        }
+        if (this.lungeCooldownTicks <= 0 && distance >= 90 && distance <= 240) {
+            this.lungeTelegraphTicks = 30;
+            this._faceToward(player.x, player.y);
+            return null;
+        }
+        return super.update(player, ghosts);
+    }
+    render(ctx) {
+        super.render(ctx);
+        if (this.dead || this.lungeTelegraphTicks <= 0) return;
+        const pulse = 1 - this.lungeTelegraphTicks / 30;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255, 173, 66, ${0.45 + pulse * 0.5})`;
+        ctx.lineWidth = 3 + pulse * 3;
+        ctx.beginPath();
+        ctx.arc(this.x + this.w / 2, this.y + this.h / 2, 25 + pulse * 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
 // Real Rogue Run chambers set isRogue. Package-free floor replays also set
 // rogueRun.active so the exit zone can clear; those guards keep campaign AI.
 export function rogueCombatActive() {
