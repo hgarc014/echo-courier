@@ -3,7 +3,7 @@ import { Entity } from './base.js';
 import { AABB, checkWallCollision, lineOfSightBlocked } from '../core/physics.js';
 import { SFX } from '../core/audio.js';
 import { drawSprite, drawTiled } from '../core/sprites.js';
-import { resolveSprite } from '../core/atlas.js';
+import { resolveSprite, pickTickHoundFrame } from '../core/atlas.js';
 import {
     CRUMBLE_MIN_TICKS,
     WARNING_RING_TICKS,
@@ -1115,6 +1115,33 @@ export class TickHound extends Guard {
         this.hp = hp;
         this.maxHp = hp;
         this.chaseSpeed = chaseSpeed;
+    }
+    render(ctx) {
+        if (!rogueCombatActive() || !state.tickHoundAtlas?.ready) return super.render(ctx);
+        const picked = pickTickHoundFrame(state.tickHoundAtlas, this, state.currentTick);
+        const visualW = this.role === 'elite' ? 94 : (this.role === 'bruiser' ? 84 : 74);
+        const visualH = this.role === 'elite' ? 76 : (this.role === 'bruiser' ? 68 : 60);
+        const x = this.x + this.w / 2 - visualW / 2;
+        const y = this.y + this.h - visualH;
+        ctx.save();
+        ctx.globalAlpha = this.dead ? 0.55 : 1;
+        ctx.fillStyle = 'rgba(0, 4, 8, 0.42)';
+        ctx.beginPath();
+        ctx.ellipse(this.x + this.w / 2, this.y + this.h - 2, visualW * 0.34, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        drawSprite(ctx, picked?.img, x, y, visualW, visualH, {
+            flipX: picked?.flipX,
+            alpha: this.dead ? 0.58 : 1,
+            tint: this.ruptureTicks > 0 ? '#8c7dff' : (this.hurtTicks > 0 ? '#ffffff' : null),
+            tintAlpha: this.hurtTicks > 0 ? 0.72 : 0.38,
+            valign: 'bottom'
+        });
+        if (!this.dead) {
+            const pct = Math.max(0, this.hp / this.maxHp);
+            ctx.fillStyle = 'rgba(8, 5, 12, 0.84)'; ctx.fillRect(this.x - 8, y - 7, this.w + 16, 4);
+            ctx.fillStyle = this.roleColor || '#ff3f75'; ctx.fillRect(this.x - 8, y - 7, (this.w + 16) * pct, 4);
+        }
     }
 }
 

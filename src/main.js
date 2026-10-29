@@ -2890,6 +2890,56 @@ function drawPreviewScrubber(target) {
     target.restore();
 }
 
+function drawRogueArenaBackdrop(target, map) {
+    const biome = state.currentLevelMeta?.biome;
+    const palette = biome === 'hourglass-warrens'
+        ? { base: '#17120d', seam: 'rgba(255,159,67,.16)', glow: 'rgba(255,132,45,.11)' }
+        : biome === 'echo-courts'
+            ? { base: '#100d1b', seam: 'rgba(200,108,255,.18)', glow: 'rgba(140,90,255,.12)' }
+            : { base: '#0b1117', seam: 'rgba(0,243,255,.14)', glow: 'rgba(0,200,255,.10)' };
+    target.fillStyle = palette.base;
+    target.fillRect(0, 0, map.w, map.h);
+    target.save();
+    target.lineWidth = 1;
+    for (let y = 0; y < map.h; y += 80) {
+        for (let x = 0; x < map.w; x += 80) {
+            const inset = ((x / 80 + y / 80) % 3) * 2;
+            target.fillStyle = ((x / 80 + y / 80) % 2) ? 'rgba(255,255,255,.012)' : 'rgba(0,0,0,.07)';
+            target.fillRect(x + 2 + inset, y + 2, 76 - inset, 76);
+            target.strokeStyle = palette.seam;
+            target.strokeRect(x + 1.5, y + 1.5, 77, 77);
+            target.fillStyle = 'rgba(210,225,235,.14)';
+            target.fillRect(x + 8, y + 8, 3, 3);
+            target.fillRect(x + 69, y + 69, 3, 3);
+        }
+    }
+    const light = target.createRadialGradient(map.w * .5, map.h * .48, 20, map.w * .5, map.h * .48, Math.max(map.w, map.h) * .58);
+    light.addColorStop(0, palette.glow);
+    light.addColorStop(.6, 'rgba(0,0,0,0)');
+    light.addColorStop(1, 'rgba(0,0,0,.48)');
+    target.fillStyle = light;
+    target.fillRect(0, 0, map.w, map.h);
+    target.restore();
+}
+
+function drawCombatArc(target, actor, color, alpha = 1) {
+    const cx = actor.x + actor.w / 2;
+    const cy = actor.y + actor.h / 2;
+    const angle = Math.atan2(actor.facingY || 0, actor.facingX || 1);
+    const active = attackIsActive(actor);
+    target.save();
+    target.globalAlpha = alpha * (active ? .9 : .38);
+    target.strokeStyle = color;
+    target.lineWidth = active ? 8 : 3;
+    target.lineCap = 'round';
+    target.shadowColor = color;
+    target.shadowBlur = active ? 16 : 6;
+    target.beginPath();
+    target.arc(cx, cy, (actor.attackRange || 48) * .82, angle - .72, angle + .72);
+    target.stroke();
+    target.restore();
+}
+
 function draw() {
     // Popup demos no longer freeze the main canvas — live world always draws.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2908,8 +2958,8 @@ function draw() {
     applyCamera(ctx, shakeX, shakeY);
 
     const map = getMapSize();
-    ctx.fillStyle = '#10151c';
-    ctx.fillRect(0, 0, map.w, map.h);
+    if (state.currentLevelMeta?.isRogue) drawRogueArenaBackdrop(ctx, map);
+    else { ctx.fillStyle = '#10151c'; ctx.fillRect(0, 0, map.w, map.h); }
     if (state.gameState === 'EDITOR') {
         ctx.save();
         ctx.strokeStyle = 'rgba(0, 243, 255, 0.08)';
@@ -2963,14 +3013,7 @@ function draw() {
     state.activeGhosts.forEach(g => {
         g.render(ctx);
         if (rogueCombatActive() && attackIsActive(g)) {
-            const box = attackBox(g);
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,243,255,.2)';
-            ctx.strokeStyle = 'rgba(190,255,255,.8)';
-            ctx.lineWidth = 2;
-            ctx.fillRect(box.x, box.y, box.w, box.h);
-            ctx.strokeRect(box.x, box.y, box.w, box.h);
-            ctx.restore();
+            drawCombatArc(ctx, g, '#7df9ff', .72);
         }
     });
 
@@ -3051,14 +3094,7 @@ function draw() {
         ctx.restore();
     }
     if (rogueCombatActive() && state.player.attackTicks > 0) {
-        const box = attackBox(state.player);
-        ctx.save();
-        ctx.fillStyle = attackIsActive(state.player) ? 'rgba(255,214,90,.34)' : 'rgba(0,243,255,.13)';
-        ctx.strokeStyle = attackIsActive(state.player) ? '#ffd65a' : '#00f3ff';
-        ctx.lineWidth = 2;
-        ctx.fillRect(box.x, box.y, box.w, box.h);
-        ctx.strokeRect(box.x, box.y, box.w, box.h);
-        ctx.restore();
+        drawCombatArc(ctx, state.player, attackIsActive(state.player) ? '#ffd65a' : '#00f3ff');
     }
     for (const effect of state.rogueWeaponEffects || []) {
         ctx.save();

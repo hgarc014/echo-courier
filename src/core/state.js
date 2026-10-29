@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -50,6 +50,7 @@ export const state = {
     assetsLoaded: 0,
     assetNames: ['player', 'package', 'plate', 'door', 'wall', 'zone', 'guard', 'laser', 'camera', 'heavy', 'fragile'],
     playerAtlas: null,
+    tickHoundAtlas: null,
     worldAtlas: null,
     
     pastRuns: [],
@@ -117,6 +118,14 @@ playerSheet.onload = () => {
 playerSheet.onerror = () => {
     state.playerAtlas = null;
 };
+
+const tickHoundSheet = new Image();
+tickHoundSheet.src = TICK_HOUND_SHEET_PATH;
+tickHoundSheet.onload = () => {
+    try { state.tickHoundAtlas = buildTickHoundAtlas(tickHoundSheet); }
+    catch { state.tickHoundAtlas = null; }
+};
+tickHoundSheet.onerror = () => { state.tickHoundAtlas = null; };
 
 const propsSheet = new Image();
 const envSheet = new Image();

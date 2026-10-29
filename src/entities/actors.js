@@ -69,12 +69,25 @@ function drawCourier(ctx, entity, opts) {
     const bob = useAtlas ? (moving ? 0 : pose.bob) : pose.bob;
     const applyTint = !(useAtlas && picked.kind === 'cloak');
 
+    const visualW = useAtlas ? 70 : entity.w;
+    const visualH = useAtlas ? 86 : entity.h;
+    const visualX = entity.x + entity.w / 2 - visualW / 2;
+    const visualY = entity.y + entity.h - visualH;
+    if (useAtlas) {
+        ctx.save();
+        ctx.fillStyle = `rgba(0, 8, 14, ${0.28 * (alpha ?? 1)})`;
+        ctx.beginPath();
+        ctx.ellipse(entity.x + entity.w / 2, entity.y + entity.h - 2, 20, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
     if (dashing && img) {
         const dir = resolveDashFacing(entity.facingX, entity.facingY);
         const dirX = dir.x;
         const dirY = dir.y;
         for (let i = 2; i >= 1; i--) {
-            drawSprite(ctx, img, entity.x - dirX * i * 8, entity.y - dirY * i * 8, entity.w, entity.h, {
+            drawSprite(ctx, img, visualX - dirX * i * 10, visualY - dirY * i * 10, visualW, visualH, {
                 tint: applyTint ? tint : null,
                 tintAlpha: applyTint ? tintAlpha * 0.6 : 0,
                 alpha: 0.28 / i,
@@ -84,7 +97,7 @@ function drawCourier(ctx, entity, opts) {
         }
     }
 
-    if (img && drawSprite(ctx, img, entity.x, entity.y, entity.w, entity.h, {
+    if (img && drawSprite(ctx, img, visualX, visualY, visualW, visualH, {
         tint: applyTint ? tint : null,
         tintAlpha: applyTint ? tintAlpha : 0,
         flipX,
