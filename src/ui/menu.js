@@ -32,7 +32,19 @@ export function updateHUD() {
     document.getElementById('touch-btn-dash')?.classList.add('hidden');
     document.getElementById('touch-btn-toss')?.classList.add('hidden');
     document.getElementById('touch-btn-cloak')?.classList.add('hidden');
-    let html = `<div class="controls-hint" style="margin-bottom: 10px;">
+    const rogue = !!state.rogueRun?.active;
+    const resetTouch = document.getElementById('touch-btn-reset');
+    const levelTouch = document.getElementById('touch-btn-level');
+    if (resetTouch) resetTouch.textContent = rogue ? 'RECALL' : 'LOOP';
+    if (levelTouch) levelTouch.textContent = rogue ? 'ASSAULT' : 'LVL';
+    let html = rogue ? `<div class="controls-hint rogue-controls" style="margin-bottom: 10px;">
+                    <kbd>WASD</kbd> Move &nbsp;|&nbsp; <kbd>SPACE/J</kbd> Quick &nbsp;|&nbsp;
+                    <kbd>K</kbd> Heavy &nbsp;|&nbsp; <kbd>L</kbd> Special &nbsp;|&nbsp; <kbd>SHIFT</kbd> Dash
+                </div>
+                <div class="controls-hint rogue-echo-controls" style="color: #00f3ff;">
+                    <kbd>HOLD E</kbd> Create Echo &nbsp;|&nbsp; <kbd>Q</kbd> Echo Assault &nbsp;|&nbsp;
+                    <kbd>R</kbd> Echo Recall &nbsp;|&nbsp; <kbd>V</kbd> Rupture &nbsp;|&nbsp; <kbd>ESC</kbd> Menu
+                </div>` : `<div class="controls-hint" style="margin-bottom: 10px;">
                     <kbd>WASD</kbd> Move &nbsp;|&nbsp; <kbd>SPACE</kbd> Pick/Drop &nbsp;|&nbsp; 
                     <kbd>R</kbd> Reset Loop &nbsp;|&nbsp; <kbd>Q</kbd> Restart Level &nbsp;|&nbsp; <kbd>ESC</kbd> Menu
                 </div>`;
@@ -42,7 +54,7 @@ export function updateHUD() {
     if (unlocked.includes('toss')) { abilities.push(`<kbd>F</kbd> Toss Package`); document.getElementById('touch-btn-toss')?.classList.remove('hidden'); }
     if (unlocked.includes('cloak')) { abilities.push(`<kbd>C</kbd> Camera Cloak`); document.getElementById('touch-btn-cloak')?.classList.remove('hidden'); }
     if (unlocked.includes('ghostShield')) { abilities.push(`Echo Shield Front`); }
-    if (abilities.length > 0) {
+    if (!rogue && abilities.length > 0) {
         html += `<div class="controls-hint" style="color: #ffdd00;">` + abilities.join(' &nbsp;|&nbsp; ') + `</div>`;
     }
     hud.innerHTML = html;

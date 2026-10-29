@@ -162,6 +162,10 @@ export class Ghost extends Entity {
         this.trail = [];
         this.spawnTtl = 24;
         this.dashCooldown = 0;
+        this.replayOffsetX = 0;
+        this.replayOffsetY = 0;
+        this.commandLockTicks = 0;
+        this.commandFxTicks = 0;
     }
     update(pkgs, staticZones, winds, playbackRate = 1) {
         if (this.vaporized) { this.isActive = false; this.moving = false; return; }
@@ -169,6 +173,15 @@ export class Ghost extends Entity {
         if (this.spawnTtl > 0) this.spawnTtl--;
         this.intendedDx = 0;
         this.intendedDy = 0;
+
+        if (this.commandLockTicks > 0) {
+            this.commandLockTicks--;
+            if (this.commandFxTicks > 0) this.commandFxTicks--;
+            this.moving = false;
+            tickAttack(this);
+            return;
+        }
+        if (this.commandFxTicks > 0) this.commandFxTicks--;
 
         if (!this.runData || this.runData.length === 0) {
             this.moving = false;
@@ -183,8 +196,8 @@ export class Ghost extends Entity {
             return;
         }
 
-        this.x = step.x;
-        this.y = step.y;
+        this.x = step.x + (this.replayOffsetX || 0);
+        this.y = step.y + (this.replayOffsetY || 0);
         this.cloakTimer = step.cloakTimer || 0;
         this.cloakActive = this.cloakTimer > 0;
         this.facingX = step.facingX ?? 0; this.facingY = step.facingY ?? 0;
@@ -287,5 +300,18 @@ export class Ghost extends Entity {
         }
 
         drawGhostShield(ctx, this);
+
+        if (this.commandFxTicks > 0) {
+            const p = this.commandFxTicks / 28;
+            const cx = this.x + this.w / 2;
+            const cy = this.y + this.h / 2;
+            ctx.save();
+            ctx.strokeStyle = `rgba(255,221,0,${0.35 + p * 0.6})`;
+            ctx.lineWidth = 2 + p * 3;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 24 + (1 - p) * 20, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
     }
 }
