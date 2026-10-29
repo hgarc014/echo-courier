@@ -1,13 +1,8 @@
-// After-chamber Aspect picker. Three hardcoded boons. Selection is a callback
-// only — this module does not write rogue meta. Call showAspectPick(onPick, kicker)
-// with onPick(id) for 'sand-tank' | 'start-sand' | 'echo-slot'.
-// kicker is the cleared chamber hall. A blank kicker leaves the markup fallback.
+// After-chamber Aspect picker. Selection is a callback only — this module does
+// not write rogue meta. The run supplies its seeded, unowned draft choices.
+import { COMBAT_ASPECTS } from '../rogue/aspects.js';
 
-export const ASPECTS = Object.freeze([
-    Object.freeze({ id: 'sand-tank', label: '+Sand Tank', detail: '+1s max sand' }),
-    Object.freeze({ id: 'start-sand', label: '+Start Sand', detail: '+0.5s sand at the door' }),
-    Object.freeze({ id: 'echo-slot', label: '+Echo Slot', detail: 'One more echo' })
-]);
+export const ASPECTS = COMBAT_ASPECTS;
 
 let pending = null;
 
@@ -23,11 +18,23 @@ function applyKicker(root, kicker) {
     if (kick) kick.textContent = label;
 }
 
-export function showAspectPick(onPick, kicker) {
+function renderChoices(root, choices) {
+    if (!root || typeof root.querySelector !== 'function') return;
+    const row = root.querySelector('.aspect-pick-row');
+    if (!row) return;
+    row.innerHTML = choices.map(aspect => `
+        <button type="button" class="aspect-card" data-aspect="${aspect.id}">
+            <span class="aspect-card-name">${aspect.label}</span>
+            <span class="aspect-card-detail">${aspect.detail}</span>
+        </button>`).join('');
+}
+
+export function showAspectPick(onPick, kicker, choices = ASPECTS.slice(0, 3)) {
     pending = typeof onPick === 'function' ? onPick : null;
     const root = rootEl();
     if (!root) return;
     applyKicker(root, kicker);
+    renderChoices(root, choices);
     root.classList.remove('hidden');
 }
 
