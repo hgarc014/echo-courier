@@ -30,4 +30,7 @@ for (let i = 0; i < 3; i++) {
 assert.equal(meta.relationshipUnlocked, true, 'three policy-breaking runs unlock the auditor relationship');
 assert.ok(meta.recentDialogueIds.length <= 5);
 
+const finalSummary = buildRunSummary({ cleared: true, rogueRun: { lastBossReached: 'stillkeeper' } });
+assert.equal(finalSummary.bossDepth, 4);
+
 console.log('run narrative ok');
