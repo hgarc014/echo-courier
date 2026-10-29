@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { installDomStubs } from './harness/domStub.mjs';
 
 installDomStubs();
-const { buildTickHoundAtlas, buildChronoSentryAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, buildStillAtlas, pickCourierActionFrame, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, CHRONO_SENTRY_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID, MODERN_PROPS_SHEET_PATH, MODERN_PROPS_FRAME_GRID, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, BIOME_SCENERY_FRAME_GRID, STILL_SHEET_PATH, STILL_FRAME_GRID } = await import('../src/core/atlas.js');
+const { buildTickHoundAtlas, buildChronoSentryAtlas, buildEchoLeechAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, buildStillAtlas, pickCourierActionFrame, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, CHRONO_SENTRY_SHEET_PATH, ECHO_LEECH_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID, MODERN_PROPS_SHEET_PATH, MODERN_PROPS_FRAME_GRID, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, BIOME_SCENERY_FRAME_GRID, STILL_SHEET_PATH, STILL_FRAME_GRID } = await import('../src/core/atlas.js');
 
 assert.equal(TICK_HOUND_SHEET_PATH, 'assets/sprite-sheets/tick-hound-v2.png');
 const atlas = buildTickHoundAtlas({ width: 1536, height: 1152 });
@@ -20,6 +20,11 @@ assert.equal(CHRONO_SENTRY_SHEET_PATH, 'assets/sprite-sheets/chrono-sentry-v1.pn
 const sentry = buildChronoSentryAtlas({ width: 2048, height: 1024 });
 assert.equal(sentry.ready, true);
 assert.ok(sentry.idleFront && sentry.aimLeft && sentry.charge && sentry.fire && sentry.hit && sentry.dead);
+
+assert.equal(ECHO_LEECH_SHEET_PATH, 'assets/sprite-sheets/echo-leech-v1.png');
+const leech = buildEchoLeechAtlas({ width: 2048, height: 1024 });
+assert.equal(leech.ready, true);
+assert.ok(leech.idleFront && leech.glideLeft && leech.charge && leech.siphon && leech.hit && leech.dead);
 
 assert.equal(VFX_SHEET_PATH, 'assets/sprite-sheets/echo-courier-vfx-v2.png');
 const vfx = buildVfxAtlas({ width: 1600, height: 1200 });
