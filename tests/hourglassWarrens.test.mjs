@@ -528,6 +528,29 @@ check('a fresh run starts in Halls and a clear advances into Hourglass Warrens',
         assert.equal(state.rogueChamber.aspectPending, true);
         assert.equal(kicker.textContent, 'Echo Courts');
         chooseAspect('sand-tank');
+        assert.equal(state.gameState, 'PLAYING');
+        assert.equal(state.rogueRun.biomeIndex, 3);
+        assert.equal(state.currentLevelMeta.hall, 'The Still');
+        quiet();
+        state.rogueChamber.aspectPending = false;
+        if (state.rogueChamber.type === 'timer') state.rogueChamber.ticksLeft = 0;
+        else if (state.rogueChamber.type === 'wave') state.rogueChamber.enemiesLeft = 0;
+        else state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+        release();
+        main.stepSimulation();
+        if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
+            state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+            main.stepSimulation();
+        }
+        if (state.rogueChamber.isBoss && !state.rogueChamber.aspectPending) {
+            state.guards.forEach(enemy => { enemy.dead = true; });
+            main.stepSimulation();
+            state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+            main.stepSimulation();
+        }
+        assert.equal(state.rogueChamber.aspectPending, true);
+        assert.equal(kicker.textContent, 'The Still');
+        chooseAspect('wide-rupture');
         assert.equal(state.gameState, 'RUN_OVER');
         assert.equal(state.rogueRun.outcome, 'cleared');
         assert.equal(state.rogueRun.active, false);

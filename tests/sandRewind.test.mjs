@@ -17,6 +17,14 @@ const mkPlayer = () => ({ x: 0, y: 0, w: 10, h: 10, facingX: 1, facingY: 0, cloa
   assert.equal(p.x, 20); assert.ok(Math.abs(s.sand - (SAND_MAX - 10 / 60)) < 1e-9);
 }
 
+// The Still can charge two sand seconds for each second of history rewound.
+{ const s = createSandState(); const p = mkPlayer();
+  tickSand(s, { holding: false, player: p, packages: [], tick: 0 });
+  const before = s.sand;
+  assert.equal(tickSand(s, { holding: true, player: p, packages: [], tick: 1, costMultiplier: 2 }), true);
+  assert.ok(Math.abs(s.sand - (before - 2 / 60)) < 1e-9);
+}
+
 // cannot rewind at 0 sand
 { const s = createSandState(); s.sand = 0; const p = mkPlayer(); pushSnapshot(s, { x: 5, y: 5 });
   assert.equal(canRewind(s), false); p.x = 50;

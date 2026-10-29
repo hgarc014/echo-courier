@@ -1,7 +1,8 @@
 const BIOME_DEPTH = {
     'second-hand-halls': 0,
     'hourglass-warrens': 1,
-    'echo-courts': 2
+    'echo-courts': 2,
+    'the-still': 3
 };
 
 export const ROOM_SHELLS = [

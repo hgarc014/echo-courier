@@ -11,6 +11,7 @@ export const BURROWER_COMBAT_HP = 14;
 export const BURROWER_EMERGE_WINDUP = 45;
 export const PRISM_COMBAT_HP = 16;
 export const PRISM_BEAM_WINDUP = 45;
+export const STILLKEEPER_COMBAT_HP = 18;
 
 function distanceToSegment(px, py, ax, ay, bx, by) {
     const dx = bx - ax;
@@ -323,15 +324,36 @@ export class CombatPrism extends Prism {
     }
 }
 
+// The Stillkeeper is the perfected final refraction: more durable, faster below
+// half health, and explicitly identified so HUD/telemetry never call it Prism.
+export class CombatStillkeeper extends CombatPrism {
+    constructor(x, y) {
+        super(x, y);
+        this.id = 'rogue-stillkeeper';
+        this.hp = STILLKEEPER_COMBAT_HP;
+        this.maxHp = STILLKEEPER_COMBAT_HP;
+        this.beamCooldownTicks = 30;
+    }
+
+    update(player, ghosts = []) {
+        const result = super.update(player, ghosts);
+        if (!this.dead && this.hp <= this.maxHp / 2 && this.beamWindupTicks <= 0) {
+            this.beamCooldownTicks = Math.min(this.beamCooldownTicks, 48);
+        }
+        if (result?.reason) result.reason = 'Erased by the Stillkeeper’s perfect route!';
+        return result;
+    }
+}
+
 export function combatBossHud(boss) {
     if (!boss || boss.dead) return null;
     const max = Math.max(1, Number(boss.maxHp) || 1);
     const hp = Math.max(0, Math.min(max, Number(boss.hp) || 0));
     return {
-        name: boss instanceof CombatPrism ? 'PRISM' : (boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER'),
+        name: boss instanceof CombatStillkeeper ? 'STILLKEEPER' : (boss instanceof CombatPrism ? 'PRISM' : (boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER')),
         hp,
         max,
-        progress: `${boss instanceof CombatPrism ? 'PRISM' : (boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER')} · ${hp}/${max}`,
+        progress: `${boss instanceof CombatStillkeeper ? 'STILLKEEPER' : (boss instanceof CombatPrism ? 'PRISM' : (boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER'))} · ${hp}/${max}`,
         phase: hp <= max / 2 ? 2 : 1
     };
 }

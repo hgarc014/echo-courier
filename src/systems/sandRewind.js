@@ -57,13 +57,13 @@ export function applySnapshot(player, packages, snap) {
 /**
  * Advance one tick. Returns true if this tick was a rewind tick (caller should skip normal play).
  */
-export function tickSand(sand, { holding, player, packages, tick }) {
+export function tickSand(sand, { holding, player, packages, tick, costMultiplier = 1 }) {
     const dt = 1 / SAND_HZ;
     if (holding && canRewind(sand)) {
         sand.rewinding = true;
         const snap = sand.history.pop();
         applySnapshot(player, packages, snap);
-        sand.sand = Math.max(0, sand.sand - dt);
+        sand.sand = Math.max(0, sand.sand - dt * Math.max(0, Number(costMultiplier) || 1));
         return true;
     }
     sand.rewinding = false;

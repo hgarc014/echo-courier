@@ -4,6 +4,7 @@ import { authoredShellWalls, composeEncounter, ROOM_SHELLS, sweepEncounterSeeds,
 assert.equal(threatBudgetFor('second-hand-halls'), 4);
 assert.equal(threatBudgetFor('hourglass-warrens'), 5);
 assert.equal(threatBudgetFor('echo-courts'), 6);
+assert.equal(threatBudgetFor('the-still'), 7);
 
 const first = composeEncounter({ seed: 42, biome: 'hourglass-warrens' });
 assert.deepEqual(first, composeEncounter({ seed: 42, biome: 'hourglass-warrens' }), 'same seed composes the same encounter');

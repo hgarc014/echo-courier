@@ -12,6 +12,7 @@ installDomStubs();
 const { generateChamber, pickChamberTypes, CHAMBER_TYPES, CHAMBER_W, CHAMBER_H, CLEAR_KINDS, COURT_NAME } = await import('../src/data/echoCourts.js');
 const { generateChamber: generateHalls } = await import('../src/data/secondHandHalls.js');
 const { generateChamber: generateWarrens, WARREN_NAME } = await import('../src/data/hourglassWarrens.js');
+const { generateChamber: generateStill, STILL_NAME } = await import('../src/data/theStill.js');
 const { deserializeLevel, serializeLevel, LEVELS, copyRogueChamberMeta } = await import('../src/data/levels.js');
 const { BIOME_ORDER, nextBiomeIndex, generateForBiome, editorChamberOptions, rogueChamberEditorLayout } = await import('../src/rogue/biomes.js');
 const { fillRogueChamberSelect, flushEditorLevelConfig, EDITOR_SAVE_PREFIX } = await import('../src/ui/editor.js');
@@ -105,21 +106,23 @@ check('chamber types cover kill, rift, and timer with guard pressure only', () =
     assert.equal(COURT_NAME, 'Echo Courts');
 });
 
-check('biome order is Halls, then Warrens, then Echo Courts', () => {
-    assert.deepEqual(BIOME_ORDER.map(b => b.id), ['second-hand-halls', 'hourglass-warrens', 'echo-courts']);
-    assert.deepEqual(BIOME_ORDER.map(b => b.name), ['Second-hand Halls', WARREN_NAME, COURT_NAME]);
+check('biome order is Halls, Warrens, Courts, then The Still', () => {
+    assert.deepEqual(BIOME_ORDER.map(b => b.id), ['second-hand-halls', 'hourglass-warrens', 'echo-courts', 'the-still']);
+    assert.deepEqual(BIOME_ORDER.map(b => b.name), ['Second-hand Halls', WARREN_NAME, COURT_NAME, STILL_NAME]);
     assert.equal(BIOME_ORDER[0].generateChamber, generateHalls);
     assert.equal(BIOME_ORDER[1].generateChamber, generateWarrens);
     assert.equal(BIOME_ORDER[2].generateChamber, generateChamber);
+    assert.equal(BIOME_ORDER[3].generateChamber, generateStill);
     assert.equal(nextBiomeIndex(0), 1);
     assert.equal(nextBiomeIndex(1), 2);
-    assert.equal(nextBiomeIndex(2), null);
+    assert.equal(nextBiomeIndex(2), 3);
+    assert.equal(nextBiomeIndex(3), null);
     assert.deepEqual(generateForBiome('second-hand-halls', 4, 'patrol-corridor'), generateHalls(4, 'patrol-corridor'));
     assert.deepEqual(generateForBiome('hourglass-warrens', 4, 'sand-funnel'), generateWarrens(4, 'sand-funnel'));
     assert.deepEqual(generateForBiome('echo-courts', 4, 'echo-gallery'), generateChamber(4, 'echo-gallery'));
     assert.deepEqual(generateForBiome(undefined, 4), generateHalls(4));
-    assert.throws(() => generateForBiome('the-still', 1), /Unknown biome/);
-    assert.equal(BIOME_ORDER.some(b => /still/i.test(b.id)), false);
+    assert.deepEqual(generateForBiome('the-still', 4, 'frozen-minute'), generateStill(4, 'frozen-minute'));
+    assert.equal(BIOME_ORDER.some(b => /still/i.test(b.id)), true);
     assert.match(biomesSrc, /The Still/);
     assert.equal(LEVELS.some(l => /echo court/i.test(l.name || '')), false);
     assert.match(mainSrc, /BIOME_ORDER/);
@@ -507,6 +510,12 @@ check('a fresh run starts in Halls and reaches Echo Courts as the third biome', 
     armClear();
     assert.equal(state.rogueChamber.aspectPending, true);
     chooseAspect('sand-tank');
+    assert.equal(state.rogueRun.biomeIndex, 3);
+    assert.equal(state.currentLevelMeta.hall, 'The Still');
+    assert.equal(state.currentLevelMeta.biome, 'the-still');
+    armClear();
+    assert.equal(state.rogueChamber.aspectPending, true);
+    chooseAspect('wide-rupture');
     assert.equal(state.gameState, 'RUN_OVER');
     assert.equal(state.rogueRun.outcome, 'cleared');
     assert.equal(state.rogueRun.active, false);
