@@ -887,6 +887,7 @@ export class Guard extends Entity {
         this.maxHp = TICK_HOUND_HP;
         this.lastHitAttackId = -1;
         this.echoTouches = new Set();
+        this.hurtTicks = 0;
         this._resetFacing();
     }
     _resetFacing() {
@@ -900,13 +901,20 @@ export class Guard extends Entity {
     reset() {
         this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.lostSightTimer=0;
         this.stunTicks = 0; this.dead = false;
-        this.hp = TICK_HOUND_HP; this.lastHitAttackId = -1; this.echoTouches.clear();
+        this.hp = TICK_HOUND_HP; this.lastHitAttackId = -1; this.echoTouches.clear(); this.hurtTicks = 0;
         this._resetFacing();
     }
-    hitByAttack(attackId, damage = 1) {
+    hitByAttack(attackId, damage = 1, impulse = null) {
         if (this.dead || this.lastHitAttackId === attackId) return false;
         this.lastHitAttackId = attackId;
         this.hp = Math.max(0, this.hp - damage);
+        this.hurtTicks = 8;
+        if (impulse) {
+            const nx = this.x + (impulse.x || 0);
+            const ny = this.y + (impulse.y || 0);
+            if (!checkWallCollision(nx, this.y, this.w, this.h)) this.x = nx;
+            if (!checkWallCollision(this.x, ny, this.w, this.h)) this.y = ny;
+        }
         this.stun(Math.max(this.stunTicks, 8));
         if (this.hp <= 0) this.dead = true;
         return true;
@@ -945,6 +953,7 @@ export class Guard extends Entity {
     }
     update(player, ghosts) {
         if (this.dead) return null;
+        if (this.hurtTicks > 0) this.hurtTicks--;
         if (this.stunTicks > 0) {
             this.stunTicks--;
             return null;
@@ -1018,13 +1027,14 @@ export class Guard extends Entity {
         const stunned = !dead && this.stunTicks > 0;
         if (rogueCombatActive()) {
             const frozen = !dead && this.ruptureTicks > 0;
+            const hitFlash = !dead && this.hurtTicks > 0 && (state.currentTick % 4 < 2);
             const cx = this.x + this.w / 2;
             const cy = this.y + this.h / 2;
             ctx.save();
             ctx.globalAlpha = dead ? 0.28 : 1;
             ctx.translate(cx, cy);
             ctx.rotate(this.facingAngle || 0);
-            ctx.fillStyle = frozen ? '#6f7088' : (stunned ? '#ffd65a' : '#191725');
+            ctx.fillStyle = hitFlash ? '#fff7ff' : (frozen ? '#6f7088' : (stunned ? '#ffd65a' : '#191725'));
             ctx.strokeStyle = dead ? '#657080' : (frozen ? '#c8b7ff' : '#ff3f75');
             ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(6, -11); ctx.lineTo(-13, -8); ctx.lineTo(-17, 8); ctx.lineTo(7, 10); ctx.closePath(); ctx.fill(); ctx.stroke();

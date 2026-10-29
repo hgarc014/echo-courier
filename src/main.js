@@ -1888,7 +1888,9 @@ function update() {
     if (rogueCombatActive() && attackIsActive(state.player)) {
         const box = attackBox(state.player);
         for (const enemy of state.guards) {
-            if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) enemy.hitByAttack?.(`player:${state.player.attackId}`);
+            if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
+                enemy.hitByAttack?.(`player:${state.player.attackId}`, 1, { x: (state.player.facingX || 0) * 12, y: (state.player.facingY || 0) * 12 });
+            }
         }
     }
     if (rogueCombatActive()) {
@@ -1896,7 +1898,9 @@ function update() {
             if (!ghost?.isActive || !attackIsActive(ghost)) continue;
             const box = attackBox(ghost);
             for (const enemy of state.guards) {
-                if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) enemy.hitByAttack?.(`echo:${ghost.id}:${ghost.attackId}`);
+                if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
+                    enemy.hitByAttack?.(`echo:${ghost.id}:${ghost.attackId}`, 1, { x: (ghost.facingX || 0) * 12, y: (ghost.facingY || 0) * 12 });
+                }
             }
         }
     }
