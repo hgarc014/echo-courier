@@ -46,3 +46,13 @@ export function toggleRelic(id, meta) {
 export function hasRelic(meta, id) {
     return normalizeRelicState(meta).relicsEquipped.includes(id);
 }
+
+export function relicModifiers(meta) {
+    return Object.freeze({
+        maxHpBonus: hasRelic(meta, 'cracked-pocketwatch') ? 1 : 0,
+        maxSandBonus: hasRelic(meta, 'sand-funnel') ? 0.5 : 0,
+        echoCharges: hasRelic(meta, 'echo-locket') ? 1 : 0,
+        riftOpenTicks: hasRelic(meta, 'rift-key') ? 0 : 60,
+        reachMultiplier: hasRelic(meta, 'hound-tooth') ? 1.1 : 1
+    });
+}

@@ -38,7 +38,7 @@ import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rog
 import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
 import { WEAPON_FAMILIES, weaponMove } from './rogue/weapons.js';
 import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
-import { RELICS, relicSlots } from './rogue/relics.js';
+import { RELICS, relicSlots, relicModifiers } from './rogue/relics.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1390,8 +1390,9 @@ function rogueSpawnPoints(layout) {
 }
 
 function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
-    const carriedHp = fresh ? PLAYER_MAX_HP : Math.max(1, state.player?.hp ?? PLAYER_MAX_HP);
     const meta = loadRogueMeta();
+    const relics = relicModifiers(meta);
+    const carriedHp = fresh ? PLAYER_MAX_HP + relics.maxHpBonus : Math.max(1, state.player?.hp ?? PLAYER_MAX_HP);
     const biome = BIOME_ORDER[biomeIndex] || BIOME_ORDER[0];
     const bossId = bossMode === true ? 'gatekeeper' : (bossMode || null);
     // Opening room is the Halls kill wave so the run starts under guard pressure.
@@ -1455,7 +1456,7 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         director: spawnPoints.length ? director : null
     };
     if (fresh || !state.sand) {
-        state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
+        state.sand = createSandState({ maxSand: rogueMaxSand(meta) + relics.maxSandBonus, sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
     } else {
         resetHistory(state.sand);
         state.deathUndoFlash = 0;
@@ -1523,7 +1524,7 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         });
     }
     state.plates = []; state.doors = []; state.cameras = []; state.lasers = []; state.drones = []; state.packages = [];
-    state.player.maxHp = PLAYER_MAX_HP + aspectModifiers(state.rogueRun).maxHpBonus;
+    state.player.maxHp = PLAYER_MAX_HP + relics.maxHpBonus + aspectModifiers(state.rogueRun).maxHpBonus;
     state.player.hp = Math.min(state.player.maxHp, carriedHp);
     beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
     updateHUD();
@@ -1547,8 +1548,11 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
 export function startRogueRun(seed) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
     hideAspectPick();
+    const meta = loadRogueMeta();
+    const relics = relicModifiers(meta);
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0, ruptureCooldown: 0, ruptureSeq: 0,
-        weapon: loadRogueMeta().selectedWeapon, aspects: [], lastBossReached: null, echoesDeployed: 0 };
+        weapon: meta.selectedWeapon, aspects: [], lastBossReached: null, echoesDeployed: 0,
+        echoCharges: relics.echoCharges, riftOpenTicks: relics.riftOpenTicks, reachMultiplier: relics.reachMultiplier };
     state.sandRewinding = false;
     enterRogueChamber(0, true);
 }
@@ -1598,16 +1602,29 @@ function tickRogueChamber() {
             state.guards.push(point.role === 'elite' ? new EliteTickHound(path) : new TickHound(path, point.role));
         }
     };
+    const openClearedRift = message => {
+        chamber.type = 'rift';
+        chamber.riftOpenTicks = Math.max(0, state.rogueRun.riftOpenTicks | 0);
+        chamber.riftOpen = chamber.riftOpenTicks === 0;
+        const objective = document.getElementById('objective-text');
+        if (objective) objective.innerText = chamber.riftOpen ? message : `Rift stabilizing — ${(chamber.riftOpenTicks / 60).toFixed(1)}s`;
+        chamber.riftMessage = message;
+    };
     if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') {
         chamber.ticksLeft -= 1;
         if (chamber.director?.kind === 'pressure') spawnHounds(tickPressureDirector(chamber.director, alive, playerCenter, chamber.ticksLeft > 0));
         if (chamber.ticksLeft <= 0) {
-            chamber.type = 'rift'; chamber.riftOpen = true;
-            const objective = document.getElementById('objective-text');
-            if (objective) objective.innerText = 'You survived — reach the open rift.';
+            openClearedRift('You survived — reach the open rift.');
         }
     } else if (chamber.type === 'rift') {
-        if (chamber.director?.kind === 'pressure') spawnHounds(tickPressureDirector(chamber.director, alive, playerCenter, true));
+        if (!chamber.riftOpen && chamber.riftOpenTicks > 0) {
+            chamber.riftOpenTicks--;
+            if (chamber.riftOpenTicks <= 0) {
+                chamber.riftOpen = true;
+                const objective = document.getElementById('objective-text');
+                if (objective) objective.innerText = chamber.riftMessage || 'Enter the open rift.';
+            }
+        } else if (chamber.director?.kind === 'pressure') spawnHounds(tickPressureDirector(chamber.director, alive, playerCenter, true));
     } else if (chamber.type === 'wave') {
         if (chamber.director) {
             spawnHounds(tickEncounterDirector(chamber.director, alive, playerCenter));
@@ -1619,10 +1636,7 @@ function tickRogueChamber() {
                 state.rogueRun.encounterTelemetry = state.rogueRun.encounterTelemetry || [];
                 state.rogueRun.encounterTelemetry.push({ ...chamber.telemetry });
             }
-            chamber.type = 'rift';
-            chamber.riftOpen = true;
-            const objective = document.getElementById('objective-text');
-            if (objective) objective.innerText = 'Wave cleared — enter the open rift.';
+            openClearedRift('Wave cleared — enter the open rift.');
         }
     } else if (chamber.type === 'boss') {
         chamber.enemiesLeft = alive;
@@ -1635,11 +1649,8 @@ function tickRogueChamber() {
                 state.rogueRun.bossTelemetry = state.rogueRun.bossTelemetry || [];
                 state.rogueRun.bossTelemetry.push({ ...chamber.bossTelemetry });
             }
-            chamber.type = 'rift';
-            chamber.riftOpen = true;
-            const objective = document.getElementById('objective-text');
             const bossName = chamber.bossId === 'prism' ? 'Prism' : (chamber.bossId === 'burrower' ? 'Burrower' : 'Gatekeeper');
-            if (objective) objective.innerText = `${bossName} defeated — enter the open rift.`;
+            openClearedRift(`${bossName} defeated — enter the open rift.`);
         }
     }
 }
@@ -1700,6 +1711,7 @@ function showRunOver(cleared) {
     if (reactionEl) reactionEl.innerText = narrative.reaction.text;
     syncRunOverUnlock();
     syncRogueShop();
+    syncRogueRelics();
     el.classList.remove('hidden');
 }
 
@@ -1739,8 +1751,13 @@ export function syncRogueHub() {
             weapons.appendChild(button);
         }
     }
-    const relics = document.getElementById('rogue-relic-list');
-    if (relics) {
+    syncRogueRelics();
+    syncRogueShop();
+}
+
+function syncRogueRelics() {
+    const m = loadRogueMeta();
+    document.querySelectorAll('.rogue-relic-list').forEach(relics => {
         relics.innerHTML = '';
         const equipped = new Set(m.relicsEquipped || []);
         const owned = new Set(m.relicsOwned || []);
@@ -1755,7 +1772,8 @@ export function syncRogueHub() {
             button.onclick = () => {
                 if (owned.has(relic.id)) equipRogueRelic(relic.id);
                 else buyRogueRelic(relic.id);
-                syncRogueHub();
+                syncRogueRelics();
+                syncRogueShop();
             };
             relics.appendChild(button);
         }
@@ -1763,8 +1781,7 @@ export function syncRogueHub() {
         label.style.cssText = 'width:100%;font-size:.75rem;color:#aaa;';
         label.innerText = `RELIC SLOTS ${equipped.size}/${relicSlots(m)} · second slot at 10 runs`;
         relics.appendChild(label);
-    }
-    syncRogueShop();
+    });
 }
 
 /** Render sandTank/startSand shop into every .rogue-shop container (hub + Run Over). */
@@ -1904,6 +1921,10 @@ function update() {
         if (wasRewinding) {
             // Hold ended (key up or sand empty): commit only if held long enough.
             if (commitSandEcho(state.pastRuns, state.sandEchoPending, state.sandHoldTicks, state.currentLevelMeta?.maxGhosts)) {
+                if ((state.rogueRun.echoCharges | 0) > 0) {
+                    state.rogueRun.echoCharges--;
+                    refillSand(state.sand, state.sandHoldTicks / 60);
+                }
                 state.activeGhosts = state.pastRuns.map((r, i) => new Ghost(i, r));
             }
             state.sandEchoPending = null;
@@ -2156,7 +2177,7 @@ function update() {
     if (rogueCombatActive()) applyEchoGuardTouches(state.guards, state.activeGhosts);
     tickAttack(state.player);
     if (rogueCombatActive() && attackIsActive(state.player)) {
-        const box = attackBox(state.player);
+        const box = attackBox(state.player, (state.player.attackRange || 48) * (state.rogueRun.reachMultiplier || 1));
         if ((state.player.weaponMove?.effect || 'melee').startsWith('melee')) {
             for (const enemy of state.guards) {
                 if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
@@ -2519,6 +2540,9 @@ function drawAbilityCooldowns(target) {
     }
     if (state.rogueRun?.active && state.rogueRun.ruptureCooldown > 0) {
         parts.push(`RUPTURE ${ticksToSeconds(state.rogueRun.ruptureCooldown)}s`);
+    }
+    if (state.rogueRun?.active && state.rogueRun.echoCharges > 0) {
+        parts.push(`FREE ECHO ${state.rogueRun.echoCharges}`);
     }
     if (!parts.length) return;
     const text = parts.join('  |  ');
