@@ -28,13 +28,12 @@ export function seededSpawnOrder(seed, points) {
 }
 
 export function createEncounterDirector({ biome, seed, spawnPoints, encounter = null }) {
-    const waves = encounter?.squad?.roles?.length
-        ? [encounter.squad.roles.length, Math.min(MAX_ALIVE, encounter.squad.roles.length + 1)]
-        : waveCountsFor(biome);
+    const waves = waveCountsFor(biome);
     return {
         kind: 'waves',
         encounter,
         waves, waveIndex: 0, queued: waves[0],
+        roleCursor: 0,
         telegraphs: [], breather: 0, cursor: 0,
         spawnPoints: seededSpawnOrder(seed, spawnPoints), done: false
     };
@@ -66,7 +65,7 @@ export function tickEncounterDirector(director, alive, avoid = null) {
     for (const mark of director.telegraphs) {
         mark.ticks--;
         if (mark.ticks <= 0) {
-            if (pointFarEnough(mark.point, avoid, 200)) spawned.push(mark.point);
+            if (pointFarEnough(mark.point, avoid, 200)) spawned.push({ ...mark.point, role: mark.role });
             else {
                 const safe = takeSafePoint(director, avoid);
                 if (safe) { mark.point = safe; mark.ticks = SPAWN_TELEGRAPH_TICKS; }
@@ -80,7 +79,8 @@ export function tickEncounterDirector(director, alive, avoid = null) {
     while (director.queued > 0 && occupied + director.telegraphs.length < MAX_ALIVE && director.spawnPoints.length) {
         const point = takeSafePoint(director, avoid);
         if (!point) break;
-        director.telegraphs.push({ point, ticks: SPAWN_TELEGRAPH_TICKS });
+        const roles = director.encounter?.squad?.roles || ['chaser'];
+        director.telegraphs.push({ point, role: roles[director.roleCursor++ % roles.length], ticks: SPAWN_TELEGRAPH_TICKS });
         director.queued--;
     }
 

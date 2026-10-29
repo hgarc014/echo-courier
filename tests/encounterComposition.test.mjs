@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { composeEncounter, sweepEncounterSeeds, threatBudgetFor } from '../src/rogue/encounterComposition.js';
+import { authoredShellWalls, composeEncounter, ROOM_SHELLS, sweepEncounterSeeds, threatBudgetFor } from '../src/rogue/encounterComposition.js';
 
 assert.equal(threatBudgetFor('second-hand-halls'), 4);
 assert.equal(threatBudgetFor('hourglass-warrens'), 5);
@@ -16,5 +16,10 @@ assert.equal(sweep.encounters.length, 20);
 assert.equal(sweep.invalidCount, 0, '20-seed sweep contains no invalid encounter');
 assert.equal(sweep.adjacentRepeatCount, 0, 'room and squad families do not repeat back-to-back');
 assert.ok(sweep.uniqueSignatures >= 12, `expected varied encounters, got ${sweep.uniqueSignatures}`);
+for (const shell of ROOM_SHELLS) {
+    const walls = authoredShellWalls(shell.id);
+    assert.ok(walls.length >= 2, `${shell.id} has authored cover`);
+    assert.ok(walls.every(wall => wall.x >= 0 && wall.y >= 0 && wall.x + wall.w <= 800 && wall.y + wall.h <= 600));
+}
 
 console.log('encounter composition ok');

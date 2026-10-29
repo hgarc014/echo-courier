@@ -22,6 +22,7 @@ assert.equal(a.telegraphs.length, 4);
 for (let i = 1; i < SPAWN_TELEGRAPH_TICKS; i++) assert.equal(tickEncounterDirector(a, 0).length, 0);
 const spawned = tickEncounterDirector(a, 0);
 assert.equal(spawned.length, 4);
+assert.deepEqual(spawned.slice(0, 3).map(point => point.role), ['chaser', 'chaser', 'chaser']);
 assert.ok(spawned.length <= MAX_ALIVE);
 assert.equal(encounterRemaining(a, 4), 15, 'remaining includes current and future waves');
 

@@ -30,7 +30,7 @@ import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, PLAYER_MAX_HP } from './rogue/combat.js';
 import { createEncounterDirector, createPressureDirector, encounterRemaining, tickEncounterDirector, tickPressureDirector } from './rogue/encounterDirector.js';
-import { composeEncounter } from './rogue/encounterComposition.js';
+import { authoredShellWalls, composeEncounter } from './rogue/encounterComposition.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1402,6 +1402,12 @@ function enterRogueChamber(biomeIndex, fresh) {
             objectiveFamily: encounter.objective.family,
             rewardFamily: encounter.reward.family
         };
+        const cover = (opening ? [] : authoredShellWalls(encounter.shell.id, mapWidth, mapHeight)).filter(wall =>
+            !AABB(wall.x, wall.y, wall.w, wall.h, layout.player.x - 40, layout.player.y - 40, 110, 110) &&
+            !AABB(wall.x, wall.y, wall.w, wall.h, runtimeRift.x - 25, runtimeRift.y - 25, runtimeRift.w + 50, runtimeRift.h + 50) &&
+            !spawnPoints.some(point => AABB(wall.x, wall.y, wall.w, wall.h, point.x - 35, point.y - 35, 100, 100))
+        );
+        layout.walls = [...(layout.walls || []), ...cover];
     }
     const director = clear === 'kill'
         ? createEncounterDirector({ biome: biome.id, seed: directorSeed, spawnPoints, encounter })
@@ -1522,7 +1528,7 @@ function tickRogueChamber() {
     const alive = (state.guards || []).filter(g => g && !g.dead).length;
     const playerCenter = state.player ? { x: state.player.x + state.player.w / 2, y: state.player.y + state.player.h / 2 } : null;
     const spawnHounds = points => {
-        for (const point of points) state.guards.push(new TickHound([{ ...point }, { x: point.x + 1, y: point.y }]));
+        for (const point of points) state.guards.push(new TickHound([{ ...point }, { x: point.x + 1, y: point.y }], point.role));
     };
     if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') {
         chamber.ticksLeft -= 1;
