@@ -282,7 +282,28 @@ kbd {
         0 0 24px rgba(0, 243, 255, 0.12);
     text-align: left;
     pointer-events: auto;
+    display: grid;
+    grid-template-columns: 170px minmax(0, 1fr);
+    gap: 22px;
+    align-items: stretch;
 }
+.dialog-portrait {
+    min-height: 190px;
+    border-radius: 10px;
+    border: 1px solid rgba(48, 231, 255, .38);
+    background-image: url('assets/ui/dialogue-portraits-v2.png');
+    background-size: 300% 200%;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    box-shadow: inset 0 0 24px rgba(0,0,0,.28), 0 12px 28px rgba(0,0,0,.38);
+}
+.dialog-portrait[data-portrait="dispatch"] { background-position: 0 0; }
+.dialog-portrait[data-portrait="courier"] { background-position: 50% 0; }
+.dialog-portrait[data-portrait="gatekeeper"] { background-position: 100% 0; }
+.dialog-portrait[data-portrait="burrower"] { background-position: 0 100%; }
+.dialog-portrait[data-portrait="prism"] { background-position: 50% 100%; }
+.dialog-portrait[data-portrait="xr9"] { background-position: 100% 100%; }
+.dialog-copy { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .dialog-chip {
     display: inline-block;
     margin-bottom: 10px;
@@ -311,6 +332,13 @@ kbd {
     color: var(--text-dim);
     font-size: 0.9rem;
     text-align: right;
+}
+@media (max-width: 620px) {
+    .dialog-panel { grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 14px; }
+    .dialog-portrait { min-height: 112px; align-self: start; }
+    .dialog-chip { margin-bottom: 5px; }
+    .dialog-speaker { margin-bottom: 5px; font-size: .92rem; }
+    .dialog-text { font-size: .92rem; line-height: 1.4; }
 }
 .panel {
     background: var(--panel-bg); border: 1px solid var(--border-color);

@@ -441,6 +441,17 @@ function localizeControlHints(text) {
 function showLevelDialog(speaker, text, accentColor = '#39ff14', clipKey = null) {
     let speakerUI = document.getElementById('dialog-speaker'); if (speakerUI) { speakerUI.innerText = speaker; speakerUI.style.color = accentColor; }
     let textUI = document.getElementById('dialog-text'); if (textUI) textUI.innerText = `"${text}"`;
+    const portrait = document.getElementById('dialog-portrait');
+    if (portrait) {
+        const name = String(speaker || '').toLowerCase();
+        const portraitKey = name.includes('gatekeeper') ? 'gatekeeper'
+            : name.includes('burrow') || name.includes('sinkhole') ? 'burrower'
+                : name.includes('prism') ? 'prism'
+                    : name.includes('xr-9') || name.includes('overclock') ? 'xr9'
+                        : name.includes('courier') ? 'courier' : 'dispatch';
+        if (portrait.dataset) portrait.dataset.portrait = portraitKey;
+        else portrait.setAttribute?.('data-portrait', portraitKey);
+    }
     let ov = document.getElementById('dialog-overlay'); if (ov) ov.classList.remove('hidden');
     preloadDialogVoice().catch(() => {});
     speakDialog(speaker, text, clipKey);
