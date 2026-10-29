@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -52,6 +52,7 @@ export const state = {
     playerAtlas: null,
     tickHoundAtlas: null,
     vfxAtlas: null,
+    modernPropsAtlas: null,
     worldAtlas: null,
     
     pastRuns: [],
@@ -135,6 +136,14 @@ vfxSheet.onload = () => {
     catch { state.vfxAtlas = null; }
 };
 vfxSheet.onerror = () => { state.vfxAtlas = null; };
+
+const modernPropsSheet = new Image();
+modernPropsSheet.src = MODERN_PROPS_SHEET_PATH;
+modernPropsSheet.onload = () => {
+    try { state.modernPropsAtlas = buildModernPropsAtlas(modernPropsSheet); }
+    catch { state.modernPropsAtlas = null; }
+};
+modernPropsSheet.onerror = () => { state.modernPropsAtlas = null; };
 
 const propsSheet = new Image();
 const envSheet = new Image();

@@ -3126,9 +3126,19 @@ function draw() {
     }
     for (const pk of (state.roguePickups || [])) {
         if (pk.collected) continue;
-        ctx.save(); ctx.fillStyle = pk.type === 'sand_max' ? '#ffb347' : '#f4d35e'; ctx.globalAlpha = 0.85;
-        ctx.fillRect(pk.x, pk.y, pk.w, pk.h); ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(pk.type === 'sand_max' ? '+MAX' : 'SAND', pk.x + pk.w / 2, pk.y + pk.h / 2 + 3); ctx.restore();
+        const img = pk.type === 'sand_max' ? state.modernPropsAtlas?.sandMax : state.modernPropsAtlas?.sandRefill;
+        const bob = Math.sin(state.currentTick * .08 + pk.x * .02) * 3;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const glow = ctx.createRadialGradient(pk.x + pk.w / 2, pk.y + pk.h / 2, 2, pk.x + pk.w / 2, pk.y + pk.h / 2, 36);
+        glow.addColorStop(0, pk.type === 'sand_max' ? 'rgba(255,190,65,.38)' : 'rgba(48,231,255,.34)');
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow; ctx.fillRect(pk.x - 20, pk.y - 20, pk.w + 40, pk.h + 40);
+        ctx.restore();
+        if (!drawSprite(ctx, img, pk.x - 10, pk.y - 18, pk.w + 20, pk.h + 34, { valign: 'bottom', bob })) {
+            ctx.save(); ctx.fillStyle = pk.type === 'sand_max' ? '#ffb347' : '#30e7ff'; ctx.globalAlpha = .9;
+            ctx.beginPath(); ctx.arc(pk.x + pk.w / 2, pk.y + pk.h / 2, pk.w * .42, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        }
     }
     drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx));
     if (state.currentLevelMeta?.isRogue) drawRogueWallDepth(ctx);

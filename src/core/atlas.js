@@ -5,11 +5,18 @@ export const PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-hazards
 export const ENV_SHEET_PATH = 'assets/sprite-sheets/echo-courier-environment-effects.png';
 export const TICK_HOUND_SHEET_PATH = 'assets/sprite-sheets/tick-hound-v2.png';
 export const VFX_SHEET_PATH = 'assets/sprite-sheets/echo-courier-vfx-v2.png';
+export const MODERN_PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-v2.png';
 
 export const VFX_FRAME_GRID = Object.freeze({
     playerSwing: [0, 0], echoSwing: [1, 0], playerImpact: [2, 0], enemyImpact: [3, 0],
     blinkDeparture: [0, 1], blinkArrival: [1, 1], rupture: [2, 1], echoSpawn: [3, 1],
     rewind: [0, 2], rift: [1, 2], enemyWarning: [2, 2], enemyDissolve: [3, 2]
+});
+
+export const MODERN_PROPS_FRAME_GRID = Object.freeze({
+    package: [0, 0], heavy: [1, 0], fragile: [2, 0], sandRefill: [3, 0],
+    sandMax: [0, 1], plate: [1, 1], platePressed: [2, 1], platePresent: [3, 1],
+    plateFirst: [0, 2], plateLast: [1, 2], camera: [2, 2], timeShard: [3, 2]
 });
 
 // Occupancy-measured rects on echo-courier-characters.png (1536x1024).
@@ -136,6 +143,19 @@ export function buildVfxAtlas(sheet) {
     return atlas;
 }
 
+export function buildModernPropsAtlas(sheet) {
+    const iw = sheet?.naturalWidth || sheet?.width || 0;
+    const ih = sheet?.naturalHeight || sheet?.height || 0;
+    if (!iw || !ih) return null;
+    const cellW = Math.floor(iw / 4);
+    const cellH = Math.floor(ih / 3);
+    const atlas = { ready: true, cellW, cellH };
+    for (const [name, [column, row]] of Object.entries(MODERN_PROPS_FRAME_GRID)) {
+        atlas[name] = sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
+    }
+    return atlas;
+}
+
 export function pickTickHoundFrame(atlas, hound, tick = 0) {
     if (!atlas?.ready) return null;
     if (hound?.dead) return { img: atlas.dead, flipX: false };
@@ -195,6 +215,8 @@ export function buildWorldAtlas(propsSheet, envSheet) {
 
 export function resolveSprite(gameState, name) {
     if (!gameState || !name) return null;
+    const modern = gameState.modernPropsAtlas;
+    if (modern && modern.ready && modern[name]) return modern[name];
     const world = gameState.worldAtlas;
     if (world && world.ready && world[name]) return world[name];
     const player = gameState.playerAtlas;
