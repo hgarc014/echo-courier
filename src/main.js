@@ -31,6 +31,7 @@ import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, PLAYER_MAX_HP } from './rogue/combat.js';
 import { createEncounterDirector, createPressureDirector, encounterRemaining, tickEncounterDirector, tickPressureDirector } from './rogue/encounterDirector.js';
 import { authoredShellWalls, composeEncounter } from './rogue/encounterComposition.js';
+import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/encounterTelemetry.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1420,6 +1421,8 @@ function enterRogueChamber(biomeIndex, fresh) {
         aspectPending: false,
         riftOpen: clear === 'rift',
         encounter,
+        // Chamber setup resets currentTick below, so every room telemetry clock starts at zero.
+        telemetry: beginEncounterTelemetry(encounter, 0),
         director: spawnPoints.length ? director : null
     };
     if (fresh || !state.sand) {
@@ -1546,6 +1549,11 @@ function tickRogueChamber() {
             chamber.enemiesLeft = encounterRemaining(chamber.director, (state.guards || []).filter(g => g && !g.dead).length);
         } else chamber.enemiesLeft = alive;
         if (chamber.enemiesLeft <= 0 && (!chamber.director || chamber.director.done)) {
+            if (chamber.telemetry && chamber.telemetry.clearedAtTick == null) {
+                completeEncounterTelemetry(chamber.telemetry, state.currentTick);
+                state.rogueRun.encounterTelemetry = state.rogueRun.encounterTelemetry || [];
+                state.rogueRun.encounterTelemetry.push({ ...chamber.telemetry });
+            }
             chamber.type = 'rift';
             chamber.riftOpen = true;
             const objective = document.getElementById('objective-text');
