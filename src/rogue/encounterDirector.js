@@ -27,10 +27,14 @@ export function seededSpawnOrder(seed, points) {
     return out;
 }
 
-export function createEncounterDirector({ biome, seed, spawnPoints }) {
+export function createEncounterDirector({ biome, seed, spawnPoints, encounter = null }) {
+    const waves = encounter?.squad?.roles?.length
+        ? [encounter.squad.roles.length, Math.min(MAX_ALIVE, encounter.squad.roles.length + 1)]
+        : waveCountsFor(biome);
     return {
         kind: 'waves',
-        waves: waveCountsFor(biome), waveIndex: 0, queued: waveCountsFor(biome)[0],
+        encounter,
+        waves, waveIndex: 0, queued: waves[0],
         telegraphs: [], breather: 0, cursor: 0,
         spawnPoints: seededSpawnOrder(seed, spawnPoints), done: false
     };
