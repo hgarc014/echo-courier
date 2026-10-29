@@ -28,6 +28,7 @@ import { sampleRun, predictEchoHazards } from './systems/preview.js';
 import { collectShieldSlabs, laserThreatens, shieldSlab, shieldShadowRects, laserEmitterRect, plateBeamEdges } from './systems/laserShield.js';
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
+import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, PLAYER_MAX_HP } from './rogue/combat.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1105,6 +1106,7 @@ function warnEchoesEndingOnCracks() {
 }
 
 export function resetRun() {
+    const rogueHp = state.currentLevelMeta?.isRogue ? state.player?.hp : null;
     markLoopBoundary();
     // A run that ended in a death is not kept as an echo: it would replay the
     // fall and could push a good echo out of the maxGhosts buffer.
@@ -1125,6 +1127,11 @@ export function resetRun() {
 
     state.bossCheckpointLive = true;
     applyLoadedLevel(loadCurrentEntities());
+    if (rogueHp != null) {
+        state.player.hp = Math.max(1, rogueHp);
+        state.player.maxHp = PLAYER_MAX_HP;
+        updateRogueHealthHud();
+    }
     state.bossCheckpointLive = false;
     // gatekeeperCheckpoint intentionally kept so broken shields survive this loop reset.
     if (state.currentLevelMeta?.isBoss) engageBossEncounter(state.currentLevelMeta);
@@ -1184,6 +1191,16 @@ function failUnlessInvuln(reason) {
     return true;
 }
 
+function applyRogueContact(hit) {
+    if (!hit?.combatDamage || !state.rogueRun?.active) return false;
+    if (!applyCombatDamage(state.player, hit.combatDamage)) return false;
+    startShake(10, 5);
+    updateRogueHealthHud();
+    if (state.player.hp > 0) return false;
+    levelFailed(hit.reason || 'Courier integrity lost!');
+    return true;
+}
+
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
     // Aspect picker is modal: a clear already happened, so a late hit must not fail the run.
@@ -1195,11 +1212,13 @@ export function levelFailed(reason) {
     if (state.rogueRun?.active && state.sand && !/destroyed/i.test(reason || '') && canDeathUndo(state.sand)) {
         const r = applyDeathUndo(state.sand, state.player, state.packages);
         if (r.ok) {
+            state.player.hp = 1;
             state.sandRewinding = false;
             state.failTimer = 0; state.failMessage = "";
             SFX.rewind();
             startShake(10, 4);
             state.deathUndoFlash = 45; // HUD pulse + 'SAND SAVE' caption
+            updateRogueHealthHud();
             return;
         }
     }
@@ -1318,6 +1337,7 @@ export function startPlaytestFromEditor() {
 // Clear opens the aspect picker, then the next biome. The last biome ends at Run Over.
 // Any death / ESC ends the run. Aspect bonuses are run-only and carry across biomes.
 function enterRogueChamber(biomeIndex, fresh) {
+    const carriedHp = fresh ? PLAYER_MAX_HP : Math.max(1, state.player?.hp ?? PLAYER_MAX_HP);
     const meta = loadRogueMeta();
     const biome = BIOME_ORDER[biomeIndex] || BIOME_ORDER[0];
     // Opening room is the Halls kill wave so the run starts under guard pressure.
@@ -1375,6 +1395,8 @@ function enterRogueChamber(biomeIndex, fresh) {
     applyLevelHint(state.currentLevelMeta);
     clearGatekeeperCheckpoint();
     applyLoadedLevel(deserializeLevel({ ...layout }));
+    state.player.hp = carriedHp;
+    state.player.maxHp = PLAYER_MAX_HP;
     beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
     updateHUD();
     state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
@@ -1391,6 +1413,7 @@ function enterRogueChamber(biomeIndex, fresh) {
     state.gameState = 'PLAYING';
     Object.assign(prevKeys, keys);
     syncTouchUi();
+    updateRogueHealthHud();
 }
 
 export function startRogueRun(seed) {
@@ -1541,6 +1564,19 @@ function updateSandHud() {
     if (flash) state.deathUndoFlash--;
     box.classList.toggle('sand-save-flash', flash);
     if (label) label.textContent = flash ? 'SAND SAVE' : state.sand.sand.toFixed(1) + 's';
+}
+
+function updateRogueHealthHud() {
+    const box = document.getElementById('rogue-health');
+    const pips = document.getElementById('rogue-health-pips');
+    const on = !!(state.rogueRun?.active && state.player);
+    box?.classList.toggle('hidden', !on);
+    if (!on || !pips) return;
+    pips.replaceChildren(...Array.from({ length: state.player.maxHp || PLAYER_MAX_HP }, (_, i) => {
+        const pip = document.createElement('span');
+        pip.className = 'health-pip' + (i < state.player.hp ? ' is-full' : '');
+        return pip;
+    }));
 }
 
 function update() {
@@ -1726,6 +1762,11 @@ function update() {
     const demoWasActive = isDemoActive();
     const popupWasActive = isPopupDemo();
     let interactJustPressed = isKeyJustPressed('space');
+    const attackJustPressed = rogueCombatActive() && (interactJustPressed || isKeyJustPressed('j'));
+    if (attackJustPressed) {
+        beginAttack(state.player);
+        interactJustPressed = false;
+    }
     updateHintPlates(interactJustPressed);
     // Opening a popup must not steal the frame's live movement — only suppress
     // treating the same Space as package pickup. Overlay demos still abort.
@@ -1804,7 +1845,18 @@ function update() {
     }
 
     if (rogueCombatActive()) applyEchoGuardTouches(state.guards, state.activeGhosts);
-    for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (failUnlessInvuln(fail)) return; }
+    tickAttack(state.player);
+    if (rogueCombatActive() && attackIsActive(state.player)) {
+        const box = attackBox(state.player);
+        for (const enemy of state.guards) {
+            if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) enemy.hitByAttack?.(state.player.attackId);
+        }
+    }
+    for(let g of state.guards) {
+        const fail = g.update(state.player, state.activeGhosts);
+        if (applyRogueContact(fail)) return;
+        if (typeof fail === 'string' && failUnlessInvuln(fail)) return;
+    }
     for (const burrower of state.burrowers || []) burrower.update(allActors);
     syncBossHud();
     for(let c of state.cracks) { let fail = c.update(allActors); if (failUnlessInvuln(fail)) return; }
@@ -2049,6 +2101,7 @@ function update() {
             facingY: state.player.facingY,
             cloakTimer: state.player.cloakTimer,
             interact: interactJustPressed,
+            attack: attackJustPressed,
             toss: tossFired,
             dash: dashFired,
             heavy: !!(carried && carried.type === 'heavy')
@@ -2520,6 +2573,16 @@ function draw() {
     }
     
     state.player.render(ctx);
+    if (rogueCombatActive() && state.player.attackTicks > 0) {
+        const box = attackBox(state.player);
+        ctx.save();
+        ctx.fillStyle = attackIsActive(state.player) ? 'rgba(255,214,90,.34)' : 'rgba(0,243,255,.13)';
+        ctx.strokeStyle = attackIsActive(state.player) ? '#ffd65a' : '#00f3ff';
+        ctx.lineWidth = 2;
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+        ctx.strokeRect(box.x, box.y, box.w, box.h);
+        ctx.restore();
+    }
     
     state.dashTrails.forEach(t => {
         ctx.save(); ctx.globalAlpha = t.life; ctx.strokeStyle = state.playerColor; ctx.lineWidth = state.player.w * 0.8;

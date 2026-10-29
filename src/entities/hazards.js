@@ -15,6 +15,7 @@ import {
     pointInRect
 } from '../core/hitZones.js';
 import { collectShieldSlabs, laserHotRects } from '../systems/laserShield.js';
+import { TICK_HOUND_HP } from '../rogue/combat.js';
 
 function isPresentPlayer(actor) {
     return actor && actor.id === undefined && actor.assetName === 'player';
@@ -882,6 +883,9 @@ export class Guard extends Entity {
         this.points=points; this.targetIndex=1; this.speed=1.5; this.state='patrol'; this.startX=this.x; this.startY=this.y;
         this.lostSightTimer=0; this.lastSeenX=this.x; this.lastSeenY=this.y; this.chaseSpeed=GUARD_CHASE_SPEED;
         this.stunTicks = 0; this.dead = false;
+        this.hp = TICK_HOUND_HP;
+        this.maxHp = TICK_HOUND_HP;
+        this.lastHitAttackId = -1;
         this._resetFacing();
     }
     _resetFacing() {
@@ -895,7 +899,16 @@ export class Guard extends Entity {
     reset() {
         this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.lostSightTimer=0;
         this.stunTicks = 0; this.dead = false;
+        this.hp = TICK_HOUND_HP; this.lastHitAttackId = -1;
         this._resetFacing();
+    }
+    hitByAttack(attackId, damage = 1) {
+        if (this.dead || this.lastHitAttackId === attackId) return false;
+        this.lastHitAttackId = attackId;
+        this.hp = Math.max(0, this.hp - damage);
+        this.stun(Math.max(this.stunTicks, 8));
+        if (this.hp <= 0) this.dead = true;
+        return true;
     }
     stun(ticks = GUARD_STUN_TICKS) {
         if (this.dead) return;
@@ -977,7 +990,7 @@ export class Guard extends Entity {
         if (this.state === 'chase') {
             const pad = GUARD_CATCH_PAD;
             if (AABB(this.x-pad, this.y-pad, this.w+pad*2, this.h+pad*2, player.x, player.y, player.w, player.h)) {
-                return "Caught by Guard!";
+                return hunting ? { combatDamage: 1, reason: 'Mauled by a Tick Hound!' } : "Caught by Guard!";
             }
             let dx=this.lastSeenX-this.x, dy=this.lastSeenY-this.y;
             let dist=Math.hypot(dx,dy);
@@ -1003,6 +1016,28 @@ export class Guard extends Entity {
     render(ctx) {
         const dead = !!this.dead;
         const stunned = !dead && this.stunTicks > 0;
+        if (rogueCombatActive()) {
+            const cx = this.x + this.w / 2;
+            const cy = this.y + this.h / 2;
+            ctx.save();
+            ctx.globalAlpha = dead ? 0.28 : 1;
+            ctx.translate(cx, cy);
+            ctx.rotate(this.facingAngle || 0);
+            ctx.fillStyle = stunned ? '#ffd65a' : '#191725';
+            ctx.strokeStyle = dead ? '#657080' : '#ff3f75';
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(6, -11); ctx.lineTo(-13, -8); ctx.lineTo(-17, 8); ctx.lineTo(7, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#00f3ff'; ctx.fillRect(5, -4, 8, 8);
+            ctx.strokeStyle = '#8c7dff'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-8, -9); ctx.lineTo(-15, -16); ctx.moveTo(-8, 9); ctx.lineTo(-15, 16); ctx.stroke();
+            ctx.restore();
+            if (!dead) {
+                const pct = Math.max(0, this.hp / this.maxHp);
+                ctx.fillStyle = '#20121c'; ctx.fillRect(this.x, this.y - 7, this.w, 4);
+                ctx.fillStyle = '#ff3f75'; ctx.fillRect(this.x, this.y - 7, this.w * pct, 4);
+            }
+            return;
+        }
         const moving = !dead && !stunned && (this.state === 'patrol' || this.state === 'chase');
         const t = state.currentTick;
         const walk = moving ? Math.sin(t * 0.4) : 0;

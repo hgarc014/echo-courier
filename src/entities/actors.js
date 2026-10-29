@@ -4,6 +4,7 @@ import { AABB, resolveDashFacing } from '../core/physics.js';
 import { drawSprite } from '../core/sprites.js';
 import { pickCourierFrame } from '../core/atlas.js';
 import { dominantFacing, shieldSlab } from '../systems/laserShield.js';
+import { PLAYER_MAX_HP } from '../rogue/combat.js';
 
 function drawGhostShield(ctx, actor) {
     if (!getUnlockedAbilities().includes('ghostShield')) return;
@@ -109,6 +110,10 @@ export class PlayerEntity extends Entity {
         this.dashCooldown = 0;
         this.tossCooldown = 0;
         this.invulnTicks = 0;
+        this.maxHp = PLAYER_MAX_HP;
+        this.hp = PLAYER_MAX_HP;
+        this.attackTicks = 0;
+        this.attackId = 0;
     }
     render(ctx) {
         const t = state.currentTick;
