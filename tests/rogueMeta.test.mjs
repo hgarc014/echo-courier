@@ -44,6 +44,10 @@ assert.equal(M.selectRogueWeapon('route-cutter').selectedWeapon, 'route-cutter')
 assert.equal(M.loadRogueMeta().selectedWeapon, 'route-cutter');
 assert.equal(M.selectRogueWeapon('unknown'), null);
 assert.equal(M.recordRunEnd(true).shopPoints, 3, 'clear grants 2 Chrono Dust');
+assert.equal(M.chronoDustReward({ bossDepth: 0 }), 1);
+assert.equal(M.chronoDustReward({ bossDepth: 2 }), 2);
+assert.equal(M.chronoDustReward({ bossDepth: 4 }), 3);
+assert.equal(M.chronoDustReward({ cleared: true, bossDepth: 4 }), 4);
 store.clear();
 assert.equal(M.recordRunEnd(false).shopPoints, 1);
 for (let i = 0; i < 20; i++) M.recordRunEnd(true);

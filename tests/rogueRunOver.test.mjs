@@ -146,15 +146,15 @@ assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('wide-rupture');
 assert.equal(state.gameState, 'RUN_OVER');
 assert.equal(state.rogueRun.outcome, 'cleared');
-assert.equal(loadRogueMeta().shopPoints, 3, 'clear grants +2 Chrono Dust');
-assert.deepEqual(dustLabels.map(el => el.innerText), ['CHRONO DUST: 3', 'CHRONO DUST: 3']);
+assert.equal(loadRogueMeta().shopPoints, 5, 'a full four-biome clear grants +4 Chrono Dust');
+assert.deepEqual(dustLabels.map(el => el.innerText), ['CHRONO DUST: 5', 'CHRONO DUST: 5']);
 
 main.returnToMenu();
 assert.equal(state.gameState, 'MENU');
 assert.equal(state.rogueRun, null);
 window.openRogueHub();
 assert.equal(state.gameState, 'MENU');
-assert.deepEqual(dustLabels.map(el => el.innerText), ['CHRONO DUST: 3', 'CHRONO DUST: 3']);
+assert.deepEqual(dustLabels.map(el => el.innerText), ['CHRONO DUST: 5', 'CHRONO DUST: 5']);
 
 window.startRogueRun();
 assert.equal(state.gameState, 'PLAYING');

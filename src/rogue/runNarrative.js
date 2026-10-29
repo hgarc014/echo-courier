@@ -22,7 +22,7 @@ const REACTIONS = {
     ]
 };
 
-const BOSS_DEPTH = ['gatekeeper', 'burrower', 'prism'];
+const BOSS_DEPTH = ['gatekeeper', 'burrower', 'prism', 'stillkeeper'];
 
 export function buildRunSummary({ cleared = false, deathCause = '', rogueRun = {}, runStats = {} } = {}) {
     const bossId = rogueRun.lastBossReached || rogueRun.currentBossId || null;

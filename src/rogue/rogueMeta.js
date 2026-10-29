@@ -89,10 +89,14 @@ export function grantUnlock(meta = loadRogueMeta()) {
     return next;
 }
 
+export function chronoDustReward({ cleared = false, bossDepth = 0 } = {}) {
+    const depth = Math.max(0, Math.min(4, Number(bossDepth) | 0));
+    return 1 + Math.floor(depth / 2) + (cleared ? 1 : 0);
+}
+
 /** Record a finished run (called at Run Over). shopPoints == Chrono Dust. */
 export function recordRunEnd(cleared, meta = loadRogueMeta(), narrative = null) {
-    // shopPoints == Chrono Dust. A failed run grants 1; a clear grants 2.
-    const dust = cleared ? 2 : 1;
+    const dust = chronoDustReward({ cleared, bossDepth: narrative?.lastRunSummary?.bossDepth });
     const next = { ...meta, runs: meta.runs + 1, clears: meta.clears + (cleared ? 1 : 0), shopPoints: (meta.shopPoints | 0) + dust };
     if (narrative) Object.assign(next, narrative);
     saveRogueMeta(next);
