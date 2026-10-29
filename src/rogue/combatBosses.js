@@ -1,5 +1,6 @@
 import { Gatekeeper, wallRayDistance } from '../entities/bosses/gatekeeper.js';
 import { Burrower } from '../entities/bosses/Burrower.js';
+import { Prism } from '../entities/bosses/Prism.js';
 import { state } from '../core/state.js';
 
 export const GATEKEEPER_COMBAT_HP = 12;
@@ -7,6 +8,8 @@ export const GATEKEEPER_BEAM_WINDUP = 60;
 export const GATEKEEPER_BEAM_DAMAGE = 2;
 export const BURROWER_COMBAT_HP = 14;
 export const BURROWER_EMERGE_WINDUP = 45;
+export const PRISM_COMBAT_HP = 16;
+export const PRISM_BEAM_WINDUP = 45;
 
 function distanceToSegment(px, py, ax, ay, bx, by) {
     const dx = bx - ax;
@@ -214,15 +217,118 @@ export class CombatBurrower extends Burrower {
     }
 }
 
+export class CombatPrism extends Prism {
+    constructor(x, y) {
+        super(x, y, { id: 'rogue-prism', hp: PRISM_COMBAT_HP, w: 58, h: 58 });
+        this.hp = PRISM_COMBAT_HP;
+        this.maxHp = PRISM_COMBAT_HP;
+        this.dead = false;
+        this.defeated = false;
+        this.lastHitAttackId = null;
+        this.hurtTicks = 0;
+        this.stunTicks = 0;
+        this.beamCooldownTicks = 45;
+        this.beamWindupTicks = 0;
+        this.beamTarget = null;
+    }
+
+    hitByAttack(attackId, damage = 1) {
+        if (this.dead || this.lastHitAttackId === attackId) return false;
+        this.lastHitAttackId = attackId;
+        this.hp = Math.max(0, this.hp - Math.max(0, Number(damage) || 0));
+        this.hurtTicks = 8;
+        if (this.hp <= 0) {
+            this.dead = true;
+            this.defeated = true;
+        }
+        return true;
+    }
+
+    stun(ticks = 8) {
+        if (!this.dead) this.stunTicks = Math.max(this.stunTicks, Math.min(12, ticks | 0));
+    }
+
+    touchByEcho() {
+        this.stun(6);
+    }
+
+    update(player, ghosts = []) {
+        if (this.dead) return null;
+        if (this.hurtTicks > 0) this.hurtTicks--;
+        if (this.stunTicks > 0) {
+            this.stunTicks--;
+            return null;
+        }
+        const cx = this.x + this.w / 2;
+        const cy = this.y + this.h / 2;
+        if (this.beamWindupTicks > 0) {
+            this.beamWindupTicks--;
+            if (this.beamWindupTicks > 0 || !this.beamTarget) return null;
+            const angle = Math.atan2(this.beamTarget.y - cy, this.beamTarget.x - cx);
+            const intended = Math.max(520, Math.hypot(this.beamTarget.x - cx, this.beamTarget.y - cy));
+            const reach = wallRayDistance(cx, cy, angle, intended, state.walls || []);
+            const bx = cx + Math.cos(angle) * reach;
+            const by = cy + Math.sin(angle) * reach;
+            const pcx = player.x + player.w / 2;
+            const pcy = player.y + player.h / 2;
+            this.beamCooldownTicks = this.hp <= this.maxHp / 2 ? 65 : 90;
+            if (distanceToSegment(pcx, pcy, cx, cy, bx, by) <= Math.max(player.w, player.h) / 2 + 10) {
+                return { combatDamage: 2, reason: 'Caught in the Prism refraction beam!' };
+            }
+            return null;
+        }
+        if (this.beamCooldownTicks > 0) this.beamCooldownTicks--;
+        if (this.beamCooldownTicks <= 0) {
+            const actors = [player, ...ghosts.filter(ghost => ghost?.isActive)];
+            let target = actors[0];
+            let best = Infinity;
+            for (const actor of actors) {
+                const d = Math.hypot(actor.x + actor.w / 2 - cx, actor.y + actor.h / 2 - cy);
+                if (d < best) { best = d; target = actor; }
+            }
+            this.beamTarget = { x: target.x + target.w / 2, y: target.y + target.h / 2 };
+            this.beamWindupTicks = PRISM_BEAM_WINDUP;
+        }
+        return null;
+    }
+
+    render(ctx) {
+        if (this.dead) return;
+        const cx = this.x + this.w / 2;
+        const cy = this.y + this.h / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate((state.currentTick || 0) * 0.012);
+        ctx.fillStyle = this.hurtTicks > 0 ? '#ffffff' : '#201a38';
+        ctx.strokeStyle = '#c86cff';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, -30); ctx.lineTo(25, 0); ctx.lineTo(0, 30); ctx.lineTo(-25, 0); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#00f3ff';
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        if (this.beamWindupTicks > 0 && this.beamTarget) {
+            const pulse = 1 - this.beamWindupTicks / PRISM_BEAM_WINDUP;
+            ctx.save();
+            ctx.strokeStyle = `rgba(255, 190, 70, ${0.45 + pulse * 0.5})`;
+            ctx.lineWidth = 4 + pulse * 5;
+            ctx.setLineDash([7, 6]);
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(this.beamTarget.x, this.beamTarget.y); ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
 export function combatBossHud(boss) {
     if (!boss || boss.dead) return null;
     const max = Math.max(1, Number(boss.maxHp) || 1);
     const hp = Math.max(0, Math.min(max, Number(boss.hp) || 0));
     return {
-        name: boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER',
+        name: boss instanceof CombatPrism ? 'PRISM' : (boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER'),
         hp,
         max,
-        progress: `${boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER'} · ${hp}/${max}`,
+        progress: `${boss instanceof CombatPrism ? 'PRISM' : (boss instanceof CombatBurrower ? 'BURROWER' : 'GATEKEEPER')} · ${hp}/${max}`,
         phase: hp <= max / 2 ? 2 : 1
     };
 }
