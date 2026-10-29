@@ -36,7 +36,7 @@ import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/enc
 import { CombatBurrower, CombatGatekeeper, CombatPrism, CombatStillkeeper, combatBossHud } from './rogue/combatBosses.js';
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
-import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
+import { aspectModifiers, isRepeatableAspect, pickAspectChoices } from './rogue/aspects.js';
 import { WEAPON_FAMILIES, weaponMove, weaponComboLength, weaponHudState } from './rogue/weapons.js';
 import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
 import { commandEchoAssault, recallEchoes, ECHO_ASSAULT_COOLDOWN, ECHO_RECALL_COOLDOWN } from './rogue/echoCommands.js';
@@ -1736,6 +1736,23 @@ function tickRogueChamber() {
 export function applyAspect(id) {
     if (!state.rogueRun?.active) return;
     if (!state.rogueRun.aspects) state.rogueRun.aspects = [];
+    if (isRepeatableAspect(id)) {
+        state.rogueRun.repeatableRewards ??= {};
+        state.rogueRun.repeatableRewards[id] = (state.rogueRun.repeatableRewards[id] | 0) + 1;
+        if (id === 'repeat-integrity' && state.player) {
+            state.player.maxHp = (state.player.maxHp || PLAYER_MAX_HP) + 1;
+            state.player.hp = Math.min(state.player.maxHp, (state.player.hp || 0) + 2);
+            updateRogueHealthHud();
+        } else if (id === 'repeat-sand' && state.sand) {
+            bumpMaxSand(state.sand, 0.5);
+            refillSand(state.sand, 0.5);
+            updateSandHud();
+        } else if (id === 'repeat-echo') {
+            state.rogueRun.echoCharges = (state.rogueRun.echoCharges | 0) + 1;
+            if (state.currentLevelMeta) state.currentLevelMeta.maxGhosts = (Number(state.currentLevelMeta.maxGhosts) || 0) + 1;
+        }
+        return;
+    }
     if (state.rogueRun.aspects.includes(id)) return;
     state.rogueRun.aspects.push(id);
     if (id === 'sand-tank') {
