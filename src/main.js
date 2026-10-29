@@ -19,7 +19,7 @@ import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopBu
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
 import { isDemoActive, isPopupDemo, canSkipDemo, startDemo, stopDemo, tickDemo, skipDemo, hasSeenDemo, demoStorageKey, initDemoPlayback, getActiveDemoSteps, setPopupDemoWorld, clearPopupDemoWorld, getPopupDemoWorld } from './systems/demoPlayback.js';
 import { drawSprite } from './core/sprites.js';
-import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo, canBlinkRewind, applyBlinkRewind, BLINK_COST, BLINK_IFRAMES, bumpMaxSand, refillSand } from './systems/sandRewind.js';
+import { createSandState, tickSand, resetHistory, canRewind, applyPickup, canDeathUndo, applyDeathUndo, canBlinkRewind, applyBlinkRewind, BLINK_COST, BLINK_IFRAMES, bumpMaxSand, refillSand, canTimeRupture, timeRupture, TIME_RUPTURE_COOLDOWN, TIME_RUPTURE_FREEZE, TIME_RUPTURE_RADIUS } from './systems/sandRewind.js';
 import { beginRecording, recordFrame, markLoopBoundary, getRecording } from './systems/inputRecorder.js';
 import { pickCourierFrame } from './core/atlas.js';
 import { collectWires, drawWires } from './systems/wires.js';
@@ -1391,7 +1391,8 @@ function enterRogueChamber(biomeIndex, fresh) {
         crackSpeed: 'normal',
         grants: ['dash', 'toss', 'cloak', 'ghostShield'],
         isPlaytest: true,
-        isRogue: true
+        isRogue: true,
+        hintLine: opening ? 'SPACE strike · B blink · hold E echo · V rupture' : undefined
     };
     applyLevelAbilityOverrides(state.currentLevelMeta);
     state.worldUnlockedAbilities = null;
@@ -1426,7 +1427,7 @@ function enterRogueChamber(biomeIndex, fresh) {
 export function startRogueRun(seed) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
     hideAspectPick();
-    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0 };
+    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0, ruptureCooldown: 0, ruptureSeq: 0 };
     state.sandRewinding = false;
     enterRogueChamber(0, true);
 }
@@ -1700,6 +1701,22 @@ function update() {
         }
     }
 
+    if (state.rogueRun?.active && state.sand && state.player && state.failTimer === 0 && !state.sandRewinding) {
+        if (state.rogueRun.ruptureCooldown > 0) state.rogueRun.ruptureCooldown--;
+        if (isKeyJustPressed('v') && canTimeRupture(state.sand, state.rogueRun.ruptureCooldown)) {
+            state.rogueRun.ruptureSeq = (state.rogueRun.ruptureSeq | 0) + 1;
+            const cx = state.player.x + state.player.w / 2;
+            const cy = state.player.y + state.player.h / 2;
+            const result = timeRupture(state.sand, { x: cx, y: cy }, state.guards, state.rogueRun.ruptureCooldown, state.rogueRun.ruptureSeq);
+            if (result.ok) {
+                state.rogueRun.ruptureCooldown = TIME_RUPTURE_COOLDOWN;
+                state.ruptureFx = { x: cx, y: cy, ticks: TIME_RUPTURE_FREEZE, max: TIME_RUPTURE_FREEZE };
+                SFX.crack();
+                updateSandHud();
+            }
+        }
+    }
+
     // Run-only sand pickups: collect on touch (not while rewinding).
     if (state.rogueRun?.active && state.sand && !state.sandRewinding && state.failTimer === 0 && state.roguePickups?.length) {
         const pl = state.player;
@@ -1884,6 +1901,14 @@ function update() {
         }
     }
     for(let g of state.guards) {
+        if (g.ruptureTicks > 0) {
+            g.ruptureTicks--;
+            if (g.ruptureTicks <= 0 && g.rupturePendingId != null) {
+                g.hitByAttack?.(`rupture:${g.rupturePendingId}`);
+                g.rupturePendingId = null;
+            }
+            continue;
+        }
         const fail = g.update(state.player, state.activeGhosts);
         if (applyRogueContact(fail)) return;
         if (typeof fail === 'string' && failUnlessInvuln(fail)) return;
@@ -2170,6 +2195,9 @@ function drawAbilityCooldowns(target) {
     }
     if (unlocked.includes('cloak') && state.player.cloakTimer > 0) {
         parts.push(`CLOAK ${ticksToSeconds(state.player.cloakTimer)}s`);
+    }
+    if (state.rogueRun?.active && state.rogueRun.ruptureCooldown > 0) {
+        parts.push(`RUPTURE ${ticksToSeconds(state.rogueRun.ruptureCooldown)}s`);
     }
     if (!parts.length) return;
     const text = parts.join('  |  ');
@@ -2654,6 +2682,18 @@ function draw() {
     }
     
     state.player.render(ctx);
+    if (state.ruptureFx?.ticks > 0) {
+        const fx = state.ruptureFx;
+        const u = 1 - fx.ticks / fx.max;
+        ctx.save();
+        ctx.globalAlpha = 0.75 * (1 - u * .65);
+        ctx.strokeStyle = '#c8b7ff';
+        ctx.fillStyle = 'rgba(110,100,150,.12)';
+        ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, TIME_RUPTURE_RADIUS * (0.25 + u * .75), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.restore();
+        fx.ticks--;
+    }
     for (const image of state.blinkAfterimages || []) {
         const u = image.ticks / 20;
         ctx.save();

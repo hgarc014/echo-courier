@@ -1017,14 +1017,15 @@ export class Guard extends Entity {
         const dead = !!this.dead;
         const stunned = !dead && this.stunTicks > 0;
         if (rogueCombatActive()) {
+            const frozen = !dead && this.ruptureTicks > 0;
             const cx = this.x + this.w / 2;
             const cy = this.y + this.h / 2;
             ctx.save();
             ctx.globalAlpha = dead ? 0.28 : 1;
             ctx.translate(cx, cy);
             ctx.rotate(this.facingAngle || 0);
-            ctx.fillStyle = stunned ? '#ffd65a' : '#191725';
-            ctx.strokeStyle = dead ? '#657080' : '#ff3f75';
+            ctx.fillStyle = frozen ? '#6f7088' : (stunned ? '#ffd65a' : '#191725');
+            ctx.strokeStyle = dead ? '#657080' : (frozen ? '#c8b7ff' : '#ff3f75');
             ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(6, -11); ctx.lineTo(-13, -8); ctx.lineTo(-17, 8); ctx.lineTo(7, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
             ctx.fillStyle = '#00f3ff'; ctx.fillRect(5, -4, 8, 8);
