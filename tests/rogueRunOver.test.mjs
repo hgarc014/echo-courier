@@ -98,6 +98,7 @@ if (state.rogueChamber.type === 'rift' && !state.rogueChamber.aspectPending) {
     state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
     main.stepSimulation();
 }
+finishBossIfNeeded();
 assert.equal(state.rogueChamber.aspectPending, true);
 chooseAspect('sand-tank');
 assert.equal(state.gameState, 'PLAYING', 'Warrens clear advances into Echo Courts');
