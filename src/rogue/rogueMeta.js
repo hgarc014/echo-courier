@@ -2,6 +2,7 @@
 // so "Wipe progress" / Dev Mode / Unlock All leave it alone.
 // Unlock rule: first unlock = +1 echo slot. Every later unlock = "longer record" (+30s loopTime),
 // capped at MAX_RECORD_BONUS_S. Base echo slots (2) match floorGen floorMeta.maxGhosts.
+import { buyRelic, normalizeRelicState, toggleRelic } from './relics.js';
 export const ROGUE_META_KEY = 'echoCourier_rogueMeta';
 export const BASE_ECHO_SLOTS = 2;
 export const BASE_LOOP_TIME_S = 60;
@@ -15,7 +16,7 @@ const WEAPON_IDS = ['chrono-baton', 'parcel-driver', 'route-cutter'];
 
 export function defaultRogueMeta() {
     return { echoSlotBonus: 0, recordBonusS: 0, runs: 0, clears: 0, shopPoints: 0, sandTankLevel: 0, startSandLevel: 0,
-        selectedWeapon: 'chrono-baton', lastRunSummary: null, lastReaction: null, recentDialogueIds: [], auditorTrust: 0, relationshipUnlocked: false };
+        selectedWeapon: 'chrono-baton', relicsOwned: [], relicsEquipped: [], lastRunSummary: null, lastReaction: null, recentDialogueIds: [], auditorTrust: 0, relationshipUnlocked: false };
 }
 
 function storage() { return typeof localStorage === 'undefined' ? null : localStorage; }
@@ -26,6 +27,7 @@ export function loadRogueMeta() {
         const raw = storage()?.getItem(ROGUE_META_KEY);
         if (!raw) return d;
         const p = JSON.parse(raw) || {};
+        const relicState = normalizeRelicState(p);
         return {
             echoSlotBonus: Math.max(0, Math.min(1, p.echoSlotBonus | 0)),
             recordBonusS: Math.max(0, Math.min(MAX_RECORD_BONUS_S, p.recordBonusS | 0)),
@@ -35,6 +37,7 @@ export function loadRogueMeta() {
             sandTankLevel: Math.max(0, Math.min(SHOP_MAX_LEVEL, p.sandTankLevel | 0)),
             startSandLevel: Math.max(0, Math.min(SHOP_MAX_LEVEL, p.startSandLevel | 0)),
             selectedWeapon: WEAPON_IDS.includes(p.selectedWeapon) ? p.selectedWeapon : 'chrono-baton',
+            ...relicState,
             lastRunSummary: p.lastRunSummary && typeof p.lastRunSummary === 'object' ? p.lastRunSummary : null,
             lastReaction: p.lastReaction && typeof p.lastReaction === 'object' ? p.lastReaction : null,
             recentDialogueIds: Array.isArray(p.recentDialogueIds) ? p.recentDialogueIds.filter(id => typeof id === 'string').slice(-5) : [],
@@ -51,6 +54,20 @@ export function saveRogueMeta(meta) {
 export function selectRogueWeapon(id, meta = loadRogueMeta()) {
     if (!WEAPON_IDS.includes(id)) return null;
     const next = { ...meta, selectedWeapon: id };
+    saveRogueMeta(next);
+    return next;
+}
+
+export function buyRogueRelic(id, meta = loadRogueMeta()) {
+    const next = buyRelic(id, meta);
+    if (!next) return null;
+    saveRogueMeta(next);
+    return next;
+}
+
+export function equipRogueRelic(id, meta = loadRogueMeta()) {
+    const next = toggleRelic(id, meta);
+    if (!next) return null;
     saveRogueMeta(next);
     return next;
 }
