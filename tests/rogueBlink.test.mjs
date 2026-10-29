@@ -11,10 +11,21 @@ function release() {
     for (const k of Object.keys(keys)) keys[k] = false;
 }
 
+// The opening room is a kill wave. Dropping its guards would clear the chamber
+// and freeze the sim on the aspect picker. Hold a long timer instead.
+function disarmWave() {
+    state.guards = [];
+    if (state.rogueChamber?.type === 'wave') {
+        state.rogueChamber.type = 'timer';
+        state.rogueChamber.ticksLeft = 100000;
+        state.rogueChamber.aspectPending = false;
+    }
+}
+
 function warmup(steps = 40) {
     release();
     main.startRogueRun(1);
-    state.guards = [];
+    disarmWave();
     for (let i = 0; i < steps; i++) main.stepSimulation();
     assert.equal(state.gameState, 'PLAYING');
     assert.equal(state.failTimer, 0);
@@ -38,7 +49,7 @@ assert.match(mainSrc, /Math\.max\(rogueStartSand\(meta\),\s*BLINK_COST\s*\+\s*0\
 {
     release();
     main.startRogueRun(1);
-    state.guards = [];
+    disarmWave();
     const p = state.player;
     const y = p.y;
     state.sand.history.length = 0;
@@ -75,7 +86,7 @@ assert.match(mainSrc, /Math\.max\(rogueStartSand\(meta\),\s*BLINK_COST\s*\+\s*0\
 {
     release();
     main.startRogueRun(1);
-    state.guards = [];
+    disarmWave();
     state.sand.history.push({ x: 10, y: state.player.y, facingX: 1, facingY: 0, vx: 0, vy: 0, cloakTimer: 0, dashCooldown: 0, tossCooldown: 0, carriedPackageId: null, tick: 0 });
     state.player.x = 200;
     state.rogueRun.active = false;

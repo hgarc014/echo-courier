@@ -68,6 +68,7 @@ const GUARD_CATCH_PAD = 4;
 const GUARD_VISION_RANGE = 220;
 const GUARD_VISION_FOV = 90; // degrees, full wedge
 const GUARD_TURN_TICKS = 18; // ~0.3s at 60tps
+export const GUARD_STUN_TICKS = 45; // ~0.75s at 60tps
 
 function angleDiff(a, b) {
     let d = a - b;
@@ -880,6 +881,7 @@ export class Guard extends Entity {
         super(points[0].x, points[0].y, 30, 30, 'guard');
         this.points=points; this.targetIndex=1; this.speed=1.5; this.state='patrol'; this.startX=this.x; this.startY=this.y;
         this.lostSightTimer=0; this.lastSeenX=this.x; this.lastSeenY=this.y; this.chaseSpeed=GUARD_CHASE_SPEED;
+        this.stunTicks = 0; this.dead = false;
         this._resetFacing();
     }
     _resetFacing() {
@@ -892,7 +894,19 @@ export class Guard extends Entity {
     }
     reset() {
         this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.lostSightTimer=0;
+        this.stunTicks = 0; this.dead = false;
         this._resetFacing();
+    }
+    stun(ticks = GUARD_STUN_TICKS) {
+        if (this.dead) return;
+        const n = ticks | 0;
+        if (n > (this.stunTicks | 0)) this.stunTicks = n;
+    }
+    // First echo touch stuns. A touch while already stunned kills.
+    touchByEcho() {
+        if (this.dead) return;
+        if ((this.stunTicks | 0) > 0) this.dead = true;
+        else this.stunTicks = GUARD_STUN_TICKS;
     }
     _setFacing(fx, fy) {
         if (this.facingX === fx && this.facingY === fy) return;
@@ -917,32 +931,47 @@ export class Guard extends Entity {
         if (this.turnTicksLeft <= 0) this.facingAngle = this.targetAngle;
     }
     update(player, ghosts) {
+        if (this.dead) return null;
+        if (this.stunTicks > 0) {
+            this.stunTicks--;
+            return null;
+        }
         // Interpolate facing before vision so this frame's cone matches render().
         // _faceToward / _setFacing only queue the next turn.
         this._advanceTurn();
         const cone = getVisionCone(this);
+        const hunting = rogueCombatActive();
 
-        // Echoes still swing the guard's facing, which can pull vision off the player.
-        for (let g of ghosts) {
-            if (!g.isActive) continue;
-            if (pointInVisionCone(cone, g.x, g.y, g.w, g.h)) {
-                this.state='distracted';
-                this.lostSightTimer=0;
-                this._faceToward(g.x, g.y);
-                return null;
+        if (!hunting) {
+            // Echoes still swing the guard's facing, which can pull vision off the player.
+            for (let g of ghosts) {
+                if (!g.isActive) continue;
+                if (pointInVisionCone(cone, g.x, g.y, g.w, g.h)) {
+                    this.state='distracted';
+                    this.lostSightTimer=0;
+                    this._faceToward(g.x, g.y);
+                    return null;
+                }
             }
-        }
 
-        const playerInVision = player.cloakTimer <= 0 && pointInVisionCone(cone, player.x, player.y, player.w, player.h);
-        if (playerInVision) {
+            const playerInVision = player.cloakTimer <= 0 && pointInVisionCone(cone, player.x, player.y, player.w, player.h);
+            if (playerInVision) {
+                this.state = 'chase';
+                this.lostSightTimer = GUARD_LOST_SIGHT;
+                this.lastSeenX = player.x;
+                this.lastSeenY = player.y;
+                this._faceToward(player.x, player.y);
+            } else if (this.state === 'chase') {
+                this.lostSightTimer--;
+                if (this.lostSightTimer <= 0) this.state = 'patrol';
+            }
+        } else {
+            // Rogue hunt: always chase. Cloak and the vision cone do not break detection.
             this.state = 'chase';
             this.lostSightTimer = GUARD_LOST_SIGHT;
             this.lastSeenX = player.x;
             this.lastSeenY = player.y;
             this._faceToward(player.x, player.y);
-        } else if (this.state === 'chase') {
-            this.lostSightTimer--;
-            if (this.lostSightTimer <= 0) this.state = 'patrol';
         }
 
         if (this.state === 'chase') {
@@ -972,20 +1001,28 @@ export class Guard extends Entity {
         return null;
     }
     render(ctx) {
-        const moving = this.state === 'patrol' || this.state === 'chase';
+        const dead = !!this.dead;
+        const stunned = !dead && this.stunTicks > 0;
+        const moving = !dead && !stunned && (this.state === 'patrol' || this.state === 'chase');
         const t = state.currentTick;
         const walk = moving ? Math.sin(t * 0.4) : 0;
+        const flash = stunned && ((t % 8) < 4);
         const img = resolveSprite(state, 'guard');
         if (img) {
-            drawSprite(ctx, img, this.x, this.y, this.w, this.h, {
+            const opts = {
                 flipX: Math.cos(this.facingAngle) < 0,
-                bob: moving ? Math.abs(walk) * 2.2 : Math.sin(t * 0.12) * 0.6,
+                bob: moving ? Math.abs(walk) * 2.2 : (stunned ? 0 : Math.sin(t * 0.12) * 0.6),
                 scaleY: moving ? 1 + walk * 0.05 : 1,
                 valign: 'bottom'
-            });
+            };
+            if (dead) { opts.alpha = 0.35; opts.tint = '#8a93a0'; opts.tintAlpha = 0.7; }
+            else if (stunned) { opts.alpha = flash ? 1 : 0.4; opts.tint = '#ffe14a'; opts.tintAlpha = 0.62; }
+            drawSprite(ctx, img, this.x, this.y, this.w, this.h, opts);
         } else super.render(ctx);
+        if (dead) return;
         const cone = getVisionCone(this);
-        if (this.state === 'chase') ctx.fillStyle = 'rgba(255,40,40,0.34)';
+        if (stunned) ctx.fillStyle = flash ? 'rgba(255,220,40,0.45)' : 'rgba(255,220,40,0.16)';
+        else if (this.state === 'chase') ctx.fillStyle = 'rgba(255,40,40,0.34)';
         else if (this.state === 'distracted') ctx.fillStyle = 'rgba(255,255,0,0.14)';
         else ctx.fillStyle = 'rgba(255,0,0,0.06)';
         ctx.beginPath();
@@ -993,6 +1030,34 @@ export class Guard extends Entity {
         ctx.arc(cone.cx, cone.cy, cone.range, cone.angle - cone.halfAngle, cone.angle + cone.halfAngle);
         ctx.closePath();
         ctx.fill();
+    }
+}
+
+// Real Rogue Run chambers set isRogue. Package-free floor replays also set
+// rogueRun.active so the exit zone can clear; those guards keep campaign AI.
+export function rogueCombatActive() {
+    return !!(state.rogueRun?.active && state.currentLevelMeta?.isRogue);
+}
+
+export function stunGuardsOverlapping(guards, rect, ticks = GUARD_STUN_TICKS) {
+    if (!rect || !guards) return;
+    for (const g of guards) {
+        if (!g || g.dead || typeof g.stun !== 'function') continue;
+        if (AABB(rect.x, rect.y, rect.w, rect.h, g.x, g.y, g.w, g.h)) g.stun(ticks);
+    }
+}
+
+export function applyEchoGuardTouches(guards, ghosts) {
+    if (!guards || !ghosts) return;
+    for (const g of guards) {
+        if (!g || g.dead || typeof g.touchByEcho !== 'function') continue;
+        for (const ghost of ghosts) {
+            if (!ghost || !ghost.isActive) continue;
+            if (AABB(g.x, g.y, g.w, g.h, ghost.x, ghost.y, ghost.w, ghost.h)) {
+                g.touchByEcho();
+                break;
+            }
+        }
     }
 }
 

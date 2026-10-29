@@ -91,28 +91,26 @@ function sweepYard(rng) {
     };
 }
 
-// Open middle lane the courier can reach. Every waypoint stays >=200px from spawn
-// so the wave does not open on a catch. Clear is the whole guard wave.
+// Open arena. Six guards hold the east half so a rogue hunt stays under pressure
+// for about half a minute. Every waypoint stays >=200px from spawn.
 function patrolCorridor(rng) {
-    const y1 = 190 + pick(rng, 0, 2) * 20;
-    const y2 = 350 + pick(rng, 0, 2) * 20;
-    const span = pick(rng, 0, 3) * 20;
+    const nudge = pick(rng, 0, 2) * 16;
     const guards = [
-        { path: [{ x: 320, y: y1 }, { x: 700 - span, y: y1 }] },
-        { path: [{ x: 300 + span, y: y2 }, { x: 660, y: y2 }] }
+        { path: [{ x: 320 + nudge, y: 80 }, { x: 560, y: 80 }] },
+        { path: [{ x: 360, y: 180 }, { x: 680, y: 180 }] },
+        { path: [{ x: 320, y: 280 }, { x: 520, y: 300 }] },
+        { path: [{ x: 560, y: 300 }, { x: 720, y: 320 }] },
+        { path: [{ x: 340, y: 400 }, { x: 560, y: 460 }] },
+        { path: [{ x: 640, y: 420 }, { x: 700, y: 200 }] }
     ];
-    if (rng() < 0.45) {
-        const y3 = 270 + pick(rng, 0, 1) * 20;
-        guards.push({ path: [{ x: 380, y: y3 }, { x: 580, y: y3 }] });
-    }
     return {
         layout: shell({
-            player: { x: 40, y: 300 },
+            player: { x: 48, y: 270 },
             deliveryZone: CLOSED_RIFT,
             walls: [
                 ...borders(),
-                { x: 20, y: 150, w: 760, h: 20 },
-                { x: 20, y: 430, w: 760, h: 20 }
+                { x: 200, y: 120, w: 24, h: 110 },
+                { x: 200, y: 370, w: 24, h: 110 }
             ],
             guards
         }),
