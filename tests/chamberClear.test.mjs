@@ -80,8 +80,10 @@ assert.equal(state.currentLevelMeta.name, 'Patrol Corridor');
 assert.equal(state.currentLevelMeta.obj, 'Clear the guard wave.');
 assert.equal(state.rogueChamber.type, 'wave');
 assert.equal(state.rogueChamber.ticksLeft, null);
-assert.ok(state.guards.length >= 6, 'opening wave has enough guards to pressure a fight');
-assert.equal(state.rogueChamber.enemiesLeft, state.guards.length);
+assert.equal(state.guards.length, 0, 'opening wave is preceded by a readable spawn telegraph');
+main.stepSimulation();
+assert.equal(state.rogueChamber.director.telegraphs.length, 3);
+assert.equal(state.rogueChamber.enemiesLeft, 7, 'both seeded waves count toward the clear');
 assert.equal(state.rogueChamber.aspectPending, false);
 assert.equal(state.rogueChamber.zone.x < 0, true);
 

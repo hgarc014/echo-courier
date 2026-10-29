@@ -57,6 +57,7 @@ function release() {
     for (const k of Object.keys(keys)) keys[k] = false;
 }
 function quiet() {
+    if (state.rogueChamber) state.rogueChamber.director = null;
     state.guards = [];
     state.cameras = [];
     state.lasers = [];
