@@ -13,7 +13,7 @@ import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
-import { Guard, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
+import { TickHound, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
@@ -29,7 +29,7 @@ import { collectShieldSlabs, laserThreatens, shieldSlab, shieldShadowRects, lase
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, PLAYER_MAX_HP } from './rogue/combat.js';
-import { createEncounterDirector, encounterRemaining, tickEncounterDirector } from './rogue/encounterDirector.js';
+import { createEncounterDirector, createPressureDirector, encounterRemaining, tickEncounterDirector, tickPressureDirector } from './rogue/encounterDirector.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1339,6 +1339,29 @@ export function startPlaytestFromEditor() {
 // (playtest path / customLayout).
 // Clear opens the aspect picker, then the next biome. The last biome ends at Run Over.
 // Any death / ESC ends the run. Aspect bonuses are run-only and carry across biomes.
+function rogueSpawnPoints(layout) {
+    const player = layout.player || { x: 50, y: 300, w: 30, h: 30 };
+    const width = layout.mapWidth || 800;
+    const height = layout.mapHeight || 600;
+    const raw = (layout.guards || []).map(g => g.points?.[0] || g.path?.[0]).filter(Boolean);
+    raw.push(
+        { x: 45, y: 45 }, { x: width - 75, y: 45 },
+        { x: 45, y: height - 75 }, { x: width - 75, y: height - 75 },
+        { x: width / 2 - 15, y: 45 }, { x: width / 2 - 15, y: height - 75 }
+    );
+    const walls = layout.walls || [];
+    const pcx = player.x + (player.w || 30) / 2;
+    const pcy = player.y + (player.h || 30) / 2;
+    const unique = [];
+    for (const point of raw) {
+        if (Math.hypot(point.x + 15 - pcx, point.y + 15 - pcy) < 200) continue;
+        if (walls.some(w => AABB(point.x, point.y, 30, 30, w.x, w.y, w.w, w.h))) continue;
+        if (unique.some(p => Math.hypot(p.x - point.x, p.y - point.y) < 20)) continue;
+        unique.push({ x: point.x, y: point.y });
+    }
+    return unique.slice(0, 6);
+}
+
 function enterRogueChamber(biomeIndex, fresh) {
     const carriedHp = fresh ? PLAYER_MAX_HP : Math.max(1, state.player?.hp ?? PLAYER_MAX_HP);
     const meta = loadRogueMeta();
@@ -1349,16 +1372,30 @@ function enterRogueChamber(biomeIndex, fresh) {
     const layout = chamber.layout;
     const cmeta = chamber.meta;
     const clear = cmeta.clear;
-    const spawnPoints = (layout.guards || []).map(g => g.points?.[0] || g.path?.[0]).filter(Boolean);
+    const mapWidth = layout.mapWidth || 800;
+    const mapHeight = layout.mapHeight || 600;
+    const rawRift = layout.deliveryZone || { x: mapWidth - 110, y: mapHeight / 2 - 50, w: 80, h: 100 };
+    const runtimeRift = rawRift.x < 0 || rawRift.y < 0
+        ? { x: mapWidth - 110, y: mapHeight / 2 - 50, w: 80, h: 100 }
+        : { ...rawRift };
+    let spawnPoints = rogueSpawnPoints(layout);
+    if (clear === 'rift' && layout.deliveryZone) {
+        const rift = layout.deliveryZone;
+        spawnPoints = spawnPoints.sort((a, b) =>
+            Math.hypot(b.x - rift.x, b.y - rift.y) - Math.hypot(a.x - rift.x, a.y - rift.y));
+    }
+    const directorSeed = state.rogueRun.seed + biomeIndex * 7919;
+    const director = clear === 'kill'
+        ? createEncounterDirector({ biome: biome.id, seed: directorSeed, spawnPoints })
+        : createPressureDirector({ seed: directorSeed, spawnPoints, initialDelay: clear === 'rift' ? 90 : 0 });
     state.rogueChamber = {
         type: clear === 'kill' ? 'wave' : clear,
-        zone: layout.deliveryZone,
-        ticksLeft: clear === 'timer' ? cmeta.clearSeconds * 60 : null,
+        zone: runtimeRift,
+        ticksLeft: clear === 'timer' ? 20 * 60 : null,
         enemiesLeft: clear === 'kill' ? cmeta.waveCount : null,
         aspectPending: false,
-        director: clear === 'kill' && spawnPoints.length
-            ? createEncounterDirector({ biome: biome.id, seed: state.rogueRun.seed + biomeIndex * 7919, spawnPoints })
-            : null
+        riftOpen: clear === 'rift',
+        director: spawnPoints.length ? director : null
     };
     if (fresh || !state.sand) {
         state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
@@ -1404,7 +1441,9 @@ function enterRogueChamber(biomeIndex, fresh) {
     applyLevelHint(state.currentLevelMeta);
     clearGatekeeperCheckpoint();
     applyLoadedLevel(deserializeLevel({ ...layout }));
-    if (state.rogueChamber.director) state.guards = [];
+    Object.assign(state.deliveryZone, runtimeRift);
+    state.guards = [];
+    state.plates = []; state.doors = []; state.cameras = []; state.lasers = []; state.drones = []; state.packages = [];
     state.player.hp = carriedHp;
     state.player.maxHp = PLAYER_MAX_HP;
     beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
@@ -1461,13 +1500,24 @@ function tickRogueChamber() {
     if (!state.rogueRun?.active || state.sandRewinding) return;
     const chamber = state.rogueChamber;
     if (!chamber || chamber.aspectPending) return;
-    if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') chamber.ticksLeft -= 1;
-    else if (chamber.type === 'wave') {
-        const alive = (state.guards || []).filter(g => g && !g.dead).length;
+    const alive = (state.guards || []).filter(g => g && !g.dead).length;
+    const playerCenter = state.player ? { x: state.player.x + state.player.w / 2, y: state.player.y + state.player.h / 2 } : null;
+    const spawnHounds = points => {
+        for (const point of points) state.guards.push(new TickHound([{ ...point }, { x: point.x + 1, y: point.y }]));
+    };
+    if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') {
+        chamber.ticksLeft -= 1;
+        if (chamber.director?.kind === 'pressure') spawnHounds(tickPressureDirector(chamber.director, alive, playerCenter, chamber.ticksLeft > 0));
+        if (chamber.ticksLeft <= 0) {
+            chamber.type = 'rift'; chamber.riftOpen = true;
+            const objective = document.getElementById('objective-text');
+            if (objective) objective.innerText = 'You survived — reach the open rift.';
+        }
+    } else if (chamber.type === 'rift') {
+        if (chamber.director?.kind === 'pressure') spawnHounds(tickPressureDirector(chamber.director, alive, playerCenter, true));
+    } else if (chamber.type === 'wave') {
         if (chamber.director) {
-            for (const point of tickEncounterDirector(chamber.director, alive)) {
-                state.guards.push(new Guard([{ ...point }, { x: point.x + 1, y: point.y }]));
-            }
+            spawnHounds(tickEncounterDirector(chamber.director, alive, playerCenter));
             chamber.enemiesLeft = encounterRemaining(chamber.director, (state.guards || []).filter(g => g && !g.dead).length);
         } else chamber.enemiesLeft = alive;
         if (chamber.enemiesLeft <= 0 && (!chamber.director || chamber.director.done)) {
@@ -2585,7 +2635,7 @@ function draw() {
     }
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
-    state.deliveryZone.render(ctx);
+    if (!state.currentLevelMeta?.isRogue || state.rogueChamber?.riftOpen) state.deliveryZone.render(ctx);
     for (const mark of state.rogueChamber?.director?.telegraphs || []) {
         const p = mark.point;
         const u = 1 - mark.ticks / 45;
