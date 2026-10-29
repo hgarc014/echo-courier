@@ -39,6 +39,7 @@ import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rog
 import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
 import { WEAPON_FAMILIES, weaponMove } from './rogue/weapons.js';
 import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
+import { commandEchoAssault, recallEchoes, ECHO_ASSAULT_COOLDOWN, ECHO_RECALL_COOLDOWN } from './rogue/echoCommands.js';
 import { RELICS, relicSlots, relicModifiers } from './rogue/relics.js';
 import { createRouteLedger, ledgerChoices } from './rogue/runRoute.js';
 import { installLayoutFit } from './ui/fitLayout.js';
@@ -1513,7 +1514,7 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         grants: ['dash', 'toss', 'cloak', 'ghostShield'],
         isPlaytest: true,
         isRogue: true,
-        hintLine: opening ? 'SPACE strike · B blink · hold E echo · V rupture' : undefined
+        hintLine: opening ? 'SPACE quick · K heavy · L special · hold E create · Q assault · R recall' : undefined
     };
     applyLevelAbilityOverrides(state.currentLevelMeta);
     state.worldUnlockedAbilities = null;
@@ -2110,8 +2111,21 @@ function update() {
         return;
     }
 
-    if (!isDemoActive() && isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
-    if (isKeyJustPressed('r') || loopTimeExpired()) { resetRun(); updatePrevKeys(); return; }
+    if (rogueCombatActive()) {
+        if (state.rogueRun.echoAssaultCooldown > 0) state.rogueRun.echoAssaultCooldown--;
+        if (state.rogueRun.echoRecallCooldown > 0) state.rogueRun.echoRecallCooldown--;
+        if (!isDemoActive() && isKeyJustPressed('q') && (state.rogueRun.echoAssaultCooldown | 0) <= 0) {
+            const count = commandEchoAssault(state.activeGhosts, state.guards, state.rogueRun.weapon);
+            if (count > 0) state.rogueRun.echoAssaultCooldown = ECHO_ASSAULT_COOLDOWN;
+        }
+        if (isKeyJustPressed('r') && (state.rogueRun.echoRecallCooldown | 0) <= 0) {
+            const count = recallEchoes(state.activeGhosts, state.player, state.walls);
+            if (count > 0) state.rogueRun.echoRecallCooldown = ECHO_RECALL_COOLDOWN;
+        }
+    } else {
+        if (!isDemoActive() && isKeyJustPressed('q')) { restartLevel(); updatePrevKeys(); return; }
+        if (isKeyJustPressed('r') || loopTimeExpired()) { resetRun(); updatePrevKeys(); return; }
+    }
     if (state.rewindFreeze > 0) {
         state.rewindFreeze--;
         updatePrevKeys();
