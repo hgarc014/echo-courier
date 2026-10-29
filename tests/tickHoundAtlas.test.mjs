@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { installDomStubs } from './harness/domStub.mjs';
 
 installDomStubs();
-const { buildTickHoundAtlas, pickTickHoundFrame, TICK_HOUND_SHEET_PATH } = await import('../src/core/atlas.js');
+const { buildTickHoundAtlas, buildVfxAtlas, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID } = await import('../src/core/atlas.js');
 
 assert.equal(TICK_HOUND_SHEET_PATH, 'assets/sprite-sheets/tick-hound-v2.png');
 const atlas = buildTickHoundAtlas({ width: 1536, height: 1152 });
@@ -15,5 +15,11 @@ assert.equal(pickTickHoundFrame(atlas, { hurtTicks: 4 }, 0).img, atlas.hit);
 assert.equal(pickTickHoundFrame(atlas, { lungeTelegraphTicks: 4 }, 0).img, atlas.windup);
 assert.equal(pickTickHoundFrame(atlas, { state: 'chase', facingAngle: Math.PI }, 6).flipX, true);
 assert.equal(pickTickHoundFrame(atlas, { state: 'idle', facingAngle: -Math.PI / 2 }, 0).img, atlas.idleBack);
+
+assert.equal(VFX_SHEET_PATH, 'assets/sprite-sheets/echo-courier-vfx-v2.png');
+const vfx = buildVfxAtlas({ width: 1600, height: 1200 });
+assert.equal(vfx.cellW, 400);
+assert.equal(vfx.cellH, 400);
+assert.deepEqual(Object.keys(VFX_FRAME_GRID), Object.keys(vfx).filter(key => !['ready', 'cellW', 'cellH'].includes(key)));
 
 console.log('tick hound atlas ok');

@@ -4,6 +4,13 @@ export const PLAYER_SHEET_PATH = 'assets/sprite-sheets/echo-courier-characters.p
 export const PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-hazards.png';
 export const ENV_SHEET_PATH = 'assets/sprite-sheets/echo-courier-environment-effects.png';
 export const TICK_HOUND_SHEET_PATH = 'assets/sprite-sheets/tick-hound-v2.png';
+export const VFX_SHEET_PATH = 'assets/sprite-sheets/echo-courier-vfx-v2.png';
+
+export const VFX_FRAME_GRID = Object.freeze({
+    playerSwing: [0, 0], echoSwing: [1, 0], playerImpact: [2, 0], enemyImpact: [3, 0],
+    blinkDeparture: [0, 1], blinkArrival: [1, 1], rupture: [2, 1], echoSpawn: [3, 1],
+    rewind: [0, 2], rift: [1, 2], enemyWarning: [2, 2], enemyDissolve: [3, 2]
+});
 
 // Occupancy-measured rects on echo-courier-characters.png (1536x1024).
 // Top band y 0-196 (idle/carry/dash/cloak). Walk band y 196-340. 4px pad, bands do not overlap.
@@ -114,6 +121,19 @@ export function buildTickHoundAtlas(sheet) {
         runRight: [0, 1, 2, 3].map(column => frame(column, 1)),
         windup: frame(0, 2), lunge: frame(1, 2), hit: frame(2, 2), dead: frame(3, 2)
     };
+}
+
+export function buildVfxAtlas(sheet) {
+    const iw = sheet?.naturalWidth || sheet?.width || 0;
+    const ih = sheet?.naturalHeight || sheet?.height || 0;
+    if (!iw || !ih) return null;
+    const cellW = Math.floor(iw / 4);
+    const cellH = Math.floor(ih / 3);
+    const atlas = { ready: true, cellW, cellH };
+    for (const [name, [column, row]] of Object.entries(VFX_FRAME_GRID)) {
+        atlas[name] = sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
+    }
+    return atlas;
 }
 
 export function pickTickHoundFrame(atlas, hound, tick = 0) {
