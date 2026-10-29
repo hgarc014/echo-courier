@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { installDomStubs } from './harness/domStub.mjs';
 
 installDomStubs();
-const { buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, pickCourierActionFrame, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID, MODERN_PROPS_SHEET_PATH, MODERN_PROPS_FRAME_GRID, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, BIOME_SCENERY_FRAME_GRID } = await import('../src/core/atlas.js');
+const { buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, buildStillAtlas, pickCourierActionFrame, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID, MODERN_PROPS_SHEET_PATH, MODERN_PROPS_FRAME_GRID, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, BIOME_SCENERY_FRAME_GRID, STILL_SHEET_PATH, STILL_FRAME_GRID } = await import('../src/core/atlas.js');
 
 assert.equal(TICK_HOUND_SHEET_PATH, 'assets/sprite-sheets/tick-hound-v2.png');
 const atlas = buildTickHoundAtlas({ width: 1536, height: 1152 });
@@ -44,5 +44,11 @@ const scenery = buildBiomeSceneryAtlas({ width: 1536, height: 1152 });
 assert.equal(scenery.cellW, 384);
 assert.equal(scenery.cellH, 384);
 assert.deepEqual(Object.keys(BIOME_SCENERY_FRAME_GRID), Object.keys(scenery).filter(key => !['ready', 'cellW', 'cellH'].includes(key)));
+
+assert.equal(STILL_SHEET_PATH, 'assets/sprite-sheets/echo-courier-still-v2.png');
+const still = buildStillAtlas({ width: 1536, height: 1024 });
+assert.equal(still.cellW, 384);
+assert.equal(still.cellH, 512);
+assert.deepEqual(Object.keys(STILL_FRAME_GRID), Object.keys(still).filter(key => !['ready', 'cellW', 'cellH'].includes(key)));
 
 console.log('tick hound atlas ok');

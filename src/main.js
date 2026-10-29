@@ -1565,19 +1565,20 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     updateRogueHealthHud();
 }
 
-export function startRogueRun(seed, ledgerEnabled = false) {
+export function startRogueRun(seed, ledgerEnabled = false, startBiomeIndex = 0) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
+    const biomeIndex = Math.max(0, Math.min(BIOME_ORDER.length - 1, startBiomeIndex | 0));
     hideAspectPick();
     const meta = loadRogueMeta();
     const relics = relicModifiers(meta);
     const ledger = ledgerEnabled ? createRouteLedger(BIOME_ORDER, seed) : null;
-    const firstNode = ledgerEnabled ? ledgerChoices(ledger, 0, 0)[0] : null;
-    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0, ruptureCooldown: 0, ruptureSeq: 0,
+    const firstNode = ledgerEnabled ? ledgerChoices(ledger, biomeIndex, 0)[0] : null;
+    state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex, ruptureCooldown: 0, ruptureSeq: 0,
         weapon: meta.selectedWeapon, aspects: [], lastBossReached: null, echoesDeployed: 0,
         echoCharges: relics.echoCharges, riftOpenTicks: relics.riftOpenTicks, reachMultiplier: relics.reachMultiplier,
         ledgerEnabled, ledger, routeDepth: 0, selectedRouteNode: firstNode, routeHistory: firstNode ? [firstNode.id] : [] };
     state.sandRewinding = false;
-    enterRogueChamber(0, true);
+    enterRogueChamber(biomeIndex, true);
 }
 
 export function startRogueLedgerRun(seed) {
@@ -2967,7 +2968,8 @@ function drawPreviewScrubber(target) {
 }
 
 function drawRogueArenaBackdrop(target, map) {
-    drawArenaBackdrop(target, map, state.currentLevelMeta?.biome, state.biomeSceneryAtlas);
+    const biome = state.currentLevelMeta?.biome;
+    drawArenaBackdrop(target, map, biome, biome === 'the-still' ? state.stillAtlas : state.biomeSceneryAtlas);
 }
 
 function drawRogueWallDepth(target) {

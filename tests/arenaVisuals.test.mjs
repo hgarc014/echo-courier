@@ -17,9 +17,11 @@ assert.notEqual(visualHash(4, 9, 2), visualHash(5, 9, 2));
 
 const hallsLayout = arenaSceneryLayout({ w: 1600, h: 900 }, 'second-hand-halls');
 const courtsLayout = arenaSceneryLayout({ w: 1600, h: 900 }, 'echo-courts');
+const stillLayout = arenaSceneryLayout({ w: 1600, h: 900 }, 'the-still');
 assert.equal(hallsLayout.length, 8);
 assert.equal(hallsLayout[0].key, 'hallsRack');
 assert.equal(courtsLayout[0].key, 'courtsPlinth');
+assert.equal(stillLayout[0].key, 'stillPendulum');
 assert.deepEqual(hallsLayout, arenaSceneryLayout({ w: 1600, h: 900 }, 'second-hand-halls'), 'scenery placement must be deterministic');
 assert.ok(hallsLayout.every(item => item.x < 1600 * .4 || item.x > 1600 * .6 || item.y < 900 * .25 || item.y > 900 * .75), 'scenery should preserve the central combat read');
 

@@ -19,7 +19,7 @@ const BIOME_SCENERY_KEYS = Object.freeze({
     'second-hand-halls': Object.freeze(['hallsRack', 'hallsGearColumn', 'hallsRelay', 'hallsBarrier']),
     'hourglass-warrens': Object.freeze(['warrensHourglass', 'warrensDebris', 'warrensVent', 'warrensObelisk']),
     'echo-courts': Object.freeze(['courtsPlinth', 'courtsShards', 'courtsArch', 'courtsTimeBloom']),
-    'the-still': Object.freeze(['courtsArch', 'courtsShards', 'courtsPlinth', 'courtsTimeBloom'])
+    'the-still': Object.freeze(['stillPendulum', 'stillConsole', 'stillObelisk', 'stillArch'])
 });
 
 export function arenaSceneryLayout(map, biome = 'second-hand-halls') {
