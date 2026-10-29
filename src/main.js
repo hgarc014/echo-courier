@@ -30,6 +30,7 @@ import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, PLAYER_MAX_HP } from './rogue/combat.js';
 import { createEncounterDirector, createPressureDirector, encounterRemaining, tickEncounterDirector, tickPressureDirector } from './rogue/encounterDirector.js';
+import { composeEncounter } from './rogue/encounterComposition.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1385,8 +1386,25 @@ function enterRogueChamber(biomeIndex, fresh) {
             Math.hypot(b.x - rift.x, b.y - rift.y) - Math.hypot(a.x - rift.x, a.y - rift.y));
     }
     const directorSeed = state.rogueRun.seed + biomeIndex * 7919;
+    const encounter = clear === 'kill'
+        ? composeEncounter({
+            biome: biome.id,
+            depth: biomeIndex,
+            seed: directorSeed,
+            previous: state.rogueRun.previousEncounterFamilies || {}
+        })
+        : null;
+    if (encounter) {
+        state.rogueRun.previousEncounterFamilies = {
+            shellFamily: encounter.shell.family,
+            squadFamily: encounter.squad.family,
+            modifierFamily: encounter.modifier.family,
+            objectiveFamily: encounter.objective.family,
+            rewardFamily: encounter.reward.family
+        };
+    }
     const director = clear === 'kill'
-        ? createEncounterDirector({ biome: biome.id, seed: directorSeed, spawnPoints })
+        ? createEncounterDirector({ biome: biome.id, seed: directorSeed, spawnPoints, encounter })
         : createPressureDirector({ seed: directorSeed, spawnPoints, initialDelay: clear === 'rift' ? 90 : 0 });
     state.rogueChamber = {
         type: clear === 'kill' ? 'wave' : clear,
@@ -1395,6 +1413,7 @@ function enterRogueChamber(biomeIndex, fresh) {
         enemiesLeft: clear === 'kill' ? cmeta.waveCount : null,
         aspectPending: false,
         riftOpen: clear === 'rift',
+        encounter,
         director: spawnPoints.length ? director : null
     };
     if (fresh || !state.sand) {

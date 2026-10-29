@@ -11,6 +11,12 @@ const a = createEncounterDirector({ biome: 'echo-courts', seed: 42, spawnPoints:
 const b = createEncounterDirector({ biome: 'echo-courts', seed: 42, spawnPoints: points });
 assert.deepEqual(a.spawnPoints, b.spawnPoints, 'same seed is deterministic');
 assert.notDeepEqual(a.spawnPoints, createEncounterDirector({ biome: 'echo-courts', seed: 43, spawnPoints: points }).spawnPoints);
+const composed = createEncounterDirector({
+    biome: 'second-hand-halls', seed: 99, spawnPoints: points,
+    encounter: { squad: { roles: ['bruiser', 'chaser', 'skirmisher'] } }
+});
+assert.deepEqual(composed.waves, [3, 4], 'composed squad size drives the runtime wave plan');
+assert.equal(composed.encounter.squad.roles[0], 'bruiser');
 tickEncounterDirector(a, 0);
 assert.equal(a.telegraphs.length, 4);
 for (let i = 1; i < SPAWN_TELEGRAPH_TICKS; i++) assert.equal(tickEncounterDirector(a, 0).length, 0);
