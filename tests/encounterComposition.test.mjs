@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { authoredShellWalls, composeEncounter, ROOM_SHELLS, sweepEncounterSeeds, threatBudgetFor } from '../src/rogue/encounterComposition.js';
+import { authoredShellWalls, composeEncounter, ROOM_SHELLS, SQUAD_PROFILES, sweepEncounterSeeds, threatBudgetFor } from '../src/rogue/encounterComposition.js';
 
 assert.equal(threatBudgetFor('second-hand-halls'), 4);
 assert.equal(threatBudgetFor('hourglass-warrens'), 5);
@@ -18,6 +18,15 @@ assert.equal(sweep.invalidCount, 0, '20-seed sweep contains no invalid encounter
 assert.equal(sweep.adjacentRepeatCount, 0, 'room and squad families do not repeat back-to-back');
 assert.ok(sweep.uniqueSignatures >= 12, `expected varied encounters, got ${sweep.uniqueSignatures}`);
 assert.ok(sweep.encounters.some(encounter => encounter.squad.roles.includes('elite')), 'late-biome sweep can produce the elite squad');
+const hallsSweep = sweepEncounterSeeds({ count: 40, seed: 1, biome: 'second-hand-halls' });
+assert.ok(hallsSweep.encounters.every(encounter => !encounter.squad.roles.includes('sentry') && !encounter.squad.roles.includes('leech')), 'opening biome teaches melee pressure before specialist enemies');
+const warrensSweep = sweepEncounterSeeds({ count: 40, seed: 1, biome: 'hourglass-warrens' });
+assert.ok(warrensSweep.encounters.some(encounter => encounter.squad.roles.includes('sentry')), 'Warrens introduces ranged Sentries');
+assert.ok(warrensSweep.encounters.every(encounter => !encounter.squad.roles.includes('leech')), 'Leeches wait until Echo Courts');
+const stillSweep = sweepEncounterSeeds({ count: 80, seed: 1, biome: 'the-still' });
+assert.ok(stillSweep.encounters.some(encounter => encounter.squad.id === 'rift-pincer'), 'The Still can compose the full three-family pincer');
+assert.ok(stillSweep.encounters.every(encounter => encounter.squad.roles.filter(role => role === 'sentry').length <= 2), 'seed sweep caps simultaneous ranged lanes');
+assert.equal(SQUAD_PROFILES.filter(profile => new Set(profile.roles.map(role => role === 'sentry' ? 'sentry' : (role === 'leech' ? 'leech' : 'hound'))).size >= 2).length >= 3, true, 'at least three squads mix enemy families');
 for (const shell of ROOM_SHELLS) {
     const walls = authoredShellWalls(shell.id);
     assert.ok(walls.length >= 2, `${shell.id} has authored cover`);
