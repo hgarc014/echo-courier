@@ -133,7 +133,7 @@ check('patrol corridor keeps every guard path point at least 200px from the cour
     for (let s = 1; s <= 40; s++) {
         const { layout } = generateChamber(s, 'patrol-corridor');
         const p = layout.player;
-        assert.ok(layout.guards.length >= 2);
+        assert.equal(layout.guards.length, 6);
         for (const g of layout.guards) {
             for (const pt of g.path) {
                 const d = Math.hypot(pt.x - p.x, pt.y - p.y);

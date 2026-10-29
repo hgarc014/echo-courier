@@ -430,7 +430,7 @@ check('a fresh run starts in Halls and a clear advances into Hourglass Warrens',
     assert.equal(state.rogueRun.biomeIndex, 0);
     assert.equal(state.rogueRun.active, true);
     assert.equal(state.currentLevelMeta.hall, 'Second-hand Halls');
-    assert.equal(state.currentLevelMeta.name, 'Timed Hold');
+    assert.equal(state.currentLevelMeta.name, 'Patrol Corridor');
     assert.ok(state.sand.sand >= BLINK_COST + 0.1);
     const ghosts = state.currentLevelMeta.maxGhosts;
     const maxSand = state.sand.maxSand;

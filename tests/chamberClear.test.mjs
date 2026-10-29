@@ -52,10 +52,6 @@ function standInExit() {
     state.player.y = z.y + 4;
 }
 
-function guard(st) {
-    return { state: st, update() { return null; } };
-}
-
 // Walk Hourglass (and any later biome) to Run Over without a second echo-slot.
 function settleRogueClear() {
     let steps = 0;
@@ -80,11 +76,12 @@ function settleRogueClear() {
 
 release();
 main.startRogueRun(1);
-assert.equal(state.currentLevelMeta.name, 'Timed Hold');
-assert.equal(state.currentLevelMeta.obj, 'Survive 8 seconds.');
-assert.equal(state.rogueChamber.type, 'timer');
-assert.equal(state.rogueChamber.ticksLeft, 8 * 60);
-assert.equal(state.rogueChamber.enemiesLeft, null);
+assert.equal(state.currentLevelMeta.name, 'Patrol Corridor');
+assert.equal(state.currentLevelMeta.obj, 'Clear the guard wave.');
+assert.equal(state.rogueChamber.type, 'wave');
+assert.equal(state.rogueChamber.ticksLeft, null);
+assert.ok(state.guards.length >= 6, 'opening wave has enough guards to pressure a fight');
+assert.equal(state.rogueChamber.enemiesLeft, state.guards.length);
 assert.equal(state.rogueChamber.aspectPending, false);
 assert.equal(state.rogueChamber.zone.x < 0, true);
 
@@ -150,12 +147,19 @@ release();
 
 begin();
 state.rogueChamber = { type: 'wave', enemiesLeft: 9, aspectPending: false };
-state.guards = [guard('patrol'), guard('distracted'), guard('chase')];
+state.guards = [
+    { dead: false, state: 'distracted', update() { return null; } },
+    { dead: true, state: 'distracted', update() { return null; } },
+    { dead: false, state: 'chase', update() { return null; } }
+];
 standInExit();
 main.stepSimulation();
 assert.equal(state.gameState, 'PLAYING');
-assert.equal(state.rogueChamber.enemiesLeft, 2, 'distracted guards are not enemies left');
-state.guards = [guard('distracted'), guard('distracted')];
+assert.equal(state.rogueChamber.enemiesLeft, 2, 'dead guards are not enemies left; distracted guards still count');
+state.guards = [
+    { dead: true, state: 'distracted', update() { return null; } },
+    { dead: true, state: 'patrol', update() { return null; } }
+];
 main.stepSimulation();
 assert.equal(state.rogueChamber.enemiesLeft, 0);
 assert.equal(state.rogueChamber.aspectPending, true);

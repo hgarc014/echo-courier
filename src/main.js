@@ -13,7 +13,7 @@ import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
-import { tickEchoFellFx, renderEchoFellFx } from './entities/hazards.js';
+import { tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
@@ -1320,7 +1320,9 @@ export function startPlaytestFromEditor() {
 function enterRogueChamber(biomeIndex, fresh) {
     const meta = loadRogueMeta();
     const biome = BIOME_ORDER[biomeIndex] || BIOME_ORDER[0];
-    const chamber = biome.generateChamber(state.rogueRun.seed);
+    // Opening room is the Halls kill wave so the run starts under guard pressure.
+    const opening = fresh && biome.id === 'second-hand-halls';
+    const chamber = biome.generateChamber(state.rogueRun.seed, opening ? 'patrol-corridor' : undefined);
     const layout = chamber.layout;
     const cmeta = chamber.meta;
     const clear = cmeta.clear;
@@ -1420,7 +1422,7 @@ function advanceRogueBiome() {
     return true;
 }
 
-// Timer chambers count down. Wave chambers recount guards that are not echo-distracted.
+// Timer chambers count down. Wave chambers recount guards that are not dead.
 // Rewind ticks and an open aspect picker do not advance either clock.
 function tickRogueChamber() {
     if (!state.rogueRun?.active || state.sandRewinding) return;
@@ -1428,7 +1430,7 @@ function tickRogueChamber() {
     if (!chamber || chamber.aspectPending) return;
     if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') chamber.ticksLeft -= 1;
     else if (chamber.type === 'wave') {
-        chamber.enemiesLeft = (state.guards || []).filter(g => g && g.state !== 'distracted').length;
+        chamber.enemiesLeft = (state.guards || []).filter(g => g && !g.dead).length;
     }
 }
 
@@ -1627,8 +1629,13 @@ function update() {
     // E-release above still commits a sand echo when the hold lasted >= MIN_ECHO_SEGMENT.
     if (state.rogueRun?.active && state.sand && state.player && state.failTimer === 0 && !state.sandRewinding
         && isKeyJustPressed('b') && canBlinkRewind(state.sand)) {
+        const blinkFrom = { x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h };
         const frames = applyBlinkRewind(state.sand, state.player, state.packages);
         if (frames > 0) {
+            if (rogueCombatActive()) {
+                stunGuardsOverlapping(state.guards, blinkFrom);
+                stunGuardsOverlapping(state.guards, { x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h });
+            }
             state.player.invulnTicks = BLINK_IFRAMES;
             SFX.rewind();
             updateSandHud();
@@ -1754,6 +1761,7 @@ function update() {
             state.player.dashCooldown = 60; 
             state.runStats.dashes++;
             dashFired = true;
+            if (rogueCombatActive()) stunGuardsOverlapping(state.guards, state.dashSweep);
         }
     }
     if (state.player.dashCooldown > 0) state.player.dashCooldown--;
@@ -1795,6 +1803,7 @@ function update() {
         if (door && door.gateLocked) door.isOpen = false;
     }
 
+    if (rogueCombatActive()) applyEchoGuardTouches(state.guards, state.activeGhosts);
     for(let g of state.guards) { let fail = g.update(state.player, state.activeGhosts); if (failUnlessInvuln(fail)) return; }
     for (const burrower of state.burrowers || []) burrower.update(allActors);
     syncBossHud();
