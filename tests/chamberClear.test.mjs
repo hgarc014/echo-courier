@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { chamberClearedByRift, chamberClearedByTimer, chamberClearedByWave } from '../src/rogue/chamberClear.js';
 import { chooseAspect } from '../src/ui/aspectPick.js';
 import { main, state, keys } from './harness/replay.mjs';
+import { TickHound } from '../src/entities/hazards.js';
 
 const zone = { x: 0, y: 0, w: 10, h: 10 };
 const inside = { x: 2, y: 2, w: 4, h: 4 };
@@ -81,11 +82,26 @@ assert.equal(state.currentLevelMeta.obj, 'Defeat every Tick Hound, then enter th
 assert.equal(state.rogueChamber.type, 'wave');
 assert.equal(state.rogueChamber.ticksLeft, null);
 assert.equal(state.guards.length, 0, 'opening wave is preceded by a readable spawn telegraph');
+assert.deepEqual([state.packages.length, state.plates.length, state.doors.length, state.cameras.length, state.lasers.length], [0, 0, 0, 0, 0], 'Rogue runtime strips campaign puzzle actors');
 main.stepSimulation();
 assert.equal(state.rogueChamber.director.telegraphs.length, 3);
 assert.equal(state.rogueChamber.enemiesLeft, 7, 'both seeded waves count toward the clear');
 assert.equal(state.rogueChamber.aspectPending, false);
-assert.equal(state.rogueChamber.zone.x < 0, true);
+assert.ok(state.rogueChamber.zone.x >= 0 && state.rogueChamber.zone.x + state.rogueChamber.zone.w <= (state.mapWidth || 800), 'closed kill rift has a reachable runtime destination');
+for (let i = 0; i < 45; i++) main.stepSimulation();
+assert.equal(state.guards.length, 3);
+assert.ok(state.guards.every(enemy => enemy instanceof TickHound), 'Rogue spawns no campaign Guard instances');
+state.guards.forEach(enemy => { enemy.dead = true; });
+const openingDirector = state.rogueChamber.director;
+openingDirector.waveIndex = openingDirector.waves.length - 1;
+openingDirector.queued = 0; openingDirector.telegraphs = []; openingDirector.done = true;
+main.stepSimulation();
+assert.equal(state.rogueChamber.type, 'rift');
+assert.equal(state.rogueChamber.riftOpen, true);
+state.player.x = state.rogueChamber.zone.x;
+state.player.y = state.rogueChamber.zone.y;
+main.stepSimulation();
+assert.equal(state.rogueChamber.aspectPending, true, 'the reachable post-wave rift completes the chamber');
 
 begin();
 state.rogueChamber = null;

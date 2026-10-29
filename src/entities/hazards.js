@@ -1079,6 +1079,10 @@ export class Guard extends Entity {
     }
 }
 
+// Rogue combat uses the campaign guard path format only as an arena spawn marker.
+// A distinct runtime class keeps campaign stealth actors out of Rogue chambers.
+export class TickHound extends Guard {}
+
 // Real Rogue Run chambers set isRogue. Package-free floor replays also set
 // rogueRun.active so the exit zone can clear; those guards keep campaign AI.
 export function rogueCombatActive() {
