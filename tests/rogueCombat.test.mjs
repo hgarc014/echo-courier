@@ -197,6 +197,12 @@ assert.equal(GUARD_STUN_TICKS, 45);
     main.stepSimulation();
     assert.equal(g.dead, true);
     assert.equal(state.rogueChamber.enemiesLeft, 0, 'a dead guard is not left in the wave');
+    assert.equal(state.rogueChamber.type, 'rift', 'the cleared wave opens the exit rift');
+    assert.equal(state.rogueChamber.aspectPending, false, 'the player must still enter the rift');
+    state.player.x = state.deliveryZone.x;
+    state.player.y = state.deliveryZone.y;
+    release();
+    main.stepSimulation();
     assert.equal(state.rogueChamber.aspectPending, true);
 }
 

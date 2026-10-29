@@ -1454,6 +1454,12 @@ function tickRogueChamber() {
     if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') chamber.ticksLeft -= 1;
     else if (chamber.type === 'wave') {
         chamber.enemiesLeft = (state.guards || []).filter(g => g && !g.dead).length;
+        if (chamber.enemiesLeft <= 0) {
+            chamber.type = 'rift';
+            chamber.riftOpen = true;
+            const objective = document.getElementById('objective-text');
+            if (objective) objective.innerText = 'Wave cleared — enter the open rift.';
+        }
     }
 }
 
@@ -2508,6 +2514,20 @@ function draw() {
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx);
+    if (state.rogueChamber?.riftOpen && state.deliveryZone) {
+        const z = state.deliveryZone;
+        const pulse = 0.65 + Math.sin(state.currentTick * 0.15) * 0.2;
+        ctx.save();
+        ctx.strokeStyle = `rgba(0,243,255,${pulse})`;
+        ctx.fillStyle = 'rgba(72,30,130,.24)';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.ellipse(z.x + z.w / 2, z.y + z.h / 2, z.w * .36, z.h * .46, state.currentTick * .012, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#d8c7ff'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('RIFT OPEN', z.x + z.w / 2, z.y - 8);
+        ctx.restore();
+    }
     for (const pk of (state.roguePickups || [])) {
         if (pk.collected) continue;
         ctx.save(); ctx.fillStyle = pk.type === 'sand_max' ? '#ffb347' : '#f4d35e'; ctx.globalAlpha = 0.85;
