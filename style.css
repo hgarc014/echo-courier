@@ -1181,6 +1181,22 @@ body.touch-ui .demo-skip-btn {
     width: 100%;
     justify-content: center;
 }
+
+.route-ledger {
+    background: radial-gradient(circle at 50% 20%, rgba(18,52,68,.97), rgba(5,8,14,.98) 65%);
+    z-index: 950;
+}
+.route-ledger-kicker { color: #00f3ff; letter-spacing: .28em; font-weight: 800; }
+.route-ledger-progress { color: #a8bbc7; text-transform: uppercase; }
+.route-ledger-choices { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 18px; width: min(620px, 90%); }
+.route-node { position: relative; min-height: 160px; padding: 20px; text-align: left; border: 1px solid rgba(0,243,255,.35); background: linear-gradient(145deg, rgba(14,25,34,.98), rgba(21,13,31,.98)); }
+.route-node:hover { transform: translateY(-3px); border-color: #00f3ff; box-shadow: 0 12px 34px rgba(0,243,255,.16); }
+.route-node-type { display: block; color: #fff; font-size: 1.05rem; font-weight: 900; }
+.route-node-room { display: block; margin-top: 6px; color: #00f3ff; font-size: .76rem; }
+.route-node-reward { display: block; margin-top: 24px; color: #ffd65a; }
+.route-node-risk { display: block; margin-top: 8px; color: #ff6f91; letter-spacing: .12em; }
+.route-ledger-note { color: #788a96; font-size: .8rem; }
+@media (max-width: 620px) { .route-ledger-choices { grid-template-columns: 1fr; gap: 10px; } .route-node { min-height: 112px; } }
 .aspect-card {
     flex: 1 1 0;
     min-width: 0;

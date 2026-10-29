@@ -47,7 +47,7 @@
             <div id="rogue-weapon-list" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:8px 0 12px;"></div>
             <div id="rogue-relic-list" class="rogue-relic-list" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:720px;margin:8px 0 12px;"></div>
             <div id="rogue-hub-shop" class="rogue-shop" style="margin:10px 0;font-size:0.85rem;text-transform:uppercase;"><div class="rogue-shop-points"></div><div class="rogue-shop-list"></div></div>
-            <button class="primary-btn" style="width: 300px;" onclick="startRogueRun()">START RUN</button>
+            <button class="primary-btn" style="width: 300px;" onclick="startRogueLedgerRun()">START ROUTE</button>
             <button class="secondary-btn" style="margin-top: 20px;" onclick="showSubMenu('main')">BACK</button>
         </div>
 
@@ -223,6 +223,13 @@
                             <span class="aspect-card-detail">Blink afterimages deal double damage.</span>
                         </button>
                     </div>
+                </div>
+                <div id="route-ledger" class="hidden overlay panel route-ledger" role="dialog" aria-labelledby="route-ledger-title">
+                    <p class="route-ledger-kicker">ROUTE LEDGER</p>
+                    <h2 id="route-ledger-title">Choose the next timeline</h2>
+                    <p id="route-ledger-progress" class="route-ledger-progress"></p>
+                    <div id="route-ledger-choices" class="route-ledger-choices"></div>
+                    <p class="route-ledger-note">The abandoned future collapses when you depart.</p>
                 </div>
             </div>
 
