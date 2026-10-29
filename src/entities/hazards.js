@@ -988,12 +988,24 @@ export class Guard extends Entity {
                 if (this.lostSightTimer <= 0) this.state = 'patrol';
             }
         } else {
-            // Rogue hunt: always chase. Cloak and the vision cone do not break detection.
+            // Rogue hunt: always chase. A Parcel Driver decoy temporarily becomes
+            // the target; ordinary Echoes remain combat partners rather than lures.
+            let huntTarget = player;
+            let bestDecoyDistance = Infinity;
+            for (const ghost of ghosts || []) {
+                if (!ghost?.isActive || !ghost.isDecoy) continue;
+                const distance = Math.hypot(ghost.x - this.x, ghost.y - this.y);
+                if (distance < bestDecoyDistance) { bestDecoyDistance = distance; huntTarget = ghost; }
+            }
             this.state = 'chase';
             this.lostSightTimer = GUARD_LOST_SIGHT;
-            this.lastSeenX = player.x;
-            this.lastSeenY = player.y;
-            this._faceToward(player.x, player.y);
+            this.lastSeenX = huntTarget.x;
+            this.lastSeenY = huntTarget.y;
+            this._faceToward(huntTarget.x, huntTarget.y);
+            if (huntTarget !== player && AABB(this.x, this.y, this.w, this.h, huntTarget.x, huntTarget.y, huntTarget.w, huntTarget.h)) {
+                huntTarget.isActive = false;
+                return null;
+            }
         }
 
         if (this.state === 'chase') {

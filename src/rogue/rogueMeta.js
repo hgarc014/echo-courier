@@ -11,10 +11,11 @@ export const MAX_RECORD_BONUS_S = 120;
 export const SHOP_MAX_LEVEL = 3;
 export const BASE_SAND_S = 3;
 export const START_SAND_STEP_S = 0.5;
+const WEAPON_IDS = ['chrono-baton', 'parcel-driver', 'route-cutter'];
 
 export function defaultRogueMeta() {
     return { echoSlotBonus: 0, recordBonusS: 0, runs: 0, clears: 0, shopPoints: 0, sandTankLevel: 0, startSandLevel: 0,
-        lastRunSummary: null, lastReaction: null, recentDialogueIds: [], auditorTrust: 0, relationshipUnlocked: false };
+        selectedWeapon: 'chrono-baton', lastRunSummary: null, lastReaction: null, recentDialogueIds: [], auditorTrust: 0, relationshipUnlocked: false };
 }
 
 function storage() { return typeof localStorage === 'undefined' ? null : localStorage; }
@@ -33,6 +34,7 @@ export function loadRogueMeta() {
             shopPoints: Math.max(0, p.shopPoints | 0),
             sandTankLevel: Math.max(0, Math.min(SHOP_MAX_LEVEL, p.sandTankLevel | 0)),
             startSandLevel: Math.max(0, Math.min(SHOP_MAX_LEVEL, p.startSandLevel | 0)),
+            selectedWeapon: WEAPON_IDS.includes(p.selectedWeapon) ? p.selectedWeapon : 'chrono-baton',
             lastRunSummary: p.lastRunSummary && typeof p.lastRunSummary === 'object' ? p.lastRunSummary : null,
             lastReaction: p.lastReaction && typeof p.lastReaction === 'object' ? p.lastReaction : null,
             recentDialogueIds: Array.isArray(p.recentDialogueIds) ? p.recentDialogueIds.filter(id => typeof id === 'string').slice(-5) : [],
@@ -44,6 +46,13 @@ export function loadRogueMeta() {
 
 export function saveRogueMeta(meta) {
     try { storage()?.setItem(ROGUE_META_KEY, JSON.stringify(meta)); } catch {}
+}
+
+export function selectRogueWeapon(id, meta = loadRogueMeta()) {
+    if (!WEAPON_IDS.includes(id)) return null;
+    const next = { ...meta, selectedWeapon: id };
+    saveRogueMeta(next);
+    return next;
 }
 
 /** The single unlock currently on offer, or null if everything is maxed. */

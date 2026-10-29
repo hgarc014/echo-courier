@@ -1,7 +1,7 @@
 // Records gameplay key state per simulated tick so a run can be replayed headlessly
 // (tests/harness/replay.mjs). Frames are run-length encoded and split into loops
 // at every rewind (R press, loop timer, or fail reset).
-export const RECORDED_KEYS = ['w', 'a', 's', 'd', 'space', 'r', 'shift', 'f', 'c'];
+export const RECORDED_KEYS = ['w', 'a', 's', 'd', 'space', 'j', 'k', 'l', 'r', 'shift', 'f', 'c'];
 
 let rec = null;
 
