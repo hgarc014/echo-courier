@@ -32,6 +32,7 @@ import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, 
 import { createEncounterDirector, createPressureDirector, encounterRemaining, tickEncounterDirector, tickPressureDirector } from './rogue/encounterDirector.js';
 import { authoredShellWalls, composeEncounter } from './rogue/encounterComposition.js';
 import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/encounterTelemetry.js';
+import { CombatGatekeeper, combatBossHud } from './rogue/combatBosses.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -376,7 +377,10 @@ function syncBossHud() {
     const boss = (state.burrowers || [])[0];
     const required = state.deliveryZone ? getRequiredPackages() : [];
     const delivered = required.length > 0 && required.every(isPackageDelivered);
-    const hud = burrowerHud(boss, { delivered });
+    const combatBoss = state.rogueChamber?.isBoss
+        ? (state.guards || []).find(enemy => enemy && enemy.maxHp > 0 && !enemy.dead)
+        : null;
+    const hud = combatBoss ? combatBossHud(combatBoss) : burrowerHud(boss, { delivered });
     const key = hud ? `${hud.progress}|${hud.goal}` : '';
     if (key === bossHudKey) return;
     bossHudKey = key;
@@ -1364,7 +1368,7 @@ function rogueSpawnPoints(layout) {
     return unique.slice(0, 6);
 }
 
-function enterRogueChamber(biomeIndex, fresh) {
+function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     const carriedHp = fresh ? PLAYER_MAX_HP : Math.max(1, state.player?.hp ?? PLAYER_MAX_HP);
     const meta = loadRogueMeta();
     const biome = BIOME_ORDER[biomeIndex] || BIOME_ORDER[0];
@@ -1373,7 +1377,7 @@ function enterRogueChamber(biomeIndex, fresh) {
     const chamber = biome.generateChamber(state.rogueRun.seed, opening ? 'patrol-corridor' : undefined);
     const layout = chamber.layout;
     const cmeta = chamber.meta;
-    const clear = cmeta.clear;
+    const clear = bossMode ? 'boss' : cmeta.clear;
     const mapWidth = layout.mapWidth || 800;
     const mapHeight = layout.mapHeight || 600;
     const rawRift = layout.deliveryZone || { x: mapWidth - 110, y: mapHeight / 2 - 50, w: 80, h: 100 };
@@ -1412,7 +1416,7 @@ function enterRogueChamber(biomeIndex, fresh) {
     }
     const director = clear === 'kill'
         ? createEncounterDirector({ biome: biome.id, seed: directorSeed, spawnPoints, encounter })
-        : createPressureDirector({ seed: directorSeed, spawnPoints, initialDelay: clear === 'rift' ? 90 : 0 });
+        : (clear === 'boss' ? null : createPressureDirector({ seed: directorSeed, spawnPoints, initialDelay: clear === 'rift' ? 90 : 0 }));
     state.rogueChamber = {
         type: clear === 'kill' ? 'wave' : clear,
         zone: runtimeRift,
@@ -1420,6 +1424,8 @@ function enterRogueChamber(biomeIndex, fresh) {
         enemiesLeft: clear === 'kill' ? cmeta.waveCount : null,
         aspectPending: false,
         riftOpen: clear === 'rift',
+        isBoss: bossMode,
+        bossPending: !bossMode && biome.id === 'second-hand-halls',
         encounter,
         // Chamber setup resets currentTick below, so every room telemetry clock starts at zero.
         telemetry: beginEncounterTelemetry(encounter, 0),
@@ -1446,12 +1452,12 @@ function enterRogueChamber(biomeIndex, fresh) {
     const baseGhosts = (cmeta.maxGhosts ?? 2) + meta.echoSlotBonus;
     const carriedGhosts = !fresh && state.currentLevelMeta ? Number(state.currentLevelMeta.maxGhosts) || 0 : 0;
     state.currentLevelMeta = {
-        name: cmeta.name,
-        obj: cmeta.obj,
+        name: bossMode ? 'Gatekeeper Audit' : cmeta.name,
+        obj: bossMode ? 'Defeat the Gatekeeper with attacks, Echoes, and time verbs.' : cmeta.obj,
         par: cmeta.par,
         hall: cmeta.hall,
         biome: biome.id,
-        clear: cmeta.clear,
+        clear,
         challenge: { desc: 'Rogue run', check: () => false },
         maxGhosts: Math.max(baseGhosts, carriedGhosts),
         loopTime: rogueLoopTime(meta),
@@ -1471,6 +1477,16 @@ function enterRogueChamber(biomeIndex, fresh) {
     applyLoadedLevel(deserializeLevel({ ...layout }));
     Object.assign(state.deliveryZone, runtimeRift);
     state.guards = [];
+    if (bossMode) {
+        const candidates = [
+            { x: mapWidth - 190, y: mapHeight / 2 - 30 },
+            { x: mapWidth / 2 - 30, y: 90 },
+            { x: mapWidth / 2 - 30, y: mapHeight - 150 }
+        ];
+        const spot = candidates.find(point => !(layout.walls || []).some(wall =>
+            AABB(point.x, point.y, 60, 60, wall.x, wall.y, wall.w, wall.h))) || candidates[0];
+        state.guards.push(new CombatGatekeeper(spot.x, spot.y));
+    }
     state.plates = []; state.doors = []; state.cameras = []; state.lasers = []; state.drones = []; state.packages = [];
     state.player.hp = carriedHp;
     state.player.maxHp = PLAYER_MAX_HP;
@@ -1522,6 +1538,13 @@ function advanceRogueBiome() {
     return true;
 }
 
+function enterRogueBossChamber() {
+    const run = state.rogueRun;
+    if (!run?.active) return false;
+    enterRogueChamber(run.biomeIndex ?? 0, false, true);
+    return true;
+}
+
 // Timer chambers count down. Wave chambers recount guards that are not dead.
 // Rewind ticks and an open aspect picker do not advance either clock.
 function tickRogueChamber() {
@@ -1561,6 +1584,14 @@ function tickRogueChamber() {
             chamber.riftOpen = true;
             const objective = document.getElementById('objective-text');
             if (objective) objective.innerText = 'Wave cleared — enter the open rift.';
+        }
+    } else if (chamber.type === 'boss') {
+        chamber.enemiesLeft = alive;
+        if (alive <= 0) {
+            chamber.type = 'rift';
+            chamber.riftOpen = true;
+            const objective = document.getElementById('objective-text');
+            if (objective) objective.innerText = 'Gatekeeper defeated — enter the open rift.';
         }
     }
 }
@@ -2198,6 +2229,11 @@ function update() {
             if (chamber) {
                 chamber.aspectPending = true;
                 SFX.win();
+                if (chamber.bossPending) {
+                    enterRogueBossChamber();
+                    updatePrevKeys();
+                    return;
+                }
                 showAspectPick(id => {
                     applyAspect(id);
                     hideAspectPick();

@@ -454,6 +454,12 @@ check('a fresh run starts in Halls and a clear advances into Hourglass Warrens',
             state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
             main.stepSimulation();
         }
+        if (state.rogueChamber.isBoss && !state.rogueChamber.aspectPending) {
+            state.guards.forEach(enemy => { enemy.dead = true; });
+            main.stepSimulation();
+            state.rogueChamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
+            main.stepSimulation();
+        }
         assert.equal(state.rogueChamber.aspectPending, true);
         assert.equal(kicker.textContent, 'Second-hand Halls');
         chooseAspect('echo-slot');

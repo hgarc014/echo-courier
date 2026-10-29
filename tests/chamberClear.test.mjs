@@ -8,6 +8,7 @@ import { chamberClearedByRift, chamberClearedByTimer, chamberClearedByWave } fro
 import { chooseAspect } from '../src/ui/aspectPick.js';
 import { main, state, keys } from './harness/replay.mjs';
 import { TickHound } from '../src/entities/hazards.js';
+import { CombatGatekeeper } from '../src/rogue/combatBosses.js';
 
 const zone = { x: 0, y: 0, w: 10, h: 10 };
 const inside = { x: 2, y: 2, w: 4, h: 4 };
@@ -101,7 +102,17 @@ assert.equal(state.rogueChamber.riftOpen, true);
 state.player.x = state.rogueChamber.zone.x;
 state.player.y = state.rogueChamber.zone.y;
 main.stepSimulation();
-assert.equal(state.rogueChamber.aspectPending, true, 'the reachable post-wave rift completes the chamber');
+assert.equal(state.rogueChamber.isBoss, true, 'the Halls rift enters its boss chamber before rewards');
+assert.equal(state.rogueChamber.type, 'boss');
+assert.equal(state.guards.length, 1);
+assert.ok(state.guards[0] instanceof CombatGatekeeper);
+state.guards[0].dead = true;
+main.stepSimulation();
+assert.equal(state.rogueChamber.type, 'rift');
+state.player.x = state.rogueChamber.zone.x;
+state.player.y = state.rogueChamber.zone.y;
+main.stepSimulation();
+assert.equal(state.rogueChamber.aspectPending, true, 'boss kill and rift open the reward choice');
 
 begin();
 state.rogueChamber = null;
