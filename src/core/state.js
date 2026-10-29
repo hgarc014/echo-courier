@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -53,6 +53,7 @@ export const state = {
     tickHoundAtlas: null,
     vfxAtlas: null,
     modernPropsAtlas: null,
+    courierActionAtlas: null,
     worldAtlas: null,
     
     pastRuns: [],
@@ -144,6 +145,14 @@ modernPropsSheet.onload = () => {
     catch { state.modernPropsAtlas = null; }
 };
 modernPropsSheet.onerror = () => { state.modernPropsAtlas = null; };
+
+const courierActionsSheet = new Image();
+courierActionsSheet.src = COURIER_ACTIONS_SHEET_PATH;
+courierActionsSheet.onload = () => {
+    try { state.courierActionAtlas = buildCourierActionAtlas(courierActionsSheet); }
+    catch { state.courierActionAtlas = null; }
+};
+courierActionsSheet.onerror = () => { state.courierActionAtlas = null; };
 
 const propsSheet = new Image();
 const envSheet = new Image();

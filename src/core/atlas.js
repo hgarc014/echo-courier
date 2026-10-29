@@ -6,6 +6,7 @@ export const ENV_SHEET_PATH = 'assets/sprite-sheets/echo-courier-environment-eff
 export const TICK_HOUND_SHEET_PATH = 'assets/sprite-sheets/tick-hound-v2.png';
 export const VFX_SHEET_PATH = 'assets/sprite-sheets/echo-courier-vfx-v2.png';
 export const MODERN_PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-v2.png';
+export const COURIER_ACTIONS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-actions-v2.png';
 
 export const VFX_FRAME_GRID = Object.freeze({
     playerSwing: [0, 0], echoSwing: [1, 0], playerImpact: [2, 0], enemyImpact: [3, 0],
@@ -17,6 +18,12 @@ export const MODERN_PROPS_FRAME_GRID = Object.freeze({
     package: [0, 0], heavy: [1, 0], fragile: [2, 0], sandRefill: [3, 0],
     sandMax: [0, 1], plate: [1, 1], platePressed: [2, 1], platePresent: [3, 1],
     plateFirst: [0, 2], plateLast: [1, 2], camera: [2, 2], timeShard: [3, 2]
+});
+
+export const COURIER_ACTION_FRAME_GRID = Object.freeze({
+    quickWindup: [0, 0], quickStrike: [1, 0], quickRecovery: [2, 0], heavyWindup: [3, 0],
+    heavyStrike: [0, 1], dashStart: [1, 1], dashTravel: [2, 1], dashRecovery: [3, 1],
+    hurt: [0, 2], downed: [1, 2], rupture: [2, 2], rewind: [3, 2]
 });
 
 // Occupancy-measured rects on echo-courier-characters.png (1536x1024).
@@ -154,6 +161,34 @@ export function buildModernPropsAtlas(sheet) {
         atlas[name] = sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
     }
     return atlas;
+}
+
+export function buildCourierActionAtlas(sheet) {
+    const iw = sheet?.naturalWidth || sheet?.width || 0;
+    const ih = sheet?.naturalHeight || sheet?.height || 0;
+    if (!iw || !ih) return null;
+    const cellW = Math.floor(iw / 4);
+    const cellH = Math.floor(ih / 3);
+    const atlas = { ready: true, cellW, cellH };
+    for (const [name, [column, row]] of Object.entries(COURIER_ACTION_FRAME_GRID)) {
+        atlas[name] = sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
+    }
+    return atlas;
+}
+
+export function pickCourierActionFrame(atlas, actor) {
+    if (!atlas?.ready || !actor) return null;
+    if ((actor.invulnTicks | 0) > 34 && atlas.hurt) return { img: atlas.hurt, kind: 'hurt' };
+    if ((actor.attackTicks | 0) <= 0) return null;
+    const total = actor.attackTotalTicks || 20;
+    const elapsed = total - actor.attackTicks;
+    const activeFrom = actor.attackActiveFrom ?? 5;
+    const activeTo = actor.attackActiveTo ?? 10;
+    if (actor.weaponAction === 'special' && atlas.rupture) return { img: atlas.rupture, kind: 'special' };
+    const heavy = actor.weaponAction === 'heavy';
+    if (elapsed < activeFrom) return { img: heavy ? atlas.heavyWindup : atlas.quickWindup, kind: 'windup' };
+    if (elapsed <= activeTo) return { img: heavy ? atlas.heavyStrike : atlas.quickStrike, kind: 'active' };
+    return { img: heavy ? atlas.quickRecovery : atlas.quickRecovery, kind: 'recovery' };
 }
 
 export function pickTickHoundFrame(atlas, hound, tick = 0) {
