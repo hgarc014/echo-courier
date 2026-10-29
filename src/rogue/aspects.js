@@ -33,3 +33,16 @@ export function pickAspectChoices(seed, held = [], count = 3) {
 export function hasAspect(run, id) {
     return !!run?.aspects?.includes(id);
 }
+
+export function aspectModifiers(run) {
+    return {
+        stillstepDamage: hasAspect(run, 'stillstep') ? 2 : 1,
+        echoDamage: hasAspect(run, 'echo-chorus') ? 2 : 1,
+        echoKnockback: hasAspect(run, 'recoil-echo') ? 24 : 12,
+        blinkDamage: hasAspect(run, 'afterimage-blade') ? 2 : 1,
+        ruptureRadius: hasAspect(run, 'wide-rupture') ? 230 : 160,
+        maxHpBonus: hasAspect(run, 'hourglass-heart') ? 1 : 0,
+        sandOnKill: hasAspect(run, 'sand-leech') ? 0.25 : 0,
+        secondStrike: hasAspect(run, 'second-strike')
+    };
+}

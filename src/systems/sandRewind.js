@@ -142,7 +142,7 @@ export function canTimeRupture(sand, cooldown = 0) {
     return TIME_RUPTURE_ENABLED && !!sand && sand.sand >= TIME_RUPTURE_COST && cooldown <= 0;
 }
 
-export function timeRupture(sand, origin, enemies, cooldown = 0, ruptureId = 0) {
+export function timeRupture(sand, origin, enemies, cooldown = 0, ruptureId = 0, radius = TIME_RUPTURE_RADIUS) {
     if (!canTimeRupture(sand, cooldown) || !origin) return { ok: false, affected: 0 };
     sand.sand = Math.max(0, sand.sand - TIME_RUPTURE_COST);
     let affected = 0;
@@ -150,7 +150,7 @@ export function timeRupture(sand, origin, enemies, cooldown = 0, ruptureId = 0) 
         if (!enemy || enemy.dead) continue;
         const dx = enemy.x + (enemy.w || 0) / 2 - origin.x;
         const dy = enemy.y + (enemy.h || 0) / 2 - origin.y;
-        if (Math.hypot(dx, dy) > TIME_RUPTURE_RADIUS) continue;
+        if (Math.hypot(dx, dy) > radius) continue;
         enemy.ruptureTicks = Math.max(enemy.ruptureTicks || 0, TIME_RUPTURE_FREEZE);
         enemy.rupturePendingId = ruptureId;
         affected++;

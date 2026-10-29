@@ -16,6 +16,9 @@ assert.equal(near.rupturePendingId, 9);
 assert.equal(far.ruptureTicks, undefined);
 assert.equal(canTimeRupture(sand, TIME_RUPTURE_COOLDOWN), false, 'cooldown blocks rupture');
 assert.equal(timeRupture(sand, { x: 115, y: 115 }, [near], TIME_RUPTURE_COOLDOWN, 10).ok, false);
+const wideSand = createSandState({ maxSand: 3, sand: 3 });
+const edge = { x: 320, y: 100, w: 30, h: 30, dead: false };
+assert.equal(timeRupture(wideSand, { x: 115, y: 115 }, [edge], 0, 11, 230).affected, 1, 'wide rupture reaches beyond the baseline radius');
 
 console.log('time rupture ok');
 
