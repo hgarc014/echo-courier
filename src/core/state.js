@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, CHRONO_SENTRY_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, STILL_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildChronoSentryAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, buildStillAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, CHRONO_SENTRY_SHEET_PATH, ECHO_LEECH_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, STILL_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildChronoSentryAtlas, buildEchoLeechAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, buildStillAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -52,6 +52,7 @@ export const state = {
     playerAtlas: null,
     tickHoundAtlas: null,
     chronoSentryAtlas: null,
+    echoLeechAtlas: null,
     vfxAtlas: null,
     modernPropsAtlas: null,
     courierActionAtlas: null,
@@ -141,6 +142,14 @@ chronoSentrySheet.onload = () => {
     catch { state.chronoSentryAtlas = null; }
 };
 chronoSentrySheet.onerror = () => { state.chronoSentryAtlas = null; };
+
+const echoLeechSheet = new Image();
+echoLeechSheet.src = ECHO_LEECH_SHEET_PATH;
+echoLeechSheet.onload = () => {
+    try { state.echoLeechAtlas = buildEchoLeechAtlas(echoLeechSheet); }
+    catch { state.echoLeechAtlas = null; }
+};
+echoLeechSheet.onerror = () => { state.echoLeechAtlas = null; };
 
 const vfxSheet = new Image();
 vfxSheet.src = VFX_SHEET_PATH;

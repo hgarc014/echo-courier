@@ -84,7 +84,7 @@ function settleRogueClear() {
 release();
 main.startRogueRun(1);
 assert.equal(state.currentLevelMeta.name, 'Patrol Corridor');
-assert.equal(state.currentLevelMeta.obj, 'Defeat every Tick Hound, then enter the rift.');
+assert.equal(state.currentLevelMeta.obj, 'Defeat every hostile, then enter the rift.');
 assert.equal(state.rogueChamber.type, 'wave');
 assert.equal(state.rogueChamber.ticksLeft, null);
 assert.equal(state.guards.length, 0, 'opening wave is preceded by a readable spawn telegraph');

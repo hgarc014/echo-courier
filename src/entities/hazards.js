@@ -1256,6 +1256,104 @@ export class ChronoSentry extends Guard {
     }
 }
 
+export class EchoLeech extends Guard {
+    constructor(points) {
+        super(points);
+        this.role = 'leech';
+        this.hp = 2; this.maxHp = 2;
+        this.roleColor = '#e044ff';
+        this.siphonTarget = null;
+        this.chargeTicks = 0;
+        this.siphonTicks = 0;
+    }
+    reset() {
+        super.reset();
+        this.hp = 2; this.maxHp = 2; this.dead = false;
+        this.siphonTarget = null; this.chargeTicks = 0; this.siphonTicks = 0;
+    }
+    _pickEcho(ghosts) {
+        let best = null, distance = Infinity;
+        for (const ghost of ghosts || []) {
+            if (!ghost?.isActive || ghost.vaporized || ghost.isDecoy) continue;
+            const d = Math.hypot(ghost.x - this.x, ghost.y - this.y);
+            if (d < distance) { best = ghost; distance = d; }
+        }
+        return best;
+    }
+    update(player, ghosts) {
+        if (this.dead) return null;
+        if (this.hurtTicks > 0) this.hurtTicks--;
+        if (this.stunTicks > 0) { this.stunTicks--; return null; }
+        if (!this.siphonTarget?.isActive) this.siphonTarget = this._pickEcho(ghosts);
+        const target = this.siphonTarget || player;
+        const dx = target.x + target.w / 2 - (this.x + this.w / 2);
+        const dy = target.y + target.h / 2 - (this.y + this.h / 2);
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        this.facingAngle = Math.atan2(dy, dx);
+        this.facingX = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0;
+        this.facingY = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+        if (this.siphonTarget && distance > 145) {
+            this.chargeTicks = 0; this.siphonTicks = 0; this.siphonTarget = this._pickEcho(ghosts);
+        }
+        if (this.siphonTarget && distance <= 105) {
+            if (this.siphonTicks > 0) {
+                this.siphonTicks--;
+                this.siphonTarget.localTick = Math.min(this.siphonTarget.runData?.length || Infinity, (this.siphonTarget.localTick || 0) + 1.25);
+                this.siphonTarget.commandLockTicks = Math.max(this.siphonTarget.commandLockTicks | 0, 2);
+                this.siphonTarget.commandFxTicks = Math.max(this.siphonTarget.commandFxTicks | 0, 8);
+                if (this.siphonTicks % 30 === 0) {
+                    this.siphonTarget.integrity = Math.max(0, (this.siphonTarget.integrity ?? 3) - 1);
+                    if (this.siphonTarget.integrity <= 0) {
+                        this.siphonTarget.isActive = false; this.siphonTarget.vaporized = true;
+                        this.siphonTarget = null; this.siphonTicks = 0;
+                    }
+                }
+            } else if (this.chargeTicks > 0) {
+                this.chargeTicks--;
+                if (this.chargeTicks === 0) this.siphonTicks = 90;
+            } else this.chargeTicks = 30;
+            return null;
+        }
+        const speed = this.siphonTarget ? 2.45 : 2.05;
+        if (distance > 28) {
+            const nx = this.x + dx / distance * speed;
+            const ny = this.y + dy / distance * speed;
+            if (!checkWallCollision(nx, this.y, this.w, this.h)) this.x = nx;
+            if (!checkWallCollision(this.x, ny, this.w, this.h)) this.y = ny;
+        }
+        if (!this.siphonTarget && AABB(this.x - 4, this.y - 4, this.w + 8, this.h + 8, player.x, player.y, player.w, player.h)) {
+            return { combatDamage: 1, reason: 'Caught by an Echo Leech!' };
+        }
+        return null;
+    }
+    render(ctx) {
+        const atlas = state.echoLeechAtlas;
+        if (!atlas?.ready) return super.render(ctx);
+        let img = this.dead ? atlas.dead : (this.hurtTicks > 0 ? atlas.hit : (this.siphonTicks > 0 ? atlas.siphon : (this.chargeTicks > 0 ? atlas.charge : (this.facingX < 0 ? atlas.glideLeft : (this.facingX > 0 ? atlas.glideRight : (this.facingY < 0 ? atlas.idleBack : atlas.idleFront))))));
+        const visualW = 72, visualH = 72;
+        const x = this.x + this.w / 2 - visualW / 2;
+        const y = this.y + this.h - visualH - 2;
+        const pulse = .5 + .5 * Math.sin((state.currentTick || 0) * .18);
+        ctx.save();
+        ctx.fillStyle = `rgba(224,68,255,${.1 + pulse * .13})`;
+        ctx.beginPath(); ctx.ellipse(this.x + 15, this.y + 28, 24, 7, 0, 0, Math.PI * 2); ctx.fill();
+        if (this.siphonTarget && (this.chargeTicks > 0 || this.siphonTicks > 0)) {
+            const tx = this.siphonTarget.x + this.siphonTarget.w / 2;
+            const ty = this.siphonTarget.y + this.siphonTarget.h / 2;
+            ctx.strokeStyle = this.siphonTicks > 0 ? `rgba(224,68,255,${.65 + pulse * .35})` : `rgba(0,234,255,${.35 + pulse * .35})`;
+            ctx.lineWidth = this.siphonTicks > 0 ? 4 : 2; ctx.setLineDash(this.siphonTicks > 0 ? [] : [5, 5]);
+            ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 15); ctx.quadraticCurveTo((this.x + tx) / 2, Math.min(this.y, ty) - 25, tx, ty); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        ctx.restore();
+        drawSprite(ctx, img, x, y, visualW, visualH, { alpha: this.dead ? .5 : 1, tint: this.ruptureTicks > 0 ? '#8c7dff' : null, tintAlpha: .38, valign: 'bottom' });
+        if (!this.dead) {
+            ctx.fillStyle = 'rgba(8,5,14,.88)'; ctx.fillRect(this.x - 6, y - 7, this.w + 12, 4);
+            ctx.fillStyle = this.roleColor; ctx.fillRect(this.x - 6, y - 7, (this.w + 12) * Math.max(0, this.hp / this.maxHp), 4);
+        }
+    }
+}
+
 export class EliteTickHound extends TickHound {
     constructor(points) {
         super(points, 'bruiser');

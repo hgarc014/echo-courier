@@ -14,7 +14,7 @@ import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems, selectRogueWeapon, buyRogueRelic, equipRogueRelic } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
-import { ChronoSentry, EliteTickHound, TickHound, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
+import { ChronoSentry, EchoLeech, EliteTickHound, TickHound, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
@@ -1672,7 +1672,7 @@ function tickRogueChamber() {
     const spawnHounds = points => {
         for (const point of points) {
             const path = [{ ...point }, { x: point.x + 1, y: point.y }];
-            state.guards.push(point.role === 'elite' ? new EliteTickHound(path) : (point.role === 'sentry' ? new ChronoSentry(path) : new TickHound(path, point.role)));
+            state.guards.push(point.role === 'elite' ? new EliteTickHound(path) : (point.role === 'sentry' ? new ChronoSentry(path) : (point.role === 'leech' ? new EchoLeech(path) : new TickHound(path, point.role))));
         }
     };
     const openClearedRift = message => {

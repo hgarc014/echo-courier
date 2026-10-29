@@ -166,6 +166,7 @@ export class Ghost extends Entity {
         this.replayOffsetY = 0;
         this.commandLockTicks = 0;
         this.commandFxTicks = 0;
+        this.integrity = 3;
     }
     update(pkgs, staticZones, winds, playbackRate = 1) {
         if (this.vaporized) { this.isActive = false; this.moving = false; return; }

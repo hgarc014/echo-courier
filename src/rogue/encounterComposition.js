@@ -18,6 +18,7 @@ export const SQUAD_PROFILES = [
     { id: 'clock-swarm', family: 'swarm', roles: ['skirmisher', 'skirmisher', 'chaser', 'chaser'], threat: 4 },
     { id: 'heavy-escort', family: 'escort', roles: ['bruiser', 'chaser', 'chaser'], threat: 5 },
     { id: 'sentry-crossfire', family: 'crossfire', roles: ['sentry', 'chaser', 'sentry'], threat: 5 },
+    { id: 'echo-harvest', family: 'parasite', roles: ['leech', 'chaser', 'sentry'], threat: 6 },
     { id: 'elite-hunt', family: 'elite', roles: ['elite', 'chaser', 'chaser'], threat: 6 }
 ];
 
@@ -29,7 +30,7 @@ export const MODIFIERS = [
 ];
 
 export const OBJECTIVES = [
-    { id: 'break-the-pack', family: 'elimination', allowedSquads: ['pursuit', 'formation', 'swarm', 'escort', 'crossfire', 'elite'] },
+    { id: 'break-the-pack', family: 'elimination', allowedSquads: ['pursuit', 'formation', 'swarm', 'escort', 'crossfire', 'parasite', 'elite'] },
     { id: 'hold-the-minute', family: 'survival', allowedSquads: ['pursuit', 'swarm'] },
     { id: 'reach-the-rift', family: 'escape', allowedSquads: ['formation', 'escort'] }
 ];
