@@ -13,13 +13,14 @@ export const ROOM_SHELLS = [
 ];
 
 export const SQUAD_PROFILES = [
-    { id: 'pursuit-pack', family: 'pursuit', roles: ['chaser', 'chaser', 'skirmisher'], threat: 3 },
-    { id: 'hammer-anvil', family: 'formation', roles: ['bruiser', 'chaser', 'skirmisher'], threat: 4 },
-    { id: 'clock-swarm', family: 'swarm', roles: ['skirmisher', 'skirmisher', 'chaser', 'chaser'], threat: 4 },
-    { id: 'heavy-escort', family: 'escort', roles: ['bruiser', 'chaser', 'chaser'], threat: 5 },
-    { id: 'sentry-crossfire', family: 'crossfire', roles: ['sentry', 'chaser', 'sentry'], threat: 5 },
-    { id: 'echo-harvest', family: 'parasite', roles: ['leech', 'chaser', 'sentry'], threat: 6 },
-    { id: 'elite-hunt', family: 'elite', roles: ['elite', 'chaser', 'chaser'], threat: 6 }
+    { id: 'pursuit-pack', family: 'pursuit', roles: ['chaser', 'chaser', 'skirmisher'], threat: 3, minDepth: 0, maxDepth: 1 },
+    { id: 'hammer-anvil', family: 'formation', roles: ['bruiser', 'chaser', 'skirmisher'], threat: 4, minDepth: 0, maxDepth: 3 },
+    { id: 'clock-swarm', family: 'swarm', roles: ['skirmisher', 'skirmisher', 'chaser', 'chaser'], threat: 4, minDepth: 0, maxDepth: 2 },
+    { id: 'heavy-escort', family: 'escort', roles: ['bruiser', 'chaser', 'chaser'], threat: 5, minDepth: 1, maxDepth: 3 },
+    { id: 'sentry-crossfire', family: 'crossfire', roles: ['sentry', 'chaser', 'sentry'], threat: 5, minDepth: 1, maxDepth: 3 },
+    { id: 'echo-harvest', family: 'parasite', roles: ['leech', 'chaser', 'sentry'], threat: 6, minDepth: 2, maxDepth: 3 },
+    { id: 'rift-pincer', family: 'pincer', roles: ['leech', 'sentry', 'chaser', 'bruiser'], threat: 7, minDepth: 3, maxDepth: 3 },
+    { id: 'elite-hunt', family: 'elite', roles: ['elite', 'chaser', 'chaser'], threat: 6, minDepth: 2, maxDepth: 3 }
 ];
 
 export const MODIFIERS = [
@@ -30,7 +31,7 @@ export const MODIFIERS = [
 ];
 
 export const OBJECTIVES = [
-    { id: 'break-the-pack', family: 'elimination', allowedSquads: ['pursuit', 'formation', 'swarm', 'escort', 'crossfire', 'parasite', 'elite'] },
+    { id: 'break-the-pack', family: 'elimination', allowedSquads: ['pursuit', 'formation', 'swarm', 'escort', 'crossfire', 'parasite', 'pincer', 'elite'] },
     { id: 'hold-the-minute', family: 'survival', allowedSquads: ['pursuit', 'swarm'] },
     { id: 'reach-the-rift', family: 'escape', allowedSquads: ['formation', 'escort'] }
 ];
@@ -89,7 +90,8 @@ export function composeEncounter({ seed, biome = 'second-hand-halls', depth, pre
     const resolvedDepth = depth ?? BIOME_DEPTH[biome] ?? 0;
     const budget = threatBudgetFor(biome, resolvedDepth);
     const shell = choose(ROOM_SHELLS, seed + 11, previous.shellFamily);
-    const affordableSquads = SQUAD_PROFILES.filter(squad => squad.threat <= budget);
+    const affordableSquads = SQUAD_PROFILES.filter(squad =>
+        squad.threat <= budget && resolvedDepth >= squad.minDepth && resolvedDepth <= squad.maxDepth);
     const squad = choose(affordableSquads, seed + 23, previous.squadFamily);
     const compatibleModifiers = MODIFIERS.filter(modifier =>
         squad.threat + modifier.threat <= budget &&
@@ -130,6 +132,8 @@ export function sweepEncounterSeeds({ count = 20, seed = 1, biome = 'second-hand
     }
     const invalid = encounters.filter(encounter =>
         encounter.threat > encounter.budget ||
+        encounter.depth < encounter.squad.minDepth || encounter.depth > encounter.squad.maxDepth ||
+        encounter.squad.roles.filter(role => role === 'sentry').length > 2 ||
         encounter.modifier.incompatibleTags.some(tag => encounter.shell.tags.includes(tag)) ||
         !encounter.objective.allowedSquads.includes(encounter.squad.family)
     );
