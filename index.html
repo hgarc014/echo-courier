@@ -44,6 +44,7 @@
             <h2 style="color: #00f3ff; margin-bottom: 20px;">ROGUE RUN</h2>
             <p id="rogue-meta-info"></p>
             <p id="rogue-hub-reaction" style="max-width:560px;color:#d9c8ff;"></p>
+            <div id="rogue-weapon-list" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:8px 0 12px;"></div>
             <div id="rogue-hub-shop" class="rogue-shop" style="margin:10px 0;font-size:0.85rem;text-transform:uppercase;"><div class="rogue-shop-points"></div><div class="rogue-shop-list"></div></div>
             <button class="primary-btn" style="width: 300px;" onclick="startRogueRun()">START RUN</button>
             <button class="secondary-btn" style="margin-top: 20px;" onclick="showSubMenu('main')">BACK</button>
@@ -234,6 +235,8 @@
                     <button type="button" data-key="r" class="touch-btn touch-btn-reset">LOOP</button>
                     <button type="button" data-key="shift" id="touch-btn-dash" class="touch-btn touch-btn-dash hidden">DASH</button>
                     <button type="button" data-key="space" class="touch-btn touch-btn-main">GRAB / HIT</button>
+                    <button type="button" data-key="k" id="touch-btn-heavy" class="touch-btn touch-btn-heavy">HEAVY</button>
+                    <button type="button" data-key="l" id="touch-btn-special" class="touch-btn touch-btn-special">SPECIAL</button>
                     <button type="button" data-key="f" id="touch-btn-toss" class="touch-btn touch-btn-toss hidden">TOSS</button>
                     <button type="button" data-key="c" id="touch-btn-cloak" class="touch-btn touch-btn-cloak hidden">CLK</button>
                     <button type="button" data-key="v" id="touch-btn-rupture" class="touch-btn touch-btn-rupture">RUPT</button>

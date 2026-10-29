@@ -1,4 +1,4 @@
-export const keys = { w: false, a: false, s: false, d: false, space: false, j: false, v: false, r: false, q: false, shift: false, f: false, c: false, esc: false, enter: false, e: false, b: false };
+export const keys = { w: false, a: false, s: false, d: false, space: false, j: false, k: false, l: false, v: false, r: false, q: false, shift: false, f: false, c: false, esc: false, enter: false, e: false, b: false };
 export const prevKeys = { ...keys };
 const justPressed = { ...keys };
 const pendingRelease = { ...keys };
@@ -10,6 +10,8 @@ const CODE_TO_KEY = {
     KeyD: 'd', ArrowRight: 'd',
     Space: 'space',
     KeyJ: 'j',
+    KeyK: 'k',
+    KeyL: 'l',
     KeyV: 'v',
     KeyR: 'r',
     KeyQ: 'q',
@@ -29,6 +31,7 @@ export const stick = { x: 0, y: 0, active: false };
 let touchUiLocked = false;
 let lastAdvanceAt = 0;
 let gameplayInputLocked = false;
+const gamepadHeld = { j: false, k: false, l: false };
 
 export function setGameplayInputLocked(on) {
     gameplayInputLocked = !!on;
@@ -116,6 +119,22 @@ export function getMoveVector() {
         x: (keys.d ? 1 : 0) - (keys.a ? 1 : 0),
         y: (keys.s ? 1 : 0) - (keys.w ? 1 : 0)
     };
+}
+
+export function pollGamepad() {
+    const pads = typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+    const pad = Array.from(pads || []).find(Boolean);
+    const down = {
+        j: !!(pad?.buttons?.[2]?.pressed || pad?.buttons?.[5]?.pressed),
+        k: !!(pad?.buttons?.[3]?.pressed || pad?.buttons?.[7]?.pressed),
+        l: !!(pad?.buttons?.[1]?.pressed || pad?.buttons?.[4]?.pressed)
+    };
+    for (const key of Object.keys(gamepadHeld)) {
+        if (down[key] && !gamepadHeld[key]) pressKey(key);
+        else if (!down[key] && gamepadHeld[key]) queueRelease(key);
+        gamepadHeld[key] = down[key];
+    }
+    return down;
 }
 
 export function requestAdvance() {

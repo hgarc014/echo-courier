@@ -5,6 +5,7 @@ import { drawSprite } from '../core/sprites.js';
 import { pickCourierFrame } from '../core/atlas.js';
 import { dominantFacing, shieldSlab } from '../systems/laserShield.js';
 import { PLAYER_MAX_HP, beginAttack, tickAttack } from '../rogue/combat.js';
+import { weaponMove } from '../rogue/weapons.js';
 
 function drawGhostShield(ctx, actor) {
     if (!getUnlockedAbilities().includes('ghostShield')) return;
@@ -181,7 +182,11 @@ export class Ghost extends Entity {
         let attackJustPressed = !isPastEnd && step.attack && this.lastStateIndex !== stateIndex;
         this.lastStateIndex = stateIndex;
 
-        if (attackJustPressed) beginAttack(this);
+        if (attackJustPressed) {
+            const action = step.weaponAction || 'quick';
+            this.weaponAction = action;
+            beginAttack(this, weaponMove(state.rogueRun?.weapon, action));
+        }
         tickAttack(this);
 
         this.trail.push({ x: this.x, y: this.y });

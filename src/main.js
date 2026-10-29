@@ -1,7 +1,7 @@
 import { pushEchoRun, rogueZoneClear, commitSandEcho } from './systems/sandEcho.js';
 import { chamberClearedByRift, chamberClearedByTimer, chamberClearedByWave } from './rogue/chamberClear.js';
 import { state, getUnlockedAbilities, getPlayerRank, isDevMode, applyDevModeUi, isDevUrlEnabled, setDevToolsEnabled, applyLevelAbilityOverrides, wipeProgress, setUnlockAll, recordLevelClear, markTutorialProgress, reloadProgressFromStorage, isLevelUnlocked } from './core/state.js';
-import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey } from './core/input.js';
+import { keys, prevKeys, isKeyJustPressed, updatePrevKeys, initTouchControls, syncTouchUi, getMoveVector, consumeKey, pollGamepad } from './core/input.js';
 import { audioCtx, startMusic, scheduleMusic, SFX, playMenuMusic, speakDialog, stopDialogSpeech, unlockAudio, preloadDialogVoice } from './core/audio.js';
 import { pickLoopRingCenter, loopRingKeyRects, LOOP_RING_R } from './ui/loopRing.js';
 import { worldLabelsFor, drawWorldLabels } from './ui/worldLabels.js';
@@ -10,7 +10,7 @@ import { applyCamera, followWorldPoint, setMapSize, getMapSize, setCamera, DEFAU
 import { ROOM_W } from './data/floorGen.js';
 import { BIOME_ORDER, nextBiomeIndex } from './rogue/biomes.js';
 import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
-import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
+import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems, selectRogueWeapon } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
 import { EliteTickHound, TickHound, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
@@ -36,6 +36,8 @@ import { CombatBurrower, CombatGatekeeper, CombatPrism, combatBossHud } from './
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
 import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
+import { WEAPON_FAMILIES, weaponMove } from './rogue/weapons.js';
+import { createWeaponEffects, syncEchoStrike, tickWeaponEffects } from './rogue/weaponRuntime.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1459,6 +1461,7 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
     }
     state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
     state.blinkAfterimages = [];
+    state.rogueWeaponEffects = [];
     state.editorReturnLayout = layout;
     state.customLayout = layout;
     state.playtesting = true;
@@ -1544,7 +1547,7 @@ export function startRogueRun(seed) {
     seed = (seed ?? Math.floor(Math.random() * 1e9)) >>> 0;
     hideAspectPick();
     state.rogueRun = { active: true, seed, outcome: null, unlockTaken: false, biomeIndex: 0, ruptureCooldown: 0, ruptureSeq: 0,
-        weapon: 'chrono-baton', aspects: [], lastBossReached: null, echoesDeployed: 0 };
+        weapon: loadRogueMeta().selectedWeapon, aspects: [], lastBossReached: null, echoesDeployed: 0 };
     state.sandRewinding = false;
     enterRogueChamber(0, true);
 }
@@ -1724,6 +1727,17 @@ export function syncRogueHub() {
     if (reaction) reaction.innerText = m.lastReaction
         ? `${m.lastReaction.text}${m.relationshipUnlocked ? ' · Auditor relationship unlocked.' : ''}`
         : 'The temporal depot is quiet. For now.';
+    const weapons = document.getElementById('rogue-weapon-list');
+    if (weapons) {
+        weapons.innerHTML = '';
+        for (const weapon of Object.values(WEAPON_FAMILIES)) {
+            const button = document.createElement('button');
+            button.className = weapon.id === m.selectedWeapon ? 'primary-btn' : 'secondary-btn';
+            button.innerText = weapon.name.toUpperCase();
+            button.onclick = () => { selectRogueWeapon(weapon.id); syncRogueHub(); };
+            weapons.appendChild(button);
+        }
+    }
     syncRogueShop();
 }
 
@@ -1796,6 +1810,7 @@ function updateRogueHealthHud() {
 }
 
 function update() {
+    pollGamepad();
     scheduleMusic();
     if (state.gameState === 'DIALOG') {
         if (isKeyJustPressed('esc')) { handleEscape(); updatePrevKeys(); return; }
@@ -2004,11 +2019,21 @@ function update() {
         else state.player.stillstepTicks = Math.min(60, (state.player.stillstepTicks | 0) + 1);
     }
     let interactJustPressed = isKeyJustPressed('space');
-    const attackJustPressed = rogueCombatActive() && (interactJustPressed || isKeyJustPressed('j'));
+    if (state.rogueRun?.weaponSpecialCooldown > 0) state.rogueRun.weaponSpecialCooldown--;
+    const quickPressed = interactJustPressed || isKeyJustPressed('j');
+    const heavyPressed = isKeyJustPressed('k');
+    const specialPressed = isKeyJustPressed('l');
+    const attackJustPressed = rogueCombatActive() && (quickPressed || heavyPressed || specialPressed);
+    let weaponAction = specialPressed ? 'special' : (heavyPressed ? 'heavy' : 'quick');
     if (attackJustPressed) {
         const mods = aspectModifiers(state.rogueRun);
-        const started = beginAttack(state.player);
+        const move = weaponMove(state.rogueRun.weapon, weaponAction);
+        const specialReady = weaponAction !== 'special' || ((state.rogueRun.weaponSpecialCooldown | 0) <= 0 && (state.sand?.sand || 0) >= move.sandCost);
+        const started = specialReady && beginAttack(state.player, move);
         if (started) {
+            state.player.weaponAction = weaponAction;
+            if (move.sandCost > 0) state.sand.sand = Math.max(0, state.sand.sand - move.sandCost);
+            if (weaponAction === 'special') state.rogueRun.weaponSpecialCooldown = move.cooldown;
             const empowered = mods.stillstepDamage > 1 && (state.player.stillstepTicks | 0) >= 60;
             state.player.aspectAttackDamage = empowered ? mods.stillstepDamage : 1;
             if (empowered) state.player.stillstepTicks = 0;
@@ -2023,7 +2048,7 @@ function update() {
                 };
             }
         }
-        interactJustPressed = false;
+        if (quickPressed) interactJustPressed = false;
     }
     updateHintPlates(interactJustPressed);
     // Opening a popup must not steal the frame's live movement — only suppress
@@ -2106,10 +2131,21 @@ function update() {
     tickAttack(state.player);
     if (rogueCombatActive() && attackIsActive(state.player)) {
         const box = attackBox(state.player);
-        for (const enemy of state.guards) {
-            if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
-                hitRogueEnemy(enemy, `player:${state.player.attackId}`, state.player.aspectAttackDamage || 1,
-                    { x: (state.player.facingX || 0) * 12, y: (state.player.facingY || 0) * 12 });
+        if ((state.player.weaponMove?.effect || 'melee').startsWith('melee')) {
+            for (const enemy of state.guards) {
+                if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
+                    const damage = (state.player.weaponMove?.damage || 1) + Math.max(0, (state.player.aspectAttackDamage || 1) - 1);
+                    hitRogueEnemy(enemy, `player:${state.player.attackId}`, damage,
+                        { x: (state.player.facingX || 0) * 12, y: (state.player.facingY || 0) * 12 });
+                }
+            }
+        }
+        if (!state.player.weaponEffectFired) {
+            state.player.weaponEffectFired = true;
+            if (state.player.weaponMove?.effect === 'echo-sync') {
+                syncEchoStrike(state.activeGhosts, state.player, state.player.weaponMove.range);
+            } else {
+                state.rogueWeaponEffects.push(...createWeaponEffects(state.player, state.player.weaponMove, 'player'));
             }
         }
     }
@@ -2117,12 +2153,19 @@ function update() {
         for (const ghost of state.activeGhosts) {
             if (!ghost?.isActive || !attackIsActive(ghost)) continue;
             const box = attackBox(ghost);
-            for (const enemy of state.guards) {
-                if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
-                    const mods = aspectModifiers(state.rogueRun);
-                    hitRogueEnemy(enemy, `echo:${ghost.id}:${ghost.attackId}`, mods.echoDamage,
-                        { x: (ghost.facingX || 0) * mods.echoKnockback, y: (ghost.facingY || 0) * mods.echoKnockback });
+            if ((ghost.weaponMove?.effect || 'melee').startsWith('melee')) {
+                for (const enemy of state.guards) {
+                    if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
+                        const mods = aspectModifiers(state.rogueRun);
+                        const damage = (ghost.weaponMove?.damage || 1) + (mods.echoDamage - 1);
+                        hitRogueEnemy(enemy, `echo:${ghost.id}:${ghost.attackId}`, damage,
+                            { x: (ghost.facingX || 0) * mods.echoKnockback, y: (ghost.facingY || 0) * mods.echoKnockback });
+                    }
                 }
+            }
+            if (!ghost.weaponEffectFired) {
+                ghost.weaponEffectFired = true;
+                state.rogueWeaponEffects.push(...createWeaponEffects(ghost, ghost.weaponMove, `echo-${ghost.id}`));
             }
         }
     }
@@ -2140,6 +2183,8 @@ function update() {
             state.rogueRun.secondStrike = null;
         }
     }
+    state.rogueWeaponEffects = tickWeaponEffects(state.rogueWeaponEffects || [], state.guards, hitRogueEnemy, state.walls);
+    const weaponDecoys = state.rogueWeaponEffects.filter(effect => effect.kind === 'decoy' && effect.isActive);
     for(let g of state.guards) {
         if (g.ruptureTicks > 0) {
             g.ruptureTicks--;
@@ -2149,7 +2194,7 @@ function update() {
             }
             continue;
         }
-        const fail = g.update(state.player, state.activeGhosts);
+        const fail = g.update(state.player, [...state.activeGhosts, ...weaponDecoys]);
         if (applyRogueContact(fail)) return;
         if (typeof fail === 'string' && failUnlessInvuln(fail)) return;
     }
@@ -2420,6 +2465,7 @@ function update() {
             cloakTimer: state.player.cloakTimer,
             interact: interactJustPressed,
             attack: attackJustPressed,
+            weaponAction: attackJustPressed ? weaponAction : null,
             toss: tossFired,
             dash: dashFired,
             heavy: !!(carried && carried.type === 'heavy')
@@ -2962,6 +3008,21 @@ function draw() {
         ctx.lineWidth = 2;
         ctx.fillRect(box.x, box.y, box.w, box.h);
         ctx.strokeRect(box.x, box.y, box.w, box.h);
+        ctx.restore();
+    }
+    for (const effect of state.rogueWeaponEffects || []) {
+        ctx.save();
+        if (effect.kind === 'parcel') {
+            ctx.fillStyle = '#ff9f43'; ctx.strokeStyle = '#fff2c2'; ctx.lineWidth = 2;
+            ctx.fillRect(effect.x, effect.y, effect.w, effect.h); ctx.strokeRect(effect.x, effect.y, effect.w, effect.h);
+        } else if (effect.kind === 'decoy') {
+            ctx.globalAlpha = 0.75; ctx.fillStyle = '#00f3ff'; ctx.strokeStyle = '#ffffff';
+            ctx.fillRect(effect.x, effect.y, effect.w, effect.h); ctx.strokeRect(effect.x, effect.y, effect.w, effect.h);
+        } else if (effect.kind === 'cut') {
+            ctx.globalAlpha = 0.55 + 0.25 * Math.sin(state.currentTick * 0.25);
+            ctx.fillStyle = 'rgba(200,108,255,.35)'; ctx.strokeStyle = '#c86cff'; ctx.lineWidth = 3;
+            ctx.fillRect(effect.x, effect.y, effect.w, effect.h); ctx.strokeRect(effect.x, effect.y, effect.w, effect.h);
+        }
         ctx.restore();
     }
     
