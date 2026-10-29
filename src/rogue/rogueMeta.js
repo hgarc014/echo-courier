@@ -13,7 +13,8 @@ export const BASE_SAND_S = 3;
 export const START_SAND_STEP_S = 0.5;
 
 export function defaultRogueMeta() {
-    return { echoSlotBonus: 0, recordBonusS: 0, runs: 0, clears: 0, shopPoints: 0, sandTankLevel: 0, startSandLevel: 0 };
+    return { echoSlotBonus: 0, recordBonusS: 0, runs: 0, clears: 0, shopPoints: 0, sandTankLevel: 0, startSandLevel: 0,
+        lastRunSummary: null, lastReaction: null, recentDialogueIds: [], auditorTrust: 0, relationshipUnlocked: false };
 }
 
 function storage() { return typeof localStorage === 'undefined' ? null : localStorage; }
@@ -31,7 +32,12 @@ export function loadRogueMeta() {
             clears: Math.max(0, p.clears | 0),
             shopPoints: Math.max(0, p.shopPoints | 0),
             sandTankLevel: Math.max(0, Math.min(SHOP_MAX_LEVEL, p.sandTankLevel | 0)),
-            startSandLevel: Math.max(0, Math.min(SHOP_MAX_LEVEL, p.startSandLevel | 0))
+            startSandLevel: Math.max(0, Math.min(SHOP_MAX_LEVEL, p.startSandLevel | 0)),
+            lastRunSummary: p.lastRunSummary && typeof p.lastRunSummary === 'object' ? p.lastRunSummary : null,
+            lastReaction: p.lastReaction && typeof p.lastReaction === 'object' ? p.lastReaction : null,
+            recentDialogueIds: Array.isArray(p.recentDialogueIds) ? p.recentDialogueIds.filter(id => typeof id === 'string').slice(-5) : [],
+            auditorTrust: Math.max(0, p.auditorTrust | 0),
+            relationshipUnlocked: !!p.relationshipUnlocked
         };
     } catch { return d; }
 }
@@ -58,10 +64,11 @@ export function grantUnlock(meta = loadRogueMeta()) {
 }
 
 /** Record a finished run (called at Run Over). shopPoints == Chrono Dust. */
-export function recordRunEnd(cleared, meta = loadRogueMeta()) {
+export function recordRunEnd(cleared, meta = loadRogueMeta(), narrative = null) {
     // shopPoints == Chrono Dust. A failed run grants 1; a clear grants 2.
     const dust = cleared ? 2 : 1;
     const next = { ...meta, runs: meta.runs + 1, clears: meta.clears + (cleared ? 1 : 0), shopPoints: (meta.shopPoints | 0) + dust };
+    if (narrative) Object.assign(next, narrative);
     saveRogueMeta(next);
     return next;
 }
