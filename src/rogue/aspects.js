@@ -9,6 +9,15 @@ export const COMBAT_ASPECTS = Object.freeze([
     Object.freeze({ id: 'stillstep', family: 'movement', label: 'Stillstep', detail: 'Standing still briefly empowers your next strike.' })
 ]);
 
+// The unique Aspect pool is intentionally finite. Once a long run owns most or
+// all of it, these stackable rewards keep every chamber clear valuable and keep
+// the picker from becoming an empty modal.
+export const REPEATABLE_ASPECTS = Object.freeze([
+    Object.freeze({ id: 'repeat-integrity', family: 'endurance', label: 'Integrity Temper', detail: '+1 maximum Integrity and repair 2 Integrity.', repeatable: true }),
+    Object.freeze({ id: 'repeat-sand', family: 'sand', label: 'Deep Reservoir', detail: '+0.5 maximum Sand and restore 1 Sand.', repeatable: true }),
+    Object.freeze({ id: 'repeat-echo', family: 'echo', label: 'Echo Capacity', detail: '+1 Echo charge and +1 active Echo slot.', repeatable: true })
+]);
+
 function mix(seed) {
     let value = seed >>> 0;
     value ^= value >>> 16;
@@ -27,7 +36,16 @@ export function pickAspectChoices(seed, held = [], count = 3) {
         code = mix(code + choices.length * 7919 + 17);
         choices.push(pool.splice(code % pool.length, 1)[0]);
     }
+    const repeatables = [...REPEATABLE_ASPECTS];
+    while (repeatables.length && choices.length < count) {
+        code = mix(code + choices.length * 6151 + 29);
+        choices.push(repeatables.splice(code % repeatables.length, 1)[0]);
+    }
     return choices;
+}
+
+export function isRepeatableAspect(id) {
+    return REPEATABLE_ASPECTS.some(aspect => aspect.id === id);
 }
 
 export function hasAspect(run, id) {
