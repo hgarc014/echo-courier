@@ -3,6 +3,7 @@ import { prepareLoadedAsset } from './sprites.js';
 export const PLAYER_SHEET_PATH = 'assets/sprite-sheets/echo-courier-characters.png';
 export const PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-hazards.png';
 export const ENV_SHEET_PATH = 'assets/sprite-sheets/echo-courier-environment-effects.png';
+export const TICK_HOUND_SHEET_PATH = 'assets/sprite-sheets/tick-hound-v2.png';
 
 // Occupancy-measured rects on echo-courier-characters.png (1536x1024).
 // Top band y 0-196 (idle/carry/dash/cloak). Walk band y 196-340. 4px pad, bands do not overlap.
@@ -98,6 +99,35 @@ function sheetReady(sheet) {
     const iw = sheet.naturalWidth || sheet.width || 0;
     const ih = sheet.naturalHeight || sheet.height || 0;
     return iw >= 1536 && ih >= 1024;
+}
+
+export function buildTickHoundAtlas(sheet) {
+    const iw = sheet?.naturalWidth || sheet?.width || 0;
+    const ih = sheet?.naturalHeight || sheet?.height || 0;
+    if (!iw || !ih) return null;
+    const cellW = Math.floor(iw / 4);
+    const cellH = Math.floor(ih / 3);
+    const frame = (column, row) => sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
+    return {
+        ready: true,
+        idleFront: frame(0, 0), idleBack: frame(1, 0), idleRight: frame(2, 0), idleLeft: frame(3, 0),
+        runRight: [0, 1, 2, 3].map(column => frame(column, 1)),
+        windup: frame(0, 2), lunge: frame(1, 2), hit: frame(2, 2), dead: frame(3, 2)
+    };
+}
+
+export function pickTickHoundFrame(atlas, hound, tick = 0) {
+    if (!atlas?.ready) return null;
+    if (hound?.dead) return { img: atlas.dead, flipX: false };
+    if ((hound?.hurtTicks | 0) > 0) return { img: atlas.hit, flipX: false };
+    if ((hound?.lungeTelegraphTicks | 0) > 0) return { img: atlas.windup, flipX: false };
+    if (hound?.state === 'chase' || hound?.state === 'patrol') {
+        return { img: atlas.runRight[Math.floor(tick / 5) % atlas.runRight.length], flipX: Math.cos(hound.facingAngle || 0) < 0 };
+    }
+    const fx = Math.cos(hound?.facingAngle || 0);
+    const fy = Math.sin(hound?.facingAngle || 0);
+    if (Math.abs(fx) >= Math.abs(fy)) return { img: fx < 0 ? atlas.idleLeft : atlas.idleRight, flipX: false };
+    return { img: fy < 0 ? atlas.idleBack : atlas.idleFront, flipX: false };
 }
 
 export function buildPlayerAtlas(sheet) {
