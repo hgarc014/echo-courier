@@ -1365,6 +1365,7 @@ function enterRogueChamber(biomeIndex, fresh) {
         state.deathUndoFlash = 0;
     }
     state.roguePickups = (layout.pickups || []).map(p => ({ ...p, collected: false }));
+    state.blinkAfterimages = [];
     state.editorReturnLayout = layout;
     state.customLayout = layout;
     state.playtesting = true;
@@ -1691,6 +1692,9 @@ function update() {
                 stunGuardsOverlapping(state.guards, { x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h });
             }
             state.player.invulnTicks = BLINK_IFRAMES;
+            state.blinkAfterimageSeq = (state.blinkAfterimageSeq | 0) + 1;
+            state.blinkAfterimages ??= [];
+            state.blinkAfterimages.push({ ...blinkFrom, id: state.blinkAfterimageSeq, ticks: 20, hit: new WeakSet() });
             SFX.rewind();
             updateSandHud();
         }
@@ -1883,6 +1887,19 @@ function update() {
         const fail = g.update(state.player, state.activeGhosts);
         if (applyRogueContact(fail)) return;
         if (typeof fail === 'string' && failUnlessInvuln(fail)) return;
+    }
+    if (rogueCombatActive() && state.blinkAfterimages?.length) {
+        for (const image of state.blinkAfterimages) {
+            for (const enemy of state.guards) {
+                if (!enemy?.dead && !image.hit.has(enemy)
+                    && AABB(image.x, image.y, image.w, image.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
+                    image.hit.add(enemy);
+                    enemy.hitByAttack?.(`blink:${image.id}`);
+                }
+            }
+            image.ticks--;
+        }
+        state.blinkAfterimages = state.blinkAfterimages.filter(image => image.ticks > 0);
     }
     for (const burrower of state.burrowers || []) burrower.update(allActors);
     syncBossHud();
@@ -2637,6 +2654,17 @@ function draw() {
     }
     
     state.player.render(ctx);
+    for (const image of state.blinkAfterimages || []) {
+        const u = image.ticks / 20;
+        ctx.save();
+        ctx.globalAlpha = 0.2 + u * 0.45;
+        ctx.strokeStyle = '#00f3ff';
+        ctx.fillStyle = 'rgba(151,98,255,.24)';
+        ctx.setLineDash([4, 4]);
+        ctx.fillRect(image.x, image.y, image.w, image.h);
+        ctx.strokeRect(image.x, image.y, image.w, image.h);
+        ctx.restore();
+    }
     if (rogueCombatActive() && state.player.attackTicks > 0) {
         const box = attackBox(state.player);
         ctx.save();
