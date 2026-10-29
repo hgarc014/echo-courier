@@ -1035,7 +1035,7 @@ export class Guard extends Entity {
             ctx.translate(cx, cy);
             ctx.rotate(this.facingAngle || 0);
             ctx.fillStyle = hitFlash ? '#fff7ff' : (frozen ? '#6f7088' : (stunned ? '#ffd65a' : '#191725'));
-            ctx.strokeStyle = dead ? '#657080' : (frozen ? '#c8b7ff' : '#ff3f75');
+            ctx.strokeStyle = dead ? '#657080' : (frozen ? '#c8b7ff' : (this.roleColor || '#ff3f75'));
             ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(6, -11); ctx.lineTo(-13, -8); ctx.lineTo(-17, 8); ctx.lineTo(7, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
             ctx.fillStyle = '#00f3ff'; ctx.fillRect(5, -4, 8, 8);
@@ -1045,7 +1045,7 @@ export class Guard extends Entity {
             if (!dead) {
                 const pct = Math.max(0, this.hp / this.maxHp);
                 ctx.fillStyle = '#20121c'; ctx.fillRect(this.x, this.y - 7, this.w, 4);
-                ctx.fillStyle = '#ff3f75'; ctx.fillRect(this.x, this.y - 7, this.w * pct, 4);
+                ctx.fillStyle = this.roleColor || '#ff3f75'; ctx.fillRect(this.x, this.y - 7, this.w * pct, 4);
             }
             return;
         }
@@ -1081,7 +1081,30 @@ export class Guard extends Entity {
 
 // Rogue combat uses the campaign guard path format only as an arena spawn marker.
 // A distinct runtime class keeps campaign stealth actors out of Rogue chambers.
-export class TickHound extends Guard {}
+export class TickHound extends Guard {
+    constructor(points, role = 'chaser') {
+        super(points);
+        const profiles = {
+            chaser: { hp: 2, chaseSpeed: 2.8, color: '#ff3f75' },
+            skirmisher: { hp: 2, chaseSpeed: 2.35, color: '#00f3ff' },
+            bruiser: { hp: 4, chaseSpeed: 1.8, color: '#ff9f43' }
+        };
+        const profile = profiles[role] || profiles.chaser;
+        this.role = profiles[role] ? role : 'chaser';
+        this.hp = profile.hp;
+        this.maxHp = profile.hp;
+        this.chaseSpeed = profile.chaseSpeed;
+        this.roleColor = profile.color;
+    }
+    reset() {
+        const hp = this.maxHp;
+        const chaseSpeed = this.chaseSpeed;
+        super.reset();
+        this.hp = hp;
+        this.maxHp = hp;
+        this.chaseSpeed = chaseSpeed;
+    }
+}
 
 // Real Rogue Run chambers set isRogue. Package-free floor replays also set
 // rogueRun.active so the exit zone can clear; those guards keep campaign AI.

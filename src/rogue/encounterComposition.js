@@ -37,6 +37,31 @@ export const REWARDS = [
     { id: 'health-cache', family: 'recovery' }
 ];
 
+export function authoredShellWalls(shellId, width = 800, height = 600) {
+    const cx = Math.round(width / 2);
+    const cy = Math.round(height / 2);
+    const patterns = {
+        crossroads: [
+            { x: cx - 110, y: cy - 18, w: 70, h: 36 },
+            { x: cx + 40, y: cy - 18, w: 70, h: 36 }
+        ],
+        'split-clock': [
+            { x: cx - 18, y: 110, w: 36, h: 120 },
+            { x: cx - 18, y: height - 230, w: 36, h: 120 }
+        ],
+        'pendulum-ring': [
+            { x: cx - 125, y: cy - 95, w: 55, h: 30 },
+            { x: cx + 70, y: cy + 65, w: 55, h: 30 }
+        ],
+        'broken-dial': [
+            { x: cx - 125, y: cy - 90, w: 50, h: 50 },
+            { x: cx + 75, y: cy - 90, w: 50, h: 50 },
+            { x: cx - 25, y: cy + 55, w: 50, h: 50 }
+        ]
+    };
+    return (patterns[shellId] || []).map(wall => ({ ...wall, style: 'rogue-cover' }));
+}
+
 function mix(seed) {
     let value = seed >>> 0;
     value ^= value >>> 16;
