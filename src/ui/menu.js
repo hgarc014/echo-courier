@@ -110,9 +110,15 @@ function formatBuiltAt(iso) {
 /** Home-screen line so a playtester can see which build they have. */
 export function applyBuildFooter() {
     const el = document.getElementById('build-footer');
-    if (!el) return;
-    el.textContent = `v${version} · ${gitSha} · ${formatBuiltAt(builtAt)}`;
-    el.title = `Echo Courier ${version} (${gitSha}), built ${builtAt}`;
+    const chip = document.getElementById('build-version-chip');
+    if (el) {
+        el.textContent = `v${version} · ${gitSha} · ${formatBuiltAt(builtAt)}`;
+        el.title = `Echo Courier ${version} (${gitSha}), built ${builtAt}`;
+    }
+    if (chip) {
+        chip.textContent = `v${version} · ${gitSha}`;
+        chip.title = `Built ${formatBuiltAt(builtAt)}`;
+    }
 }
 
 export function initMenu() {

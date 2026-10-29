@@ -1,5 +1,19 @@
 # Echo Courier
 
+## Published build version
+
+The title screen and in-game HUD show `v<semver> · <git sha>`. Every push to `main` or `master` runs tests, stamps the deployed artifact with that merge SHA, and publishes it through GitHub Pages.
+
+Before intentionally creating a release version, run one of:
+
+```bash
+npm run release:patch
+npm run release:minor
+npm run release:major
+```
+
+Commit `package.json`, `package-lock.json`, and `src/buildInfo.js` together. CI rejects mismatched release versions with `npm run release:check`.
+
 **Echo Courier** is a temporal-logistics puzzle game built purely in Vanilla Javascript and HTML5 Canvas. You play as Courier 83-A, an underpaid delivery worker for the monolithic megacorporation **ChronoHaul**. To meet impossibly tight delivery quotas, you must utilize experimental looping technology to clone your past actions and cooperate with your own time-remnants ("Echoes"). 
 
 However, as the routes get deeper into the Anomaly Sector, the ChronoHaul infrastructure breaks down, hostile corporate surveillance goes rogue, and a hacker begins intercepting your encrypted comms.
