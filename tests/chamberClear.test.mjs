@@ -57,7 +57,7 @@ function standInExit() {
 // Walk Hourglass (and any later biome) to Run Over without a second echo-slot.
 function settleRogueClear() {
     let steps = 0;
-    while (state.rogueRun?.active && state.gameState === 'PLAYING' && steps++ < 6) {
+    while (state.rogueRun?.active && state.gameState === 'PLAYING' && steps++ < 10) {
         release();
         state.guards = [];
         state.cameras = [];
@@ -67,12 +67,12 @@ function settleRogueClear() {
         if (!chamber || chamber.aspectPending) break;
         if (chamber.type === 'timer') chamber.ticksLeft = 0;
         else if (chamber.type === 'wave') chamber.enemiesLeft = 0;
+        else if (chamber.type === 'boss') state.guards.forEach(enemy => { enemy.dead = true; });
         else if (chamber.type === 'rift') chamber.zone = { x: state.player.x, y: state.player.y, w: 48, h: 48 };
         else break;
         main.stepSimulation();
         if (state.gameState !== 'PLAYING') break;
         if (state.rogueChamber?.aspectPending) chooseAspect('sand-tank');
-        else break;
     }
 }
 
