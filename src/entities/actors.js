@@ -213,7 +213,7 @@ export class Ghost extends Entity {
         if (attackJustPressed) {
             const action = step.weaponAction || 'quick';
             this.weaponAction = action;
-            beginAttack(this, weaponMove(state.rogueRun?.weapon, action));
+            beginAttack(this, weaponMove(state.rogueRun?.weapon, action, step.weaponComboStep || 0));
         }
         tickAttack(this);
 
