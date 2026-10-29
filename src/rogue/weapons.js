@@ -58,6 +58,23 @@ export function weaponMove(weaponId, action) {
     return weaponDefinition(weaponId).moves[action] || null;
 }
 
+function moveLabel(id) {
+    return String(id || '').split('-').map(word => word[0]?.toUpperCase() + word.slice(1)).join(' ');
+}
+
+export function weaponHudState(weaponId, specialCooldown = 0) {
+    const weapon = weaponDefinition(weaponId);
+    const cooldown = Math.max(0, specialCooldown | 0);
+    return {
+        name: weapon.name,
+        quick: `${moveLabel(weapon.moves.quick.id)} · ${weapon.moves.quick.range}px`,
+        heavy: `${moveLabel(weapon.moves.heavy.id)} · ${weapon.moves.heavy.range}px`,
+        special: moveLabel(weapon.moves.special.id),
+        specialReady: cooldown === 0,
+        specialSeconds: Math.ceil(cooldown / 60)
+    };
+}
+
 export function trainingMetrics(weaponId) {
     const weapon = weaponDefinition(weaponId);
     const quick = weapon.moves.quick;
