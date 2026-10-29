@@ -130,6 +130,7 @@
             <div class="hud-center">
                 <div class="stat-box"><span class="loop-stat">Loop&nbsp;<span id="loop-count">1</span><span id="loop-of" class="hidden">&nbsp;of&nbsp;<span id="loop-budget"></span></span><span id="loop-over" class="hidden">&nbsp;·&nbsp;over par&nbsp;<span id="loop-par"></span>&nbsp;(no penalty)</span>&nbsp;·&nbsp;Echoes&nbsp;<span id="echo-count">0</span>/<span id="max-echoes">∞</span></span></div>
                 <div class="stat-box hidden" id="sand-box" title="Hold E to rewind">Sand <span class="sand-bar"><span id="sand-fill" class="sand-fill"></span></span> <span id="sand-text">3.0s</span> <kbd>E</kbd></div>
+                <div class="stat-box hidden" id="rogue-health" aria-label="Courier health"><span class="health-label">Integrity</span> <span id="rogue-health-pips" class="health-pips"></span></div>
                 <div class="stat-box hidden" id="delivery-progress-box">Delivery <span id="delivery-progress">0 / 0</span></div>
                 <div class="objective" id="objective-text">Deliver the package safely to the green zone.</div>
                 <div class="objective boss-progress hidden" id="boss-progress"></div>
@@ -229,7 +230,7 @@
                 <div id="action-cluster" class="touch-actions">
                     <button type="button" data-key="r" class="touch-btn touch-btn-reset">LOOP</button>
                     <button type="button" data-key="shift" id="touch-btn-dash" class="touch-btn touch-btn-dash hidden">DASH</button>
-                    <button type="button" data-key="space" class="touch-btn touch-btn-main">GRAB</button>
+                    <button type="button" data-key="space" class="touch-btn touch-btn-main">GRAB / HIT</button>
                     <button type="button" data-key="f" id="touch-btn-toss" class="touch-btn touch-btn-toss hidden">TOSS</button>
                     <button type="button" data-key="c" id="touch-btn-cloak" class="touch-btn touch-btn-cloak hidden">CLK</button>
                     <button type="button" data-key="q" class="touch-btn touch-btn-level">LVL</button>

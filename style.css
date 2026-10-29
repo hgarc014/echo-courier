@@ -1445,3 +1445,7 @@ body.touch-ui .demo-popup-panel {
 #sand-box.sand-save-flash .sand-bar { border-color:#5ff; box-shadow:0 0 8px #5ff; }
 #sand-box.sand-save-flash .sand-fill { background:#5ff; }
 @keyframes sandSavePulse { from { text-shadow:0 0 2px #e8c37a; } to { text-shadow:0 0 10px #5ff; } }
+.health-pips { display:inline-flex; gap:4px; margin-left:5px; vertical-align:middle; }
+.health-pip { width:13px; height:9px; border:1px solid #ff6b8a; transform:skewX(-14deg); background:#321421; box-shadow:inset 0 0 4px #000; }
+.health-pip.is-full { background:#ff3366; box-shadow:0 0 7px rgba(255,51,102,.65); }
+.health-label { color:#ff9bb0; }

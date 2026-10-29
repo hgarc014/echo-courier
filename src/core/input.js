@@ -1,4 +1,4 @@
-export const keys = { w: false, a: false, s: false, d: false, space: false, r: false, q: false, shift: false, f: false, c: false, esc: false, enter: false, e: false, b: false };
+export const keys = { w: false, a: false, s: false, d: false, space: false, j: false, r: false, q: false, shift: false, f: false, c: false, esc: false, enter: false, e: false, b: false };
 export const prevKeys = { ...keys };
 const justPressed = { ...keys };
 const pendingRelease = { ...keys };
@@ -9,6 +9,7 @@ const CODE_TO_KEY = {
     KeyS: 's', ArrowDown: 's',
     KeyD: 'd', ArrowRight: 'd',
     Space: 'space',
+    KeyJ: 'j',
     KeyR: 'r',
     KeyQ: 'q',
     ShiftLeft: 'shift', ShiftRight: 'shift',
