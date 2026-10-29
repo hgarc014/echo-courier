@@ -2,6 +2,37 @@
 
 Draft 2026-10-28 for Henry / PM. Based on thin slice [#62](https://github.com/hgarc014/echo-courier/pull/62). **Play tip for raw.githack stays `624b5a7`.** Later commits (docs / camera) must not move that tip. **Do not merge #62 until Henry finishes playtest.**
 
+## Combat-first addendum (2026-10-28)
+
+This addendum supersedes the draft's implementation order. The live source of truth is the [Rogue Run — Combat Loop Plan](https://app.notion.com/p/4088021cbaef81cabd48ff3e7d3034a3); the Notion board carries current ownership, status, acceptance criteria, and merged PR links. The repository plan remains the durable architectural record.
+
+The pivot is now an action roguelike built around a fast combat loop and time manipulation:
+
+1. Enter a seeded arena and read the spawn warnings.
+2. Strike, dash, blink, rewind into attack-replaying echoes, and use Time Rupture.
+3. Clear waves or survive pressure, enter the opened rift, and choose a combat-changing Aspect.
+4. Carry integrity and run power through the biome spine; death returns to the run hub and permanent progression.
+
+Implemented foundation on `main` (at least `f726507`): five-integrity combat, three-hit Tick Hounds, contact iframes, Sand Save, kill/survive/rift-dash encounter modes, seeded wave pressure, attack-replaying echoes, blink afterimages, Time Rupture, a gated post-wave rift, and a modern visual target in `docs/ART_DIRECTION.md`.
+
+### Parked work
+
+The following sections are **PARKED**, not cancelled. Do not build them until the live combat board moves them back to Ready:
+
+- **§2 campaign-template extraction / mechanic pools — PARKED.** The current arena generators and authored room shells are the combat testbed. Puzzle-template extraction would optimize the former puzzle game rather than validate the new combat game.
+- **§5 recipe editor — PARKED.** Continue supporting inspection of Rogue chamber types, but do not build the full recipe-authoring pipeline until combat rooms, weapons, Aspects, and encounter pacing stabilize.
+- **§7 PR #57 / #60 / #61 disposition — PARKED.** Do not retarget or land those puzzle/boss branches as originally proposed. Re-evaluate their mechanics only as combat elites, bosses, or arena modifiers after the combat progression cards ship.
+
+### Current priority after the foundation
+
+1. Independent cold-play and Henry go/no-go gates.
+2. Combat-changing Aspects and three weapon families.
+3. Encounter director plus authored combat room shells.
+4. Permanent Relics.
+5. The Still biome spine, an elite/end-biome boss, then the Temporal Depot narrative hub.
+
+Everything below this addendum is preserved as historical context. Where it conflicts with this section or the live Notion plan, the combat-first plan wins.
+
 ## 1. Keep Level Select campaign vs sunset
 
 **Recommendation: keep campaign as legacy for one more sprint, then soft-sunset.**
