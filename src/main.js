@@ -2922,6 +2922,65 @@ function drawRogueArenaBackdrop(target, map) {
     target.restore();
 }
 
+function drawRogueWallDepth(target) {
+    target.save();
+    for (const wall of state.walls || []) {
+        target.fillStyle = 'rgba(0,0,0,.42)';
+        target.fillRect(wall.x + 9, wall.y + 12, wall.w, wall.h);
+    }
+    target.restore();
+}
+
+function drawRogueWallHighlights(target) {
+    target.save();
+    for (const wall of state.walls || []) {
+        const edge = target.createLinearGradient(wall.x, wall.y, wall.x, wall.y + Math.min(18, wall.h));
+        edge.addColorStop(0, 'rgba(190,245,255,.34)');
+        edge.addColorStop(1, 'rgba(0,243,255,0)');
+        target.fillStyle = edge;
+        target.fillRect(wall.x + 2, wall.y + 2, Math.max(0, wall.w - 4), Math.min(18, wall.h - 4));
+        target.strokeStyle = 'rgba(3,8,12,.8)';
+        target.lineWidth = 3;
+        target.strokeRect(wall.x + 1.5, wall.y + 1.5, Math.max(0, wall.w - 3), Math.max(0, wall.h - 3));
+    }
+    target.restore();
+}
+
+function drawRogueWorldLighting(target, map) {
+    if (!state.player) return;
+    const cx = state.player.x + state.player.w / 2;
+    const cy = state.player.y + state.player.h / 2;
+    target.save();
+    const shade = target.createRadialGradient(cx, cy, 90, cx, cy, 430);
+    shade.addColorStop(0, 'rgba(0,0,0,0)');
+    shade.addColorStop(.48, 'rgba(0,4,9,.08)');
+    shade.addColorStop(1, 'rgba(0,2,7,.56)');
+    target.fillStyle = shade;
+    target.fillRect(0, 0, map.w, map.h);
+    target.globalCompositeOperation = 'lighter';
+    for (const actor of [state.player, ...(state.activeGhosts || []).filter(g => g?.isActive)]) {
+        const x = actor.x + actor.w / 2;
+        const y = actor.y + actor.h / 2;
+        const glow = target.createRadialGradient(x, y, 0, x, y, actor === state.player ? 95 : 72);
+        glow.addColorStop(0, actor === state.player ? 'rgba(255,125,20,.18)' : 'rgba(0,243,255,.16)');
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        target.fillStyle = glow;
+        target.fillRect(x - 100, y - 100, 200, 200);
+    }
+    target.restore();
+}
+
+function drawRogueScreenVignette(target) {
+    const vignette = target.createRadialGradient(canvas.width / 2, canvas.height / 2, canvas.height * .18, canvas.width / 2, canvas.height / 2, canvas.width * .62);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(.72, 'rgba(0,0,0,.08)');
+    vignette.addColorStop(1, 'rgba(0,2,7,.52)');
+    target.save();
+    target.fillStyle = vignette;
+    target.fillRect(0, 0, canvas.width, canvas.height);
+    target.restore();
+}
+
 function drawCombatArc(target, actor, color, alpha = 1) {
     const cx = actor.x + actor.w / 2;
     const cy = actor.y + actor.h / 2;
@@ -3005,7 +3064,10 @@ function draw() {
         ctx.fillRect(pk.x, pk.y, pk.w, pk.h); ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
         ctx.fillText(pk.type === 'sand_max' ? '+MAX' : 'SAND', pk.x + pk.w / 2, pk.y + pk.h / 2 + 3); ctx.restore();
     }
-    drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx)); state.walls.forEach(w => w.render(ctx));
+    drawWires(ctx, collectWires(state.plates, state.doors, state.lasers), state.currentTick); (state.hints||[]).forEach(h => h.render(ctx));
+    if (state.currentLevelMeta?.isRogue) drawRogueWallDepth(ctx);
+    state.walls.forEach(w => w.render(ctx));
+    if (state.currentLevelMeta?.isRogue) drawRogueWallHighlights(ctx);
     // Plates draw over beams so a plate under a laser column (W5-L4) stays readable.
     state.lasers.forEach(l => l.render(ctx)); drawShieldShadows(ctx); drawBeamFixtures(ctx); state.plates.forEach(p => p.render(ctx)); state.doors.forEach(d => { if (d.render.length > 1) d.render(ctx, state.currentTick); else d.render(ctx); });
     drawEchoEndMarkers(ctx);
@@ -3128,11 +3190,14 @@ function draw() {
     if (state.failFx) drawBurst(ctx, state.failFx);
     if (state.rewindFx) drawBurst(ctx, state.rewindFx);
     renderEchoFellFx(ctx);
+    if (state.currentLevelMeta?.isRogue) drawRogueWorldLighting(ctx, map);
     if (state.gameState === 'EDITOR') drawEditorOverlay(ctx);
 
     ctx.restore();
     
     if (state.gameState === 'EDITOR') return;
+
+    if (state.currentLevelMeta?.isRogue) drawRogueScreenVignette(ctx);
 
     drawAbilityCooldowns(ctx);
 
