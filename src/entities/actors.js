@@ -258,6 +258,14 @@ export class Ghost extends Entity {
             const cx = this.x + this.w / 2;
             const cy = this.y + this.h / 2;
             ctx.save();
+            if (state.vfxAtlas?.echoSpawn) {
+                const size = 96 - spawn * 18;
+                ctx.globalAlpha = .22 + spawn * .58;
+                ctx.translate(cx, cy);
+                ctx.scale(1, .72);
+                ctx.drawImage(state.vfxAtlas.echoSpawn, -size / 2, -size / 2, size, size);
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+            }
             ctx.strokeStyle = `rgba(0,243,255,${spawn})`;
             ctx.lineWidth = 2;
             ctx.beginPath();

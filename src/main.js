@@ -3009,11 +3009,27 @@ function drawRogueScreenVignette(target) {
     target.restore();
 }
 
+function drawVfx(target, image, cx, cy, size, { rotation = 0, alpha = 1, scaleX = 1, scaleY = 1 } = {}) {
+    if (!image) return false;
+    target.save();
+    target.translate(cx, cy);
+    target.rotate(rotation);
+    target.scale(scaleX, scaleY);
+    target.globalAlpha = alpha;
+    target.drawImage(image, -size / 2, -size / 2, size, size);
+    target.restore();
+    return true;
+}
+
 function drawCombatArc(target, actor, color, alpha = 1) {
     const cx = actor.x + actor.w / 2;
     const cy = actor.y + actor.h / 2;
     const angle = Math.atan2(actor.facingY || 0, actor.facingX || 1);
     const active = attackIsActive(actor);
+    const isEcho = actor !== state.player;
+    if (active && drawVfx(target, isEcho ? state.vfxAtlas?.echoSwing : state.vfxAtlas?.playerSwing, cx, cy, (actor.attackRange || 48) * 2.35, {
+        rotation: angle, alpha: alpha * (isEcho ? .68 : .9)
+    })) return;
     target.save();
     target.globalAlpha = alpha * (active ? .95 : .38);
     target.strokeStyle = color;
@@ -3081,6 +3097,9 @@ function draw() {
     for (const mark of state.rogueChamber?.director?.telegraphs || []) {
         const p = mark.point;
         const u = 1 - mark.ticks / 45;
+        drawVfx(ctx, state.vfxAtlas?.enemyWarning, p.x + 15, p.y + 15, 82 - u * 12, {
+            rotation: state.currentTick * .006, alpha: .28 + u * .48, scaleY: .58
+        });
         ctx.save();
         ctx.strokeStyle = `rgba(255,63,117,${0.35 + u * 0.6})`;
         ctx.lineWidth = 2 + u * 3;
@@ -3091,6 +3110,9 @@ function draw() {
     if (state.rogueChamber?.riftOpen && state.deliveryZone) {
         const z = state.deliveryZone;
         const pulse = 0.65 + Math.sin(state.currentTick * 0.15) * 0.2;
+        drawVfx(ctx, state.vfxAtlas?.rift, z.x + z.w / 2, z.y + z.h / 2, Math.max(z.w, z.h) * 2.25, {
+            rotation: state.currentTick * .004, alpha: .72 + pulse * .18
+        });
         ctx.save();
         ctx.strokeStyle = `rgba(0,243,255,${pulse})`;
         ctx.fillStyle = 'rgba(72,30,130,.24)';
@@ -3179,8 +3201,11 @@ function draw() {
     if (state.ruptureFx?.ticks > 0) {
         const fx = state.ruptureFx;
         const u = 1 - fx.ticks / fx.max;
+        const rendered = drawVfx(ctx, state.vfxAtlas?.rupture, fx.x, fx.y, (fx.radius || TIME_RUPTURE_RADIUS) * 2.25 * (0.45 + u * .55), {
+            rotation: u * .35, alpha: .88 * (1 - u * .55)
+        });
         ctx.save();
-        ctx.globalAlpha = 0.75 * (1 - u * .65);
+        ctx.globalAlpha = (rendered ? .3 : .75) * (1 - u * .65);
         ctx.strokeStyle = '#c8b7ff';
         ctx.fillStyle = 'rgba(110,100,150,.12)';
         ctx.lineWidth = 5;
@@ -3190,8 +3215,11 @@ function draw() {
     }
     for (const image of state.blinkAfterimages || []) {
         const u = image.ticks / 20;
+        const rendered = drawVfx(ctx, state.vfxAtlas?.blinkDeparture, image.x + image.w / 2, image.y + image.h / 2, 92, {
+            alpha: .28 + u * .48, scaleY: .72 + u * .28
+        });
         ctx.save();
-        ctx.globalAlpha = 0.2 + u * 0.45;
+        ctx.globalAlpha = rendered ? .16 : 0.2 + u * 0.45;
         ctx.strokeStyle = '#00f3ff';
         ctx.fillStyle = 'rgba(151,98,255,.24)';
         ctx.setLineDash([4, 4]);
@@ -3231,8 +3259,17 @@ function draw() {
     if (state.gameState !== 'EDITOR') drawWorldLabels(ctx, worldLabelsFor(state, { shield: getUnlockedAbilities().includes('ghostShield') }), state.mapWidth || 800, state.mapHeight || 600);
     drawEchoHazardFlashes(ctx);
     drawScrubPreviewGhosts(ctx);
-    if (state.failFx) drawBurst(ctx, state.failFx);
-    if (state.rewindFx) drawBurst(ctx, state.rewindFx);
+    if (state.failFx) {
+        drawVfx(ctx, state.vfxAtlas?.enemyDissolve, state.failFx.cx, state.failFx.cy, 112, { alpha: Math.min(.82, state.failFx.ttl / state.failFx.max) });
+        drawBurst(ctx, state.failFx);
+    }
+    if (state.rewindFx) {
+        drawVfx(ctx, state.vfxAtlas?.rewind, state.rewindFx.cx, state.rewindFx.cy, 118, {
+            rotation: (1 - state.rewindFx.ttl / state.rewindFx.max) * -.45,
+            alpha: Math.min(.78, state.rewindFx.ttl / state.rewindFx.max)
+        });
+        drawBurst(ctx, state.rewindFx);
+    }
     renderEchoFellFx(ctx);
     if (state.currentLevelMeta?.isRogue) drawRogueWorldLighting(ctx, map);
     if (state.gameState === 'EDITOR') drawEditorOverlay(ctx);
