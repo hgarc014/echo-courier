@@ -1,5 +1,5 @@
 import { prepareLoadedAsset } from './sprites.js';
-import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas } from './atlas.js';
+import { PLAYER_SHEET_PATH, PROPS_SHEET_PATH, ENV_SHEET_PATH, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, MODERN_PROPS_SHEET_PATH, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, buildPlayerAtlas, buildWorldAtlas, buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas } from './atlas.js';
 
 function loadAudioSettings() {
     const raw = localStorage.getItem('echoCourier_audio');
@@ -55,6 +55,7 @@ export const state = {
     modernPropsAtlas: null,
     courierActionAtlas: null,
     rogueBossAtlas: null,
+    biomeSceneryAtlas: null,
     worldAtlas: null,
     
     pastRuns: [],
@@ -162,6 +163,14 @@ rogueBossesSheet.onload = () => {
     catch { state.rogueBossAtlas = null; }
 };
 rogueBossesSheet.onerror = () => { state.rogueBossAtlas = null; };
+
+const biomeScenerySheet = new Image();
+biomeScenerySheet.src = BIOME_SCENERY_SHEET_PATH;
+biomeScenerySheet.onload = () => {
+    try { state.biomeSceneryAtlas = buildBiomeSceneryAtlas(biomeScenerySheet); }
+    catch { state.biomeSceneryAtlas = null; }
+};
+biomeScenerySheet.onerror = () => { state.biomeSceneryAtlas = null; };
 
 const propsSheet = new Image();
 const envSheet = new Image();

@@ -2958,7 +2958,7 @@ function drawPreviewScrubber(target) {
 }
 
 function drawRogueArenaBackdrop(target, map) {
-    drawArenaBackdrop(target, map, state.currentLevelMeta?.biome);
+    drawArenaBackdrop(target, map, state.currentLevelMeta?.biome, state.biomeSceneryAtlas);
 }
 
 function drawRogueWallDepth(target) {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { installDomStubs } from './harness/domStub.mjs';
 
 installDomStubs();
-const { buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, pickCourierActionFrame, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID, MODERN_PROPS_SHEET_PATH, MODERN_PROPS_FRAME_GRID, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH } = await import('../src/core/atlas.js');
+const { buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, buildCourierActionAtlas, buildRogueBossAtlas, buildBiomeSceneryAtlas, pickCourierActionFrame, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID, MODERN_PROPS_SHEET_PATH, MODERN_PROPS_FRAME_GRID, COURIER_ACTIONS_SHEET_PATH, ROGUE_BOSSES_SHEET_PATH, BIOME_SCENERY_SHEET_PATH, BIOME_SCENERY_FRAME_GRID } = await import('../src/core/atlas.js');
 
 assert.equal(TICK_HOUND_SHEET_PATH, 'assets/sprite-sheets/tick-hound-v2.png');
 const atlas = buildTickHoundAtlas({ width: 1536, height: 1152 });
@@ -38,5 +38,11 @@ assert.equal(pickCourierActionFrame(actions, { attackTicks: 12, attackTotalTicks
 assert.equal(ROGUE_BOSSES_SHEET_PATH, 'assets/sprite-sheets/echo-courier-rogue-bosses-v2.png');
 const bosses = buildRogueBossAtlas({ width: 1600, height: 1200 });
 assert.ok(bosses.gatekeeperIdle && bosses.burrowerEmerge && bosses.prismHurt);
+
+assert.equal(BIOME_SCENERY_SHEET_PATH, 'assets/sprite-sheets/echo-courier-biome-scenery-v2.png');
+const scenery = buildBiomeSceneryAtlas({ width: 1536, height: 1152 });
+assert.equal(scenery.cellW, 384);
+assert.equal(scenery.cellH, 384);
+assert.deepEqual(Object.keys(BIOME_SCENERY_FRAME_GRID), Object.keys(scenery).filter(key => !['ready', 'cellW', 'cellH'].includes(key)));
 
 console.log('tick hound atlas ok');

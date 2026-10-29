@@ -8,6 +8,7 @@ export const VFX_SHEET_PATH = 'assets/sprite-sheets/echo-courier-vfx-v2.png';
 export const MODERN_PROPS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-props-v2.png';
 export const COURIER_ACTIONS_SHEET_PATH = 'assets/sprite-sheets/echo-courier-actions-v2.png';
 export const ROGUE_BOSSES_SHEET_PATH = 'assets/sprite-sheets/echo-courier-rogue-bosses-v2.png';
+export const BIOME_SCENERY_SHEET_PATH = 'assets/sprite-sheets/echo-courier-biome-scenery-v2.png';
 
 export const VFX_FRAME_GRID = Object.freeze({
     playerSwing: [0, 0], echoSwing: [1, 0], playerImpact: [2, 0], enemyImpact: [3, 0],
@@ -31,6 +32,12 @@ export const ROGUE_BOSS_FRAME_GRID = Object.freeze({
     gatekeeperIdle: [0, 0], gatekeeperCharge: [1, 0], gatekeeperHurt: [2, 0], gatekeeperDead: [3, 0],
     burrowerIdle: [0, 1], burrowerEmerge: [1, 1], burrowerHurt: [2, 1], burrowerDead: [3, 1],
     prismIdle: [0, 2], prismCharge: [1, 2], prismHurt: [2, 2], prismDead: [3, 2]
+});
+
+export const BIOME_SCENERY_FRAME_GRID = Object.freeze({
+    hallsRack: [0, 0], hallsGearColumn: [1, 0], hallsRelay: [2, 0], hallsBarrier: [3, 0],
+    warrensHourglass: [0, 1], warrensDebris: [1, 1], warrensVent: [2, 1], warrensObelisk: [3, 1],
+    courtsPlinth: [0, 2], courtsShards: [1, 2], courtsArch: [2, 2], courtsTimeBloom: [3, 2]
 });
 
 // Occupancy-measured rects on echo-courier-characters.png (1536x1024).
@@ -191,6 +198,19 @@ export function buildRogueBossAtlas(sheet) {
     const cellH = Math.floor(ih / 3);
     const atlas = { ready: true, cellW, cellH };
     for (const [name, [column, row]] of Object.entries(ROGUE_BOSS_FRAME_GRID)) {
+        atlas[name] = sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
+    }
+    return atlas;
+}
+
+export function buildBiomeSceneryAtlas(sheet) {
+    const iw = sheet?.naturalWidth || sheet?.width || 0;
+    const ih = sheet?.naturalHeight || sheet?.height || 0;
+    if (!iw || !ih) return null;
+    const cellW = Math.floor(iw / 4);
+    const cellH = Math.floor(ih / 3);
+    const atlas = { ready: true, cellW, cellH };
+    for (const [name, [column, row]] of Object.entries(BIOME_SCENERY_FRAME_GRID)) {
         atlas[name] = sliceRect(sheet, { x: column * cellW, y: row * cellH, w: cellW, h: cellH });
     }
     return atlas;
