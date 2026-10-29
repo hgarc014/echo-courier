@@ -34,6 +34,7 @@ import { authoredShellWalls, composeEncounter } from './rogue/encounterCompositi
 import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/encounterTelemetry.js';
 import { CombatBurrower, CombatGatekeeper, CombatPrism, combatBossHud } from './rogue/combatBosses.js';
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
+import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1204,6 +1205,7 @@ function failUnlessInvuln(reason) {
 function applyRogueContact(hit) {
     if (!hit?.combatDamage || !state.rogueRun?.active) return false;
     if (!applyCombatDamage(state.player, hit.combatDamage)) return false;
+    if (state.rogueChamber?.isBoss) noteBossDamage(state.rogueChamber.bossTelemetry, hit.combatDamage);
     startShake(10, 5);
     updateRogueHealthHud();
     if (state.player.hp > 0) return false;
@@ -1495,6 +1497,11 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         state.guards.push(bossId === 'prism'
             ? new CombatPrism(spot.x, spot.y)
             : (bossId === 'burrower' ? new CombatBurrower(spot.x, spot.y) : new CombatGatekeeper(spot.x, spot.y)));
+        const boss = state.guards[0];
+        state.rogueChamber.bossTelemetry = beginBossTelemetry(bossId, boss.maxHp, 0, {
+            dashes: 0, cloaks: 0, tosses: 0,
+            ruptures: state.rogueRun.ruptureSeq
+        });
     }
     state.plates = []; state.doors = []; state.cameras = []; state.lasers = []; state.drones = []; state.packages = [];
     state.player.hp = carriedHp;
@@ -1601,6 +1608,14 @@ function tickRogueChamber() {
     } else if (chamber.type === 'boss') {
         chamber.enemiesLeft = alive;
         if (alive <= 0) {
+            if (chamber.bossTelemetry?.killedAtTick == null) {
+                completeBossTelemetry(chamber.bossTelemetry, state.currentTick, {
+                    ...state.runStats,
+                    ruptures: state.rogueRun.ruptureSeq
+                });
+                state.rogueRun.bossTelemetry = state.rogueRun.bossTelemetry || [];
+                state.rogueRun.bossTelemetry.push({ ...chamber.bossTelemetry });
+            }
             chamber.type = 'rift';
             chamber.riftOpen = true;
             const objective = document.getElementById('objective-text');
