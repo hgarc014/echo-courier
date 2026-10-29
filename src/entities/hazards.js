@@ -886,6 +886,7 @@ export class Guard extends Entity {
         this.hp = TICK_HOUND_HP;
         this.maxHp = TICK_HOUND_HP;
         this.lastHitAttackId = -1;
+        this.echoTouches = new Set();
         this._resetFacing();
     }
     _resetFacing() {
@@ -899,7 +900,7 @@ export class Guard extends Entity {
     reset() {
         this.x=this.startX; this.y=this.startY; this.targetIndex=1; this.state='patrol'; this.lostSightTimer=0;
         this.stunTicks = 0; this.dead = false;
-        this.hp = TICK_HOUND_HP; this.lastHitAttackId = -1;
+        this.hp = TICK_HOUND_HP; this.lastHitAttackId = -1; this.echoTouches.clear();
         this._resetFacing();
     }
     hitByAttack(attackId, damage = 1) {
@@ -915,11 +916,10 @@ export class Guard extends Entity {
         const n = ticks | 0;
         if (n > (this.stunTicks | 0)) this.stunTicks = n;
     }
-    // First echo touch stuns. A touch while already stunned kills.
-    touchByEcho() {
-        if (this.dead) return;
-        if ((this.stunTicks | 0) > 0) this.dead = true;
-        else this.stunTicks = GUARD_STUN_TICKS;
+    touchByEcho(id) {
+        if (this.dead || this.echoTouches.has(id)) return;
+        this.echoTouches.add(id);
+        this.stunTicks = Math.max(this.stunTicks, 30);
     }
     _setFacing(fx, fy) {
         if (this.facingX === fx && this.facingY === fy) return;
@@ -1089,7 +1089,7 @@ export function applyEchoGuardTouches(guards, ghosts) {
         for (const ghost of ghosts) {
             if (!ghost || !ghost.isActive) continue;
             if (AABB(g.x, g.y, g.w, g.h, ghost.x, ghost.y, ghost.w, ghost.h)) {
-                g.touchByEcho();
+                g.touchByEcho(ghost.id);
                 break;
             }
         }
