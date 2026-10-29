@@ -328,7 +328,7 @@ check('an editor-placed Echo Courts guard layout round-trips, including an edit'
         meta: {
             name: 'Editor Echo Gallery',
             story: { speaker: '', text: '' },
-            obj: 'Clear the guard wave.',
+            obj: 'Defeat every Tick Hound, then enter the rift.',
             grants: ['dash', 'toss', 'cloak', 'ghostShield'],
             maxGhosts: 2,
             crackSpeed: 'normal',
@@ -397,7 +397,7 @@ check('editor lists Echo Courts chambers and the config form keeps biome fields'
     for (const [id, node] of Object.entries({
         'editor-meta-speaker': el(''),
         'editor-meta-text': el(''),
-        'editor-meta-obj': el('Clear the guard wave.'),
+        'editor-meta-obj': el('Defeat every Tick Hound, then enter the rift.'),
         'editor-meta-maxghosts': el('2'),
         'editor-meta-looptime': el(''),
         'editor-meta-par': el(''),

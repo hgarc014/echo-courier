@@ -84,7 +84,7 @@ function echoGallery(rng) {
             ],
             guards
         }),
-        obj: 'Clear the guard wave.'
+        obj: 'Defeat every Tick Hound, then enter the rift.'
     };
 }
 

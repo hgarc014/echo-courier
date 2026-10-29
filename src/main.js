@@ -518,6 +518,8 @@ function applyLevelHint(level) {
 function applyChallengeHud(level, levelIndex) {
     const el = document.getElementById('challenge-text');
     if (!el) return;
+    el.classList.toggle('hidden', !!level.isRogue);
+    if (level.isRogue) return;
     el.classList.remove('challenge-done', 'challenge-open', 'challenge-training');
     el.style.color = '';
     if (level.isTutorial || level.isSandbox || level.isPlaytest) {
