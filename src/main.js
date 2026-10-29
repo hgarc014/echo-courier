@@ -35,7 +35,7 @@ import { beginEncounterTelemetry, completeEncounterTelemetry } from './rogue/enc
 import { CombatBurrower, CombatGatekeeper, CombatPrism, combatBossHud } from './rogue/combatBosses.js';
 import { buildRunSummary, nextNarrativeState } from './rogue/runNarrative.js';
 import { beginBossTelemetry, completeBossTelemetry, noteBossDamage } from './rogue/bossTelemetry.js';
-import { pickAspectChoices } from './rogue/aspects.js';
+import { aspectModifiers, pickAspectChoices } from './rogue/aspects.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1214,6 +1214,20 @@ function applyRogueContact(hit) {
     return true;
 }
 
+function hitRogueEnemy(enemy, attackId, damage = 1, impulse = null) {
+    if (!enemy || enemy.dead) return false;
+    const wasDead = !!enemy.dead;
+    const hit = enemy.hitByAttack?.(attackId, damage, impulse) || false;
+    if (hit && !wasDead && enemy.dead) {
+        const amount = aspectModifiers(state.rogueRun).sandOnKill;
+        if (amount > 0 && state.sand) {
+            refillSand(state.sand, amount);
+            updateSandHud();
+        }
+    }
+    return hit;
+}
+
 export function levelFailed(reason) {
     if (state.failTimer > 0) return;
     // Aspect picker is modal: a clear already happened, so a late hit must not fail the run.
@@ -1505,8 +1519,8 @@ function enterRogueChamber(biomeIndex, fresh, bossMode = false) {
         });
     }
     state.plates = []; state.doors = []; state.cameras = []; state.lasers = []; state.drones = []; state.packages = [];
-    state.player.hp = carriedHp;
-    state.player.maxHp = PLAYER_MAX_HP;
+    state.player.maxHp = PLAYER_MAX_HP + aspectModifiers(state.rogueRun).maxHpBonus;
+    state.player.hp = Math.min(state.player.maxHp, carriedHp);
     beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
     updateHUD();
     state.runStats = { tosses: 0, dashes: 0, cloaks: 0, alarms: 0 };
@@ -1638,6 +1652,9 @@ export function applyAspect(id) {
         if (state.sand) refillSand(state.sand, 0.5);
     } else if (id === 'echo-slot' && state.currentLevelMeta) {
         state.currentLevelMeta.maxGhosts = (Number(state.currentLevelMeta.maxGhosts) || 0) + 1;
+    } else if (id === 'hourglass-heart' && state.player) {
+        state.player.maxHp = (state.player.maxHp || PLAYER_MAX_HP) + 1;
+        state.player.hp = Math.min(state.player.maxHp, (state.player.hp || 0) + 1);
     }
 }
 
@@ -1874,7 +1891,8 @@ function update() {
             state.player.invulnTicks = BLINK_IFRAMES;
             state.blinkAfterimageSeq = (state.blinkAfterimageSeq | 0) + 1;
             state.blinkAfterimages ??= [];
-            state.blinkAfterimages.push({ ...blinkFrom, id: state.blinkAfterimageSeq, ticks: 20, hit: new WeakSet() });
+            state.blinkAfterimages.push({ ...blinkFrom, id: state.blinkAfterimageSeq, ticks: 20, hit: new WeakSet(),
+                damage: aspectModifiers(state.rogueRun).blinkDamage });
             SFX.rewind();
             updateSandHud();
         }
@@ -1886,10 +1904,11 @@ function update() {
             state.rogueRun.ruptureSeq = (state.rogueRun.ruptureSeq | 0) + 1;
             const cx = state.player.x + state.player.w / 2;
             const cy = state.player.y + state.player.h / 2;
-            const result = timeRupture(state.sand, { x: cx, y: cy }, state.guards, state.rogueRun.ruptureCooldown, state.rogueRun.ruptureSeq);
+            const ruptureRadius = aspectModifiers(state.rogueRun).ruptureRadius;
+            const result = timeRupture(state.sand, { x: cx, y: cy }, state.guards, state.rogueRun.ruptureCooldown, state.rogueRun.ruptureSeq, ruptureRadius);
             if (result.ok) {
                 state.rogueRun.ruptureCooldown = TIME_RUPTURE_COOLDOWN;
-                state.ruptureFx = { x: cx, y: cy, ticks: TIME_RUPTURE_FREEZE, max: TIME_RUPTURE_FREEZE };
+                state.ruptureFx = { x: cx, y: cy, ticks: TIME_RUPTURE_FREEZE, max: TIME_RUPTURE_FREEZE, radius: ruptureRadius };
                 SFX.crack();
                 updateSandHud();
             }
@@ -1979,10 +1998,31 @@ function update() {
 
     const demoWasActive = isDemoActive();
     const popupWasActive = isPopupDemo();
+    if (rogueCombatActive() && state.player) {
+        const intent = getMoveVector();
+        if (intent.x || intent.y) state.player.stillstepTicks = 0;
+        else state.player.stillstepTicks = Math.min(60, (state.player.stillstepTicks | 0) + 1);
+    }
     let interactJustPressed = isKeyJustPressed('space');
     const attackJustPressed = rogueCombatActive() && (interactJustPressed || isKeyJustPressed('j'));
     if (attackJustPressed) {
-        beginAttack(state.player);
+        const mods = aspectModifiers(state.rogueRun);
+        const started = beginAttack(state.player);
+        if (started) {
+            const empowered = mods.stillstepDamage > 1 && (state.player.stillstepTicks | 0) >= 60;
+            state.player.aspectAttackDamage = empowered ? mods.stillstepDamage : 1;
+            if (empowered) state.player.stillstepTicks = 0;
+            if (mods.secondStrike) {
+                state.rogueRun.secondStrike = {
+                    ticks: 12,
+                    id: state.player.attackId,
+                    actor: {
+                        x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h,
+                        facingX: state.player.facingX, facingY: state.player.facingY
+                    }
+                };
+            }
+        }
         interactJustPressed = false;
     }
     updateHintPlates(interactJustPressed);
@@ -2068,7 +2108,8 @@ function update() {
         const box = attackBox(state.player);
         for (const enemy of state.guards) {
             if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
-                enemy.hitByAttack?.(`player:${state.player.attackId}`, 1, { x: (state.player.facingX || 0) * 12, y: (state.player.facingY || 0) * 12 });
+                hitRogueEnemy(enemy, `player:${state.player.attackId}`, state.player.aspectAttackDamage || 1,
+                    { x: (state.player.facingX || 0) * 12, y: (state.player.facingY || 0) * 12 });
             }
         }
     }
@@ -2078,16 +2119,32 @@ function update() {
             const box = attackBox(ghost);
             for (const enemy of state.guards) {
                 if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
-                    enemy.hitByAttack?.(`echo:${ghost.id}:${ghost.attackId}`, 1, { x: (ghost.facingX || 0) * 12, y: (ghost.facingY || 0) * 12 });
+                    const mods = aspectModifiers(state.rogueRun);
+                    hitRogueEnemy(enemy, `echo:${ghost.id}:${ghost.attackId}`, mods.echoDamage,
+                        { x: (ghost.facingX || 0) * mods.echoKnockback, y: (ghost.facingY || 0) * mods.echoKnockback });
                 }
             }
+        }
+    }
+    const second = state.rogueRun?.secondStrike;
+    if (rogueCombatActive() && second) {
+        second.ticks--;
+        if (second.ticks <= 0) {
+            const box = attackBox(second.actor);
+            for (const enemy of state.guards) {
+                if (!enemy?.dead && AABB(box.x, box.y, box.w, box.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
+                    hitRogueEnemy(enemy, `second:${second.id}`, 1,
+                        { x: (second.actor.facingX || 0) * 12, y: (second.actor.facingY || 0) * 12 });
+                }
+            }
+            state.rogueRun.secondStrike = null;
         }
     }
     for(let g of state.guards) {
         if (g.ruptureTicks > 0) {
             g.ruptureTicks--;
             if (g.ruptureTicks <= 0 && g.rupturePendingId != null) {
-                g.hitByAttack?.(`rupture:${g.rupturePendingId}`);
+                hitRogueEnemy(g, `rupture:${g.rupturePendingId}`);
                 g.rupturePendingId = null;
             }
             continue;
@@ -2102,7 +2159,7 @@ function update() {
                 if (!enemy?.dead && !image.hit.has(enemy)
                     && AABB(image.x, image.y, image.w, image.h, enemy.x, enemy.y, enemy.w, enemy.h)) {
                     image.hit.add(enemy);
-                    enemy.hitByAttack?.(`blink:${image.id}`);
+                    hitRogueEnemy(enemy, `blink:${image.id}`, image.damage || 1);
                 }
             }
             image.ticks--;
@@ -2882,7 +2939,7 @@ function draw() {
         ctx.strokeStyle = '#c8b7ff';
         ctx.fillStyle = 'rgba(110,100,150,.12)';
         ctx.lineWidth = 5;
-        ctx.beginPath(); ctx.arc(fx.x, fx.y, TIME_RUPTURE_RADIUS * (0.25 + u * .75), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, (fx.radius || TIME_RUPTURE_RADIUS) * (0.25 + u * .75), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.restore();
         fx.ticks--;
     }

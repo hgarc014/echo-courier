@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { COMBAT_ASPECTS, hasAspect, pickAspectChoices } from '../src/rogue/aspects.js';
+import { aspectModifiers, COMBAT_ASPECTS, hasAspect, pickAspectChoices } from '../src/rogue/aspects.js';
 
 assert.equal(COMBAT_ASPECTS.length, 8);
 assert.equal(new Set(COMBAT_ASPECTS.map(aspect => aspect.id)).size, 8);
@@ -13,5 +13,18 @@ const next = pickAspectChoices(42, held, 3);
 assert.equal(next.some(aspect => held.includes(aspect.id)), false, 'held Aspects are excluded');
 assert.equal(hasAspect({ aspects: held }, held[0]), true);
 assert.equal(hasAspect({ aspects: held }, 'not-owned'), false);
+assert.deepEqual(aspectModifiers({ aspects: [
+    'recoil-echo', 'second-strike', 'afterimage-blade', 'wide-rupture',
+    'hourglass-heart', 'sand-leech', 'echo-chorus', 'stillstep'
+]}), {
+    stillstepDamage: 2,
+    echoDamage: 2,
+    echoKnockback: 24,
+    blinkDamage: 2,
+    ruptureRadius: 230,
+    maxHpBonus: 1,
+    sandOnKill: 0.25,
+    secondStrike: true
+});
 
 console.log('combat aspects ok');
