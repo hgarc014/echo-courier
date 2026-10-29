@@ -13,7 +13,7 @@ import { showAspectPick, hideAspectPick } from './ui/aspectPick.js';
 import { loadRogueMeta, nextUnlock, grantUnlock, recordRunEnd, rogueMaxGhosts, rogueLoopTime, rogueMaxSand, rogueStartSand, buyRogueShop, shopItems } from './rogue/rogueMeta.js';
 import { getLevelSetup, LEVELS, deserializeLevel, serializeLevel, createBoundWalls, CAMPAIGN_LEVEL_COUNT, SANDBOX_LEVEL_INDEX, cloneDemo, getWorldUnlockedAbilities, getWorldUnlockedAbilitiesForWorld, normalizeWorldId, normalizeLoopTime, normalizePar, copyBossMeta, getChallengeByRef, normalizePitKillFraction, nextCampaignLevelIndex, firstSelectableLevel } from './data/levels.js';
 import { Ghost, PlayerEntity } from './entities/actors.js';
-import { tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
+import { Guard, tickEchoFellFx, renderEchoFellFx, stunGuardsOverlapping, applyEchoGuardTouches, rogueCombatActive } from './entities/hazards.js';
 import { findEchoesEndingOnCracks } from './validation/echoValidation.js';
 import { initMenu, showSubMenu, updateHUD, refreshLevelSelectGrid, refreshShopButtons } from './ui/menu.js';
 import { initEditor, drawEditorOverlay, tickEditor, syncEditorUi, setEditorLevelMetaFromLevel } from './ui/editor.js';
@@ -29,6 +29,7 @@ import { collectShieldSlabs, laserThreatens, shieldSlab, shieldShadowRects, lase
 import { TemporalPlate, drawTemporalGlyph } from './entities/interactables.js';
 import { burrowerHud, crackEdgeWarning } from './core/bossHud.js';
 import { beginAttack, tickAttack, attackIsActive, attackBox, applyCombatDamage, PLAYER_MAX_HP } from './rogue/combat.js';
+import { createEncounterDirector, encounterRemaining, tickEncounterDirector } from './rogue/encounterDirector.js';
 import { installLayoutFit } from './ui/fitLayout.js';
 import { displayedLoopNumber, finishLoopLine, plannedLoopBudget, loopHudState, formatCampaignClearMessage } from './core/loopDisplay.js';
 
@@ -1346,12 +1347,16 @@ function enterRogueChamber(biomeIndex, fresh) {
     const layout = chamber.layout;
     const cmeta = chamber.meta;
     const clear = cmeta.clear;
+    const spawnPoints = (layout.guards || []).map(g => g.points?.[0] || g.path?.[0]).filter(Boolean);
     state.rogueChamber = {
         type: clear === 'kill' ? 'wave' : clear,
         zone: layout.deliveryZone,
         ticksLeft: clear === 'timer' ? cmeta.clearSeconds * 60 : null,
         enemiesLeft: clear === 'kill' ? cmeta.waveCount : null,
-        aspectPending: false
+        aspectPending: false,
+        director: clear === 'kill' && spawnPoints.length
+            ? createEncounterDirector({ biome: biome.id, seed: state.rogueRun.seed + biomeIndex * 7919, spawnPoints })
+            : null
     };
     if (fresh || !state.sand) {
         state.sand = createSandState({ maxSand: rogueMaxSand(meta), sand: Math.max(rogueStartSand(meta), BLINK_COST + 0.1) });
@@ -1395,6 +1400,7 @@ function enterRogueChamber(biomeIndex, fresh) {
     applyLevelHint(state.currentLevelMeta);
     clearGatekeeperCheckpoint();
     applyLoadedLevel(deserializeLevel({ ...layout }));
+    if (state.rogueChamber.director) state.guards = [];
     state.player.hp = carriedHp;
     state.player.maxHp = PLAYER_MAX_HP;
     beginRecording({ level: null, levelName: state.currentLevelMeta.name, layout, meta: editorMetaForRecording() });
@@ -1453,8 +1459,14 @@ function tickRogueChamber() {
     if (!chamber || chamber.aspectPending) return;
     if (chamber.type === 'timer' && typeof chamber.ticksLeft === 'number') chamber.ticksLeft -= 1;
     else if (chamber.type === 'wave') {
-        chamber.enemiesLeft = (state.guards || []).filter(g => g && !g.dead).length;
-        if (chamber.enemiesLeft <= 0) {
+        const alive = (state.guards || []).filter(g => g && !g.dead).length;
+        if (chamber.director) {
+            for (const point of tickEncounterDirector(chamber.director, alive)) {
+                state.guards.push(new Guard([{ ...point }, { x: point.x + 1, y: point.y }]));
+            }
+            chamber.enemiesLeft = encounterRemaining(chamber.director, (state.guards || []).filter(g => g && !g.dead).length);
+        } else chamber.enemiesLeft = alive;
+        if (chamber.enemiesLeft <= 0 && (!chamber.director || chamber.director.done)) {
             chamber.type = 'rift';
             chamber.riftOpen = true;
             const objective = document.getElementById('objective-text');
@@ -2514,6 +2526,16 @@ function draw() {
 
     state.statics.forEach(s => s.render(ctx)); state.winds.forEach(w => w.render(ctx)); state.cracks.forEach(c => c.render(ctx));
     state.deliveryZone.render(ctx);
+    for (const mark of state.rogueChamber?.director?.telegraphs || []) {
+        const p = mark.point;
+        const u = 1 - mark.ticks / 45;
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,63,117,${0.35 + u * 0.6})`;
+        ctx.lineWidth = 2 + u * 3;
+        ctx.beginPath(); ctx.arc(p.x + 15, p.y + 15, 22 - u * 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,63,117,.12)'; ctx.fillRect(p.x, p.y, 30, 30);
+        ctx.restore();
+    }
     if (state.rogueChamber?.riftOpen && state.deliveryZone) {
         const z = state.deliveryZone;
         const pulse = 0.65 + Math.sin(state.currentTick * 0.15) * 0.2;

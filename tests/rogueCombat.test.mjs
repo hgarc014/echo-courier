@@ -17,7 +17,9 @@ function begin() {
     assert.equal(state.gameState, 'PLAYING');
     assert.equal(state.currentLevelMeta.name, 'Patrol Corridor');
     assert.equal(state.rogueChamber.type, 'wave');
-    assert.ok(state.guards.length >= 6);
+    for (let i = 0; i <= 45; i++) main.stepSimulation();
+    assert.equal(state.guards.length, 3, 'the first seeded wave arrives after its telegraph');
+    state.rogueChamber.director = null;
 }
 
 function snap(x, y) {
