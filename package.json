@@ -6,5 +6,8 @@
   "scripts": {
     "test": "node tests/run.mjs",
     "stamp": "node scripts/stamp-build.mjs"
+  },
+  "devDependencies": {
+    "acorn": "^8.15.0"
   }
 }
