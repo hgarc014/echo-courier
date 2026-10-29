@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { main, state, keys } from './harness/replay.mjs';
 import { prevKeys } from '../src/core/input.js';
-import { Guard, GUARD_STUN_TICKS } from '../src/entities/hazards.js';
+import { EliteTickHound, Guard, GUARD_STUN_TICKS } from '../src/entities/hazards.js';
 import { Ghost } from '../src/entities/actors.js';
 
 function release() {
@@ -35,6 +35,29 @@ function echoAt(x, y) {
 }
 
 assert.equal(GUARD_STUN_TICKS, 45);
+
+// Elite hound: readable 30-tick lunge, 8 HP, and a maximum two-damage hit.
+{
+    const walls = state.walls;
+    const run = state.rogueRun;
+    const meta = state.currentLevelMeta;
+    state.walls = [];
+    state.rogueRun = { active: true };
+    state.currentLevelMeta = { isRogue: true };
+    const elite = new EliteTickHound([{ x: 100, y: 100 }, { x: 101, y: 100 }]);
+    const target = { x: 205, y: 100, w: 30, h: 30, cloakTimer: 0 };
+    elite.lungeCooldownTicks = 0;
+    assert.equal(elite.update(target, []), null);
+    assert.equal(elite.lungeTelegraphTicks, 30);
+    assert.equal(elite.hp, 8);
+    for (let i = 0; i < 29; i++) assert.equal(elite.update(target, []), null);
+    const hit = elite.update(target, []);
+    assert.equal(hit?.combatDamage, 2);
+    assert.ok(elite.lungeCooldownTicks >= 120);
+    state.walls = walls;
+    state.rogueRun = run;
+    state.currentLevelMeta = meta;
+}
 
 // Campaign guards still patrol, chase on sight, and get distracted. Cloak blocks detection.
 {
