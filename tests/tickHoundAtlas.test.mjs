@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { installDomStubs } from './harness/domStub.mjs';
 
 installDomStubs();
-const { buildTickHoundAtlas, buildVfxAtlas, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID } = await import('../src/core/atlas.js');
+const { buildTickHoundAtlas, buildVfxAtlas, buildModernPropsAtlas, pickTickHoundFrame, TICK_HOUND_SHEET_PATH, VFX_SHEET_PATH, VFX_FRAME_GRID, MODERN_PROPS_SHEET_PATH, MODERN_PROPS_FRAME_GRID } = await import('../src/core/atlas.js');
 
 assert.equal(TICK_HOUND_SHEET_PATH, 'assets/sprite-sheets/tick-hound-v2.png');
 const atlas = buildTickHoundAtlas({ width: 1536, height: 1152 });
@@ -21,5 +21,11 @@ const vfx = buildVfxAtlas({ width: 1600, height: 1200 });
 assert.equal(vfx.cellW, 400);
 assert.equal(vfx.cellH, 400);
 assert.deepEqual(Object.keys(VFX_FRAME_GRID), Object.keys(vfx).filter(key => !['ready', 'cellW', 'cellH'].includes(key)));
+
+assert.equal(MODERN_PROPS_SHEET_PATH, 'assets/sprite-sheets/echo-courier-props-v2.png');
+const props = buildModernPropsAtlas({ width: 1600, height: 1200 });
+assert.equal(props.cellW, 400);
+assert.equal(props.cellH, 400);
+assert.deepEqual(Object.keys(MODERN_PROPS_FRAME_GRID), Object.keys(props).filter(key => !['ready', 'cellW', 'cellH'].includes(key)));
 
 console.log('tick hound atlas ok');
